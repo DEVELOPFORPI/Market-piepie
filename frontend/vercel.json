@@ -1,0 +1,16 @@
+{
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "http://54.250.253.123:4000/api/:path*" },
+    { "source": "/proxy/coingecko/:path*", "destination": "https://api.coingecko.com/api/v3/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    }
+  ]
+}

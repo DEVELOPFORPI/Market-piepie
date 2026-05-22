@@ -1,0 +1,16 @@
+.cursor/
+.claude/
+node_modules/
+*.log
+debug-*.log
+
+.vercel
+
+# Environment files (NEVER commit secrets)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+frontend/dist/

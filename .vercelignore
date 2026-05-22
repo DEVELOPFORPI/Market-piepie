@@ -1,0 +1,12 @@
+node_modules
+backend
+.cursor
+.claude
+.git
+*.log
+debug-*.log
+
+# Environment files (NEVER upload secrets)
+.env
+.env.*
+!.env.example
