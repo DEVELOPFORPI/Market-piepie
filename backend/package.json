@@ -2,7 +2,7 @@
   "name": "marketpiepie-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "MarketPiePie API (Express + PostgreSQL optional)",
+  "description": "MarketPiePie API (Express + MySQL optional)",
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
@@ -17,8 +17,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-rate-limit": "^8.3.2",
+    "mysql2": "^3.22.3",
     "node-fetch": "^3.3.2",
-    "pg": "^8.13.1",
     "socket.io": "^4.8.3",
     "xss": "^1.0.15"
   }

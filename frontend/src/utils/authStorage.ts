@@ -85,19 +85,6 @@ export const isLoggedIn = (): boolean => {
   return !!sessionStorage.getItem(AUTH_KEY);
 };
 
-/**
- * Full document load: drop tab session only so every app open starts at Welcome.
- * Pi/guest device hints stay in localStorage until the user chooses Pi / Guest / local test again.
- */
-export function resetSessionOnAppLoad(): void {
-  try {
-    sessionStorage.removeItem(AUTH_KEY);
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 export type EnsureImplicitSessionOptions = {
   /**
    * When true: create or reuse device guest if no Pi session (Welcome / AppLogin "Continue as Guest").

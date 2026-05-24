@@ -56,6 +56,7 @@ import { SignupProfile } from './pages/SignupProfile';
 import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
+import { api } from './utils/api';
 import { initDBSync, syncProductsFromDB, syncNotificationsFromDB } from './utils/dbSync';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
 import { addRemoteMessage, addRemoteRoom, updateRoomFromRemote } from './utils/chatStorage';
@@ -439,27 +440,90 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [heavyReady, setHeavyReady] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   useEffect(() => {
     preloadHeavyStorage().finally(() => setHeavyReady(true));
+  }, []);
+
+  const checkBackendHealth = async (showChecking = false) => {
+    if (showChecking) setBackendStatus('checking');
+    const res = await api.health();
+    const dbConnected = res.ok && res.data?.ok === true && res.data.db === 'connected';
+    setBackendStatus(dbConnected ? 'online' : 'offline');
+  };
+
+  useEffect(() => {
+    checkBackendHealth(true);
+    const timer = window.setInterval(() => checkBackendHealth(), 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
 
+  const shouldBlockApp = backendStatus !== 'online';
+
   return (
     <>
       {showSplash && <SplashScreen onComplete={handleSplashComplete} duration={2000} />}
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <AppContent showSplash={showSplash} heavyReady={heavyReady} />
-      </BrowserRouter>
+      {shouldBlockApp ? (
+        <BackendUnavailable status={backendStatus} onRetry={() => checkBackendHealth(true)} />
+      ) : (
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <AppContent showSplash={showSplash} heavyReady={heavyReady} />
+        </BrowserRouter>
+      )}
     </>
+  );
+}
+
+function BackendUnavailable({
+  status,
+  onRetry,
+}: {
+  status: 'checking' | 'online' | 'offline';
+  onRetry: () => void;
+}) {
+  const checking = status === 'checking';
+
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center px-6">
+      <div className="w-full max-w-sm text-center">
+        <img src="/LOGO_M.svg" alt="Market PiePie" className="h-16 w-auto object-contain mx-auto mb-6" />
+        {checking ? (
+          <>
+            <div className="w-8 h-8 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <h1 className="text-lg font-semibold text-gray-900 mb-2">Connecting...</h1>
+            <p className="text-sm text-gray-500">Checking the server and database.</p>
+          </>
+        ) : (
+          <>
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <span className="text-xl font-bold">!</span>
+            </div>
+            <h1 className="text-lg font-semibold text-gray-900 mb-2">Service unavailable</h1>
+            <p className="text-sm text-gray-500 mb-6">
+              The database is not reachable right now. Please try again shortly.
+            </p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="w-full px-4 py-3 rounded-lg text-white font-medium"
+              style={{ backgroundColor: '#00A8A3' }}
+            >
+              Retry
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

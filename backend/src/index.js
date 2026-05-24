@@ -27,7 +27,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const xss = require('xss');
-const { Pool } = require('pg');
+const { createDbPool, jsonObjectSql } = require('./db');
 const http = require('http');
 const { Server: SocketIOServer } = require('socket.io');
 
@@ -56,7 +56,10 @@ async function createSession(userId) {
   sessionCache.set(token, { userId, createdAt: Date.now() });
   if (pool) {
     try {
-      await pool.query('INSERT INTO sessions (token, user_id) VALUES ($1, $2) ON CONFLICT (token) DO NOTHING', [token, userId]);
+      await pool.query(
+        'INSERT INTO sessions (token, user_id) VALUES ($1, $2) ON DUPLICATE KEY UPDATE token=token',
+        [token, userId]
+      );
     } catch {}
   }
   return token;
@@ -92,7 +95,7 @@ setInterval(() => {
   for (const [token, session] of sessionCache) {
     if (now - session.createdAt > SESSION_TTL_MS) sessionCache.delete(token);
   }
-  if (pool) pool.query("DELETE FROM sessions WHERE created_at < NOW() - INTERVAL '7 days'").catch(() => {});
+  if (pool) pool.query('DELETE FROM sessions WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)').catch(() => {});
 }, 60 * 60 * 1000);
 
 // ????????? ?? ?????????? ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
@@ -134,11 +137,12 @@ app.use('/api/auth/', authLimiter);
 app.use('/api/payments/', paymentLimiter);
 
 let pool = null;
-if (process.env.DATABASE_URL) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' },
-  });
+pool = createDbPool();
+
+async function queryReturning(sql, params, table, whereSql = 'id=$1', whereParams = [params[0]], options = {}) {
+  const result = await pool.query(sql, params);
+  if (options.emptyOnNoChange && result.rowCount === 0) return { rows: [], rowCount: 0 };
+  return pool.query(`SELECT * FROM ${table} WHERE ${whereSql} LIMIT 1`, whereParams);
 }
 
 // ????????? ???????? ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
@@ -147,6 +151,7 @@ app.get('/api/health', async (_req, res) => {
   if (!pool) return res.json(out);
   try {
     await pool.query('SELECT 1');
+    await pool.query('SELECT 1 FROM products LIMIT 1');
     out.db = 'connected';
     return res.json(out);
   } catch (e) {
@@ -165,7 +170,7 @@ if (process.env.NODE_ENV !== 'production') {
       try {
         await pool.query(
           `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $2, 'verified')
-           ON CONFLICT (id) DO NOTHING`,
+           ON DUPLICATE KEY UPDATE id=id`,
           [userId, nickname]
         );
       } catch { /* ignore if no DB */ }
@@ -284,7 +289,7 @@ app.post('/api/payments/complete', async (req, res) => {
 
         await pool.query(
 
-          'INSERT INTO users (id, nickname, pi_verified) VALUES ($1, $2, true) ON CONFLICT (id) DO UPDATE SET pi_verified = true',
+          'INSERT INTO users (id, nickname, pi_verified) VALUES ($1, $2, true) ON DUPLICATE KEY UPDATE pi_verified = true',
 
           [paymentInfo.user_uid, paymentInfo.user_uid]
 
@@ -414,26 +419,26 @@ app.post('/api/users', requireDb, async (req, res) => {
   const isUuidLike = (s) => s && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s);
   const safeNickname = (!nickname || nickname === id || isUuidLike(nickname)) ? null : nickname;
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO users (id, nickname, profile_image, bio, kyc_status, trust_score, rating, trade_count, activity_region, verified_region, display_activity_badge_id, seller_type)
        VALUES ($1, COALESCE($2, $1), $3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (id) DO UPDATE SET
+       ON DUPLICATE KEY UPDATE
          nickname = CASE
            WHEN $2 IS NOT NULL THEN $2
            ELSE COALESCE(NULLIF(users.nickname, ''), NULLIF(users.nickname, users.id), users.nickname)
          END,
-         profile_image=COALESCE(EXCLUDED.profile_image, users.profile_image),
-         bio=COALESCE(EXCLUDED.bio, users.bio),
-         kyc_status=COALESCE(NULLIF(EXCLUDED.kyc_status,'unverified'), users.kyc_status, EXCLUDED.kyc_status),
-         trust_score=GREATEST(EXCLUDED.trust_score, users.trust_score),
-         rating=CASE WHEN EXCLUDED.rating > 0 THEN EXCLUDED.rating ELSE users.rating END,
-         trade_count=GREATEST(EXCLUDED.trade_count, users.trade_count),
-         activity_region=COALESCE(EXCLUDED.activity_region, users.activity_region),
-         verified_region=COALESCE(EXCLUDED.verified_region, users.verified_region),
-         display_activity_badge_id=COALESCE(EXCLUDED.display_activity_badge_id, users.display_activity_badge_id),
-         seller_type=COALESCE(EXCLUDED.seller_type, users.seller_type)
-       RETURNING *`,
-      [id, safeNickname, profile_image, bio, kyc_status || 'unverified', trust_score || 0, rating || 0, trade_count || 0, activity_region, verified_region, display_activity_badge_id, seller_type]
+         profile_image=COALESCE(VALUES(profile_image), users.profile_image),
+         bio=COALESCE(VALUES(bio), users.bio),
+         kyc_status=COALESCE(NULLIF(VALUES(kyc_status),'unverified'), users.kyc_status, VALUES(kyc_status)),
+         trust_score=GREATEST(VALUES(trust_score), users.trust_score),
+         rating=CASE WHEN VALUES(rating) > 0 THEN VALUES(rating) ELSE users.rating END,
+         trade_count=GREATEST(VALUES(trade_count), users.trade_count),
+         activity_region=COALESCE(VALUES(activity_region), users.activity_region),
+         verified_region=COALESCE(VALUES(verified_region), users.verified_region),
+         display_activity_badge_id=COALESCE(VALUES(display_activity_badge_id), users.display_activity_badge_id),
+         seller_type=COALESCE(VALUES(seller_type), users.seller_type)`,
+      [id, safeNickname, profile_image, bio, kyc_status || 'unverified', trust_score || 0, rating || 0, trade_count || 0, activity_region, verified_region, display_activity_badge_id, seller_type],
+      'users'
     );
     res.json(rows[0]);
   } catch (e) {
@@ -445,10 +450,11 @@ app.put('/api/users/:id', requireDb, requireAuth, async (req, res) => {
   if (req.authUserId !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
   const { nickname, profile_image, bio, activity_region, display_activity_badge_id, seller_type } = req.body;
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE users SET nickname=$2, profile_image=$3, bio=$4, activity_region=$5,
-       display_activity_badge_id=$6, seller_type=$7 WHERE id=$1 RETURNING *`,
-      [req.params.id, nickname, profile_image, bio, activity_region, display_activity_badge_id, seller_type]
+       display_activity_badge_id=$6, seller_type=$7 WHERE id=$1`,
+      [req.params.id, nickname, profile_image, bio, activity_region, display_activity_badge_id, seller_type],
+      'users'
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(rows[0]);
@@ -463,7 +469,7 @@ app.get('/api/products', requireDb, async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   try {
-    let query = `SELECT p.*, row_to_json(u.*) AS seller FROM products p
+    let query = `SELECT p.*, ${jsonObjectSql('u', 'users')} AS seller FROM products p
                  LEFT JOIN users u ON p.seller_id = u.id WHERE 1=1`;
     const params = [];
     if (category) { params.push(category); query += ` AND p.category=$${params.length}`; }
@@ -481,7 +487,7 @@ app.get('/api/products', requireDb, async (req, res) => {
 app.get('/api/products/:id', requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, row_to_json(u.*) AS seller FROM products p
+      `SELECT p.*, ${jsonObjectSql('u', 'users')} AS seller FROM products p
        LEFT JOIN users u ON p.seller_id = u.id WHERE p.id=$1`,
       [req.params.id]
     );
@@ -497,17 +503,17 @@ app.post('/api/products', requireDb, requireAuth, async (req, res) => {
   if (seller_id && req.authUserId !== seller_id) return res.status(403).json({ error: 'Forbidden' });
   const effectiveSellerId = req.authUserId;
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO products (id, title, description, price, category, region, status, images, seller_id, trade_methods, today_trade_available, is_free_share, allow_offer)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       ON CONFLICT (id) DO UPDATE SET
-         title=EXCLUDED.title, description=EXCLUDED.description, price=EXCLUDED.price,
-         category=EXCLUDED.category, region=EXCLUDED.region, status=EXCLUDED.status,
-         images=EXCLUDED.images, trade_methods=EXCLUDED.trade_methods,
-         today_trade_available=EXCLUDED.today_trade_available,
-         is_free_share=EXCLUDED.is_free_share, allow_offer=EXCLUDED.allow_offer
-       RETURNING *`,
-      [id, title, description, price, category, region, status || '??????', images || [], effectiveSellerId, trade_methods || [], today_trade_available || false, is_free_share || false, allow_offer || false]
+       ON DUPLICATE KEY UPDATE
+         title=VALUES(title), description=VALUES(description), price=VALUES(price),
+         category=VALUES(category), region=VALUES(region), status=VALUES(status),
+         images=VALUES(images), trade_methods=VALUES(trade_methods),
+         today_trade_available=VALUES(today_trade_available),
+         is_free_share=VALUES(is_free_share), allow_offer=VALUES(allow_offer)`,
+      [id, title, description, price, category, region, status || 'active', images || [], effectiveSellerId, trade_methods || [], today_trade_available || false, is_free_share || false, allow_offer || false],
+      'products'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -521,11 +527,12 @@ app.put('/api/products/:id', requireDb, requireAuth, async (req, res) => {
     if (!existing.length) return res.status(404).json({ error: 'Product not found' });
     if (existing[0].seller_id !== req.authUserId) return res.status(403).json({ error: 'Forbidden' });
     const { title, description, price, category, region, status, images, trade_methods, today_trade_available, is_free_share, allow_offer } = req.body;
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE products SET title=$2, description=$3, price=$4, category=$5, region=$6,
        status=$7, images=$8, trade_methods=$9, today_trade_available=$10,
-       is_free_share=$11, allow_offer=$12 WHERE id=$1 RETURNING *`,
-      [req.params.id, title, description, price, category, region, status, images, trade_methods, today_trade_available, is_free_share, allow_offer]
+       is_free_share=$11, allow_offer=$12 WHERE id=$1`,
+      [req.params.id, title, description, price, category, region, status, images, trade_methods, today_trade_available, is_free_share, allow_offer],
+      'products'
     );
     res.json(rows[0]);
   } catch (e) {
@@ -540,9 +547,10 @@ app.patch('/api/products/:id/status', requireDb, requireAuth, async (req, res) =
     if (existing[0].seller_id !== req.authUserId) return res.status(403).json({ error: 'Forbidden' });
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: 'status required' });
-    const { rows } = await pool.query(
-      'UPDATE products SET status=$2 WHERE id=$1 RETURNING *',
-      [req.params.id, status]
+    const { rows } = await queryReturning(
+      'UPDATE products SET status=$2 WHERE id=$1',
+      [req.params.id, status],
+      'products'
     );
     res.json(rows[0]);
   } catch (e) {
@@ -576,14 +584,14 @@ app.get('/api/orders', requireDb, async (req, res) => {
   try {
     let query = `SELECT o.*,
       o.meetup_location AS meetup_place,
-      split_part(COALESCE(o.meetup_time,''), ' ', 1) AS meetup_date,
-      CASE WHEN position(' ' IN COALESCE(o.meetup_time,'')) > 0
-        THEN substring(o.meetup_time FROM position(' ' IN o.meetup_time)+1)
+      SUBSTRING_INDEX(COALESCE(o.meetup_time,''), ' ', 1) AS meetup_date,
+      CASE WHEN LOCATE(' ', COALESCE(o.meetup_time,'')) > 0
+        THEN SUBSTRING(o.meetup_time, LOCATE(' ', o.meetup_time)+1)
         ELSE o.meetup_time
       END AS meetup_time_only,
-      row_to_json(p.*) AS product,
-      row_to_json(b.*) AS buyer,
-      row_to_json(s.*) AS seller
+      ${jsonObjectSql('p', 'products')} AS product,
+      ${jsonObjectSql('b', 'users')} AS buyer,
+      ${jsonObjectSql('s', 'users')} AS seller
       FROM orders o
       LEFT JOIN products p ON o.product_id = p.id
       LEFT JOIN users b ON o.buyer_id = b.id
@@ -610,9 +618,9 @@ app.get('/api/orders/:id', requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT o.*,
-        row_to_json(p.*) AS product,
-        row_to_json(b.*) AS buyer,
-        row_to_json(s.*) AS seller
+        ${jsonObjectSql('p', 'products')} AS product,
+        ${jsonObjectSql('b', 'users')} AS buyer,
+        ${jsonObjectSql('s', 'users')} AS seller
        FROM orders o
        LEFT JOIN products p ON o.product_id = p.id
        LEFT JOIN users b ON o.buyer_id = b.id
@@ -644,15 +652,15 @@ app.post('/api/orders', requireDb, requireAuth, async (req, res) => {
   const meetupLocation = meetup_place || null;
   const meetupDateTime = meetup_date && meetup_time ? `${meetup_date} ${meetup_time}` : (meetup_time || null);
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status, proposed_price=EXCLUDED.proposed_price,
-         meetup_location=EXCLUDED.meetup_location, meetup_time=EXCLUDED.meetup_time,
-         buyer_completed=EXCLUDED.buyer_completed, seller_completed=EXCLUDED.seller_completed
-       RETURNING *`,
-      [id, product_id, buyer_id, seller_id, status || 'PENDING_OFFER', proposed_price || 0, trade_method, meetupLocation, meetupDateTime, memo, buyer_completed || false, seller_completed || false]
+       ON DUPLICATE KEY UPDATE
+         status=VALUES(status), proposed_price=VALUES(proposed_price),
+         meetup_location=VALUES(meetup_location), meetup_time=VALUES(meetup_time),
+         buyer_completed=VALUES(buyer_completed), seller_completed=VALUES(seller_completed)`,
+      [id, product_id, buyer_id, seller_id, status || 'PENDING_OFFER', proposed_price || 0, trade_method, meetupLocation, meetupDateTime, memo, buyer_completed || false, seller_completed || false],
+      'orders'
     );
     console.log('[POST /api/orders] SUCCESS', { id: rows[0].id, status: rows[0].status });
     res.status(201).json(rows[0]);
@@ -701,8 +709,10 @@ app.put('/api/orders/:id', requireDb, requireAuth, async (req, res) => {
       }
     }
     if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
-    const { rows } = await pool.query(
-      `UPDATE orders SET ${sets.join(', ')} WHERE id=$1 RETURNING *`, vals
+    const { rows } = await queryReturning(
+      `UPDATE orders SET ${sets.join(', ')} WHERE id=$1`,
+      vals,
+      'orders'
     );
     if (!rows.length) return res.status(404).json({ error: 'Order not found' });
     console.log('[PUT /api/orders/:id] SUCCESS', { id: req.params.id, newStatus: rows[0].status, buyer_completed: rows[0].buyer_completed, seller_completed: rows[0].seller_completed });
@@ -723,12 +733,15 @@ app.post('/api/orders/:id/timeline', requireDb, requireAuth, async (req, res) =>
     if (req.authUserId !== oCheck[0].buyer_id && req.authUserId !== oCheck[0].seller_id) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO order_timeline_events (id, order_id, type, description)
        VALUES ($1,$2,$3,$4)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING *`,
-      [id, req.params.id, evtType, description]
+       ON DUPLICATE KEY UPDATE id=id`,
+      [id, req.params.id, evtType, description],
+      'order_timeline_events',
+      'id=$1',
+      [id],
+      { emptyOnNoChange: true }
     );
     res.status(201).json(rows[0] || {});
   } catch (e) {
@@ -742,9 +755,9 @@ app.get('/api/chat-rooms', requireDb, async (req, res) => {
   if (req.authUserId && user_id && req.authUserId !== user_id) return res.status(403).json({ error: 'Forbidden' });
   try {
     let query = `SELECT cr.*,
-      row_to_json(bu.*) AS buyer_user,
-      row_to_json(su.*) AS seller_user,
-      row_to_json(p.*) AS product_data
+      ${jsonObjectSql('bu', 'users')} AS buyer_user,
+      ${jsonObjectSql('su', 'users')} AS seller_user,
+      ${jsonObjectSql('p', 'products')} AS product_data
       FROM chat_rooms cr
       LEFT JOIN users bu ON cr.buyer_id = bu.id
       LEFT JOIN users su ON cr.seller_id = su.id
@@ -753,8 +766,7 @@ app.get('/api/chat-rooms', requireDb, async (req, res) => {
     const params = [];
     if (user_id) {
       params.push(user_id);
-      // left_user_ids NULL ? ANY(NULL) is NULL ? NOT NULL excludes all rows; COALESCE fixes seller/buyer list
-      query += ` AND (cr.buyer_id=$${params.length} OR cr.seller_id=$${params.length}) AND NOT ($${params.length} = ANY(COALESCE(cr.left_user_ids, ARRAY[]::TEXT[])))`;
+      query += ` AND (cr.buyer_id=$${params.length} OR cr.seller_id=$${params.length}) AND NOT JSON_CONTAINS(COALESCE(cr.left_user_ids, JSON_ARRAY()), JSON_QUOTE(CAST($${params.length} AS CHAR)))`;
     }
     query += ' ORDER BY cr.last_message_time DESC';
     const { rows } = await pool.query(query, params);
@@ -776,7 +788,7 @@ app.get('/api/chat-rooms/:id/messages', requireDb, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const { rows } = await pool.query(
-      `SELECT m.*, row_to_json(u.*) AS sender FROM chat_messages m
+      `SELECT m.*, ${jsonObjectSql('u', 'users')} AS sender FROM chat_messages m
        LEFT JOIN users u ON m.sender_id = u.id
        WHERE m.room_id=$1 ORDER BY m.created_at ASC LIMIT 500`,
       [req.params.id]
@@ -791,12 +803,12 @@ app.post('/api/chat-rooms', requireDb, requireAuth, async (req, res) => {
   const { id, product_id, buyer_id, seller_id } = req.body;
   if (req.authUserId !== buyer_id && req.authUserId !== seller_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO chat_rooms (id, product_id, buyer_id, seller_id)
        VALUES ($1,$2,$3,$4)
-       ON CONFLICT (id) DO UPDATE SET left_user_ids = ARRAY[]::TEXT[]
-       RETURNING *`,
-      [id, product_id, buyer_id, seller_id]
+       ON DUPLICATE KEY UPDATE left_user_ids = JSON_ARRAY()`,
+      [id, product_id, buyer_id, seller_id],
+      'chat_rooms'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -808,12 +820,15 @@ app.post('/api/chat-rooms/:id/messages', requireDb, requireAuth, async (req, res
   const { id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result, meetup_location, meetup_time, meetup_place, meetup_date } = req.body;
   if (sender_id && req.authUserId !== sender_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING *`,
-      [id, req.params.id, sender_id, content, type || 'text', images || [], order_id, original_price, proposed_price, offer_result]
+       ON DUPLICATE KEY UPDATE id=id`,
+      [id, req.params.id, sender_id, content, type || 'text', images || [], order_id, original_price, proposed_price, offer_result],
+      'chat_messages',
+      'id=$1',
+      [id],
+      { emptyOnNoChange: true }
     );
     await pool.query(
       `UPDATE chat_rooms SET last_message=$2, last_message_time=NOW() WHERE id=$1`,
@@ -831,7 +846,7 @@ app.get('/api/posts', requireDb, async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   try {
-    let query = `SELECT p.*, row_to_json(u.*) AS author FROM community_posts p
+    let query = `SELECT p.*, ${jsonObjectSql('u', 'users')} AS author FROM community_posts p
                  LEFT JOIN users u ON p.author_id = u.id WHERE 1=1`;
     const params = [];
     if (category) { params.push(category); query += ` AND p.category=$${params.length}`; }
@@ -849,14 +864,14 @@ app.post('/api/posts', requireDb, requireAuth, async (req, res) => {
   const { id, title, content, category, author_id, images, tags, region, latitude, longitude, order_id, attached_product_id } = req.body;
   if (author_id && req.authUserId !== author_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO community_posts (id, title, content, category, author_id, images, tags, region, latitude, longitude, order_id, attached_product_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (id) DO UPDATE SET
-         title=EXCLUDED.title, content=EXCLUDED.content, category=EXCLUDED.category,
-         images=EXCLUDED.images, tags=EXCLUDED.tags, region=EXCLUDED.region
-       RETURNING *`,
-      [id, title, content, category, author_id, images || [], tags || [], region, latitude, longitude, order_id, attached_product_id]
+       ON DUPLICATE KEY UPDATE
+         title=VALUES(title), content=VALUES(content), category=VALUES(category),
+         images=VALUES(images), tags=VALUES(tags), region=VALUES(region)`,
+      [id, title, content, category, author_id, images || [], tags || [], region, latitude, longitude, order_id, attached_product_id],
+      'community_posts'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -880,7 +895,7 @@ app.delete('/api/posts/:id', requireDb, requireAuth, async (req, res) => {
 app.get('/api/posts/:id/comments', requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT c.*, row_to_json(u.*) AS author FROM comments c
+      `SELECT c.*, ${jsonObjectSql('u', 'users')} AS author FROM comments c
        LEFT JOIN users u ON c.author_id = u.id
        WHERE c.post_id=$1 ORDER BY c.created_at ASC`,
       [req.params.id]
@@ -895,12 +910,15 @@ app.post('/api/posts/:id/comments', requireDb, requireAuth, async (req, res) => 
   const { id, author_id, content, parent_id } = req.body;
   if (author_id && req.authUserId !== author_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO comments (id, post_id, author_id, content, parent_id)
        VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING *`,
-      [id, req.params.id, author_id, content, parent_id]
+       ON DUPLICATE KEY UPDATE id=id`,
+      [id, req.params.id, author_id, content, parent_id],
+      'comments',
+      'id=$1',
+      [id],
+      { emptyOnNoChange: true }
     );
     if (rows.length > 0) {
       await pool.query(
@@ -936,7 +954,7 @@ app.get('/api/posts/:id/likes', requireDb, async (req, res) => {
   const { user_id } = req.query;
   try {
     const countRes = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id=$1`,
+      `SELECT COUNT(*) AS count FROM post_likes WHERE post_id=$1`,
       [req.params.id]
     );
     let liked = false;
@@ -960,17 +978,17 @@ app.post('/api/posts/:id/like', requireDb, requireAuth, async (req, res) => {
   try {
     // ?? upsert(FK ?? ??)
     await pool.query(
-      `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $1, 'unverified') ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $1, 'unverified') ON DUPLICATE KEY UPDATE id=id`,
       [userId]
     );
     const ins = await pool.query(
-      `INSERT INTO post_likes (user_id, post_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING 1`,
+      `INSERT INTO post_likes (user_id, post_id) VALUES ($1,$2) ON DUPLICATE KEY UPDATE user_id=user_id`,
       [userId, postId]
     );
-    if (ins.rows.length > 0) {
+    if (ins.rowCount > 0) {
       await pool.query(`UPDATE community_posts SET like_count = like_count + 1 WHERE id=$1`, [postId]);
     }
-    const countRes = await pool.query(`SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id=$1`, [postId]);
+    const countRes = await pool.query(`SELECT COUNT(*) AS count FROM post_likes WHERE post_id=$1`, [postId]);
     res.json({ liked: true, count: countRes.rows[0].count });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -983,13 +1001,13 @@ app.delete('/api/posts/:id/like', requireDb, requireAuth, async (req, res) => {
   const postId = req.params.id;
   try {
     const del = await pool.query(
-      `DELETE FROM post_likes WHERE user_id=$1 AND post_id=$2 RETURNING 1`,
+      `DELETE FROM post_likes WHERE user_id=$1 AND post_id=$2`,
       [userId, postId]
     );
-    if (del.rows.length > 0) {
+    if (del.rowCount > 0) {
       await pool.query(`UPDATE community_posts SET like_count = GREATEST(like_count - 1, 0) WHERE id=$1`, [postId]);
     }
-    const countRes = await pool.query(`SELECT COUNT(*)::int AS count FROM post_likes WHERE post_id=$1`, [postId]);
+    const countRes = await pool.query(`SELECT COUNT(*) AS count FROM post_likes WHERE post_id=$1`, [postId]);
     res.json({ liked: false, count: countRes.rows[0].count });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1000,7 +1018,7 @@ app.delete('/api/posts/:id/like', requireDb, requireAuth, async (req, res) => {
 app.get('/api/reviews', requireDb, async (req, res) => {
   const { reviewee_id, reviewer_id } = req.query;
   try {
-    let query = `SELECT r.*, row_to_json(u.*) AS reviewer FROM reviews r
+    let query = `SELECT r.*, ${jsonObjectSql('u', 'users')} AS reviewer FROM reviews r
                  LEFT JOIN users u ON r.reviewer_id = u.id WHERE 1=1`;
     const params = [];
     if (reviewee_id) { params.push(reviewee_id); query += ` AND r.reviewee_id=$${params.length}`; }
@@ -1028,20 +1046,20 @@ app.post('/api/reviews', requireDb, requireAuth, async (req, res) => {
     // FK ?? ??: reviewer/reviewee ???? ??? ?? ??
     await pool.query(
       `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $1, 'unverified')
-       ON CONFLICT (id) DO NOTHING`,
+       ON DUPLICATE KEY UPDATE id=id`,
       [reviewer_id]
     );
     await pool.query(
       `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $1, 'unverified')
-       ON CONFLICT (id) DO NOTHING`,
+       ON DUPLICATE KEY UPDATE id=id`,
       [reviewee_id]
     );
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO reviews (id, reviewer_id, reviewee_id, order_id, rating, tags, comment, product_title, product_image)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET rating=EXCLUDED.rating, comment=EXCLUDED.comment
-       RETURNING *`,
-      [id, reviewer_id, reviewee_id, order_id, rating, tags || [], comment, product_title, product_image]
+       ON DUPLICATE KEY UPDATE rating=VALUES(rating), comment=VALUES(comment)`,
+      [id, reviewer_id, reviewee_id, order_id, rating, tags || [], comment, product_title, product_image],
+      'reviews'
     );
     console.log('[POST /api/reviews] SUCCESS', { id: rows[0]?.id });
     res.status(201).json(rows[0]);
@@ -1070,12 +1088,15 @@ app.post('/api/notifications', requireDb, async (req, res) => {
   const { id, target_user_id, type, title, content, link } = req.body;
   console.log('[POST /api/notifications] REQUEST', { id, target_user_id, type, title });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO notifications (id, target_user_id, type, title, content, link)
        VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING *`,
-      [id, target_user_id, type, title, content, link]
+       ON DUPLICATE KEY UPDATE id=id`,
+      [id, target_user_id, type, title, content, link],
+      'notifications',
+      'id=$1',
+      [id],
+      { emptyOnNoChange: true }
     );
     console.log('[POST /api/notifications] SUCCESS', { id, inserted: rows.length > 0 });
     res.status(201).json(rows[0] || {});
@@ -1089,7 +1110,7 @@ app.put('/api/notifications/:id/read', requireDb, async (req, res) => {
   try {
     const { rows: nCheck } = await pool.query('SELECT target_user_id FROM notifications WHERE id=$1', [req.params.id]);
     if (req.authUserId && nCheck.length && nCheck[0].target_user_id !== req.authUserId) return res.status(403).json({ error: 'Forbidden' });
-    await pool.query('UPDATE notifications SET read=true WHERE id=$1', [req.params.id]);
+    await pool.query('UPDATE notifications SET `read`=true WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1120,12 +1141,12 @@ app.post('/api/disputes', requireDb, requireAuth, async (req, res) => {
   const { id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, reason, action, description, evidence } = req.body;
   if (req.authUserId !== buyer_id && req.authUserId !== seller_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO disputes (id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, reason, action, description, evidence)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (id) DO UPDATE SET description=EXCLUDED.description
-       RETURNING *`,
-      [id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, reason, action, description, evidence || []]
+       ON DUPLICATE KEY UPDATE description=VALUES(description)`,
+      [id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, reason, action, description, evidence || []],
+      'disputes'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -1139,7 +1160,7 @@ app.get('/api/favorites', requireDb, async (req, res) => {
   if (req.authUserId && user_id && req.authUserId !== user_id) return res.status(403).json({ error: 'Forbidden' });
   try {
     const { rows } = await pool.query(
-      `SELECT f.*, row_to_json(p.*) AS product FROM favorites f
+      `SELECT f.*, ${jsonObjectSql('p', 'products')} AS product FROM favorites f
        LEFT JOIN products p ON f.product_id = p.id
        WHERE f.user_id=$1 ORDER BY f.created_at DESC`,
       [user_id]
@@ -1154,10 +1175,14 @@ app.post('/api/favorites', requireDb, async (req, res) => {
   const { user_id, product_id } = req.body;
   if (req.authUserId && user_id && req.authUserId !== user_id) return res.status(403).json({ error: 'Forbidden' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO favorites (user_id, product_id) VALUES ($1,$2)
-       ON CONFLICT (user_id, product_id) DO NOTHING RETURNING *`,
-      [user_id, product_id]
+       ON DUPLICATE KEY UPDATE user_id=user_id`,
+      [user_id, product_id],
+      'favorites',
+      'user_id=$1 AND product_id=$2',
+      [user_id, product_id],
+      { emptyOnNoChange: true }
     );
     res.status(201).json(rows[0] || { user_id, product_id });
   } catch (e) {
@@ -1189,11 +1214,12 @@ app.post('/api/inquiries', requireDb, async (req, res) => {
   const cat = (category || 'general').toString().slice(0, 200);
   const imgs = Array.isArray(images) ? images.slice(0, 5).map(String) : [];
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO inquiries (id, user_id, email, category, title, content, images, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
-       RETURNING *`,
-      [id, user_id || null, email || null, cat, String(title).trim(), String(content).trim(), imgs]
+      `,
+      [id, user_id || null, email || null, cat, String(title).trim(), String(content).trim(), imgs],
+      'inquiries'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -1227,7 +1253,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ?????????? ????? (???? ?????? DATABASE_URL DB ??? Supabase ????????????? ????? ??? ?????)
+// ?????????? ?????
 app.get('/api/admin/stats', requireDb, requireAdmin, async (_req, res) => {
   try {
     const r = await Promise.all([
@@ -1245,10 +1271,10 @@ app.get('/api/admin/stats', requireDb, requireAdmin, async (_req, res) => {
       pool.query('SELECT COUNT(*) FROM reports').catch(() => ({ rows: [{ count: '0' }] })),
       pool.query("SELECT COUNT(*) FROM reports WHERE status='open'").catch(() => ({ rows: [{ count: '0' }] })),
       pool.query(
-        'SELECT id, nickname, created_at FROM users ORDER BY created_at DESC NULLS LAST LIMIT 5'
+        'SELECT id, nickname, created_at FROM users ORDER BY created_at DESC LIMIT 5'
       ),
       pool.query(
-        'SELECT id, status, created_at FROM orders ORDER BY created_at DESC NULLS LAST LIMIT 5'
+        'SELECT id, status, created_at FROM orders ORDER BY created_at DESC LIMIT 5'
       ),
     ]);
     res.json({
@@ -1304,11 +1330,14 @@ app.get('/api/admin/users/:id', requireDb, requireAdmin, async (req, res) => {
 app.put('/api/admin/users/:id', requireDb, requireAdmin, async (req, res) => {
   try {
     const { nickname, kyc_status, trust_score, bio, seller_type } = req.body;
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE users SET nickname=COALESCE($1,nickname), kyc_status=COALESCE($2,kyc_status),
        trust_score=COALESCE($3,trust_score), bio=COALESCE($4,bio), seller_type=COALESCE($5,seller_type)
-       WHERE id=$6 RETURNING *`,
-      [nickname, kyc_status, trust_score, bio, seller_type, req.params.id]
+       WHERE id=$6`,
+      [nickname, kyc_status, trust_score, bio, seller_type, req.params.id],
+      'users',
+      'id=$1',
+      [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
@@ -1347,12 +1376,14 @@ app.get('/api/admin/disputes', requireDb, requireAdmin, async (_req, res) => {
 app.put('/api/admin/disputes/:id', requireDb, requireAdmin, async (req, res) => {
   try {
     const { status, admin_response } = req.body;
-    const resolved = status === 'RESOLVED' ? 'NOW()' : 'resolved_at';
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE disputes SET status=COALESCE($1,status), admin_response=COALESCE($2,admin_response),
        resolved_at=${status === 'RESOLVED' ? 'NOW()' : 'resolved_at'}
-       WHERE id=$3 RETURNING *`,
-      [status, admin_response, req.params.id]
+       WHERE id=$3`,
+      [status, admin_response, req.params.id],
+      'disputes',
+      'id=$1',
+      [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
@@ -1384,7 +1415,7 @@ app.get('/api/admin/products', requireDb, requireAdmin, async (req, res) => {
     if (free_share === 'true') { query += ` AND p.is_free_share=true`; }
     if (q) {
       params.push(`%${q}%`);
-      query += ` AND (p.title ILIKE $${params.length} OR p.id::text ILIKE $${params.length})`;
+      query += ` AND (p.title LIKE $${params.length} OR CAST(p.id AS CHAR) LIKE $${params.length})`;
     }
     query += ` ORDER BY p.created_at DESC LIMIT 500`;
     const { rows } = await pool.query(query, params);
@@ -1407,7 +1438,7 @@ app.get('/api/admin/posts', requireDb, requireAdmin, async (req, res) => {
     if (category) { params.push(category); query += ` AND p.category=$${params.length}`; }
     if (q) {
       params.push(`%${q}%`);
-      query += ` AND (p.title ILIKE $${params.length} OR p.content ILIKE $${params.length})`;
+      query += ` AND (p.title LIKE $${params.length} OR p.content LIKE $${params.length})`;
     }
     query += ` ORDER BY p.created_at DESC LIMIT 500`;
     const { rows } = await pool.query(query, params);
@@ -1450,11 +1481,12 @@ app.post('/api/reports', requireDb, requireAuth, async (req, res) => {
     if (dup.rows.length) {
       return res.status(409).json({ error: 'You already reported this. Wait for admin review.' });
     }
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `INSERT INTO reports (id, reporter_id, target_type, target_id, reason, description, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'open')
-       RETURNING *`,
-      [id, req.authUserId, target_type, target_id, String(reason).trim(), description ? String(description).trim() : null]
+      `,
+      [id, req.authUserId, target_type, target_id, String(reason).trim(), description ? String(description).trim() : null],
+      'reports'
     );
     res.status(201).json(rows[0]);
   } catch (e) {
@@ -1504,14 +1536,17 @@ app.put('/api/admin/reports/:id', requireDb, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Invalid status' });
   }
   try {
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE reports SET
-         status = COALESCE($1::text, status),
-         admin_note = COALESCE($2::text, admin_note),
-         resolved_at = CASE WHEN $1::text IN ('resolved','dismissed') THEN NOW() ELSE resolved_at END
+         status = COALESCE($1, status),
+         admin_note = COALESCE($2, admin_note),
+         resolved_at = CASE WHEN $1 IN ('resolved','dismissed') THEN NOW() ELSE resolved_at END
        WHERE id = $3
-       RETURNING *`,
-      [status ?? null, admin_note ?? null, req.params.id]
+      `,
+      [status ?? null, admin_note ?? null, req.params.id],
+      'reports',
+      'id=$1',
+      [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
@@ -1527,7 +1562,7 @@ app.get('/api/admin/inquiries', requireDb, requireAdmin, async (_req, res) => {
       `SELECT i.*, u.nickname AS user_nickname
        FROM inquiries i
        LEFT JOIN users u ON u.id = i.user_id
-       ORDER BY i.created_at DESC NULLS LAST`
+       ORDER BY i.created_at DESC`
     );
     res.json(rows);
   } catch (e) {
@@ -1538,14 +1573,17 @@ app.get('/api/admin/inquiries', requireDb, requireAdmin, async (_req, res) => {
 app.put('/api/admin/inquiries/:id', requireDb, requireAdmin, async (req, res) => {
   try {
     const { admin_reply, status } = req.body;
-    const { rows } = await pool.query(
+    const { rows } = await queryReturning(
       `UPDATE inquiries SET
-         admin_reply = COALESCE($1::text, admin_reply),
-         status = COALESCE($2::text, status),
-         replied_at = CASE WHEN $2::text = 'replied' THEN NOW() ELSE replied_at END
+         admin_reply = COALESCE($1, admin_reply),
+         status = COALESCE($2, status),
+         replied_at = CASE WHEN $2 = 'replied' THEN NOW() ELSE replied_at END
        WHERE id = $3
-       RETURNING *`,
-      [admin_reply ?? null, status ?? null, req.params.id]
+      `,
+      [admin_reply ?? null, status ?? null, req.params.id],
+      'inquiries',
+      'id=$1',
+      [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
@@ -1601,7 +1639,7 @@ io.on('connection', async (socket) => {
       try {
         await pool.query(
           `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images)
-           VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+           VALUES ($1,$2,$3,$4,$5,$6) ON DUPLICATE KEY UPDATE id=id`,
           [message.id, roomId, message.senderId, message.content, message.type || 'text', message.images || []]
         );
       } catch (e) {
