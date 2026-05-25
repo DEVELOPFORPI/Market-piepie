@@ -118,10 +118,39 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000'];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://blindlounge.xyz',
+  'https://www.blindlounge.xyz',
+  'https://pie.blindlounge.xyz',
+  'https://www.pie.blindlounge.xyz',
+  'https://market-piepie-frontend.vercel.app',
+  'https://piepie-market.vercel.app',
+];
+const envAllowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+const allowAnyOrigin = envAllowedOrigins.includes('*');
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins].filter((origin) => origin !== '*')));
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowAnyOrigin || allowedOrigins.includes(origin)) return true;
+  try {
+    const url = new URL(origin);
+    return ['localhost', '127.0.0.1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+function corsOptionsDelegate(req, callback) {
+  const origin = req.header('Origin');
+  callback(null, {
+    origin: isAllowedOrigin(origin) ? origin || false : false,
+    credentials: true,
+  });
+}
+app.use(cors(corsOptionsDelegate));
 app.use(express.json({ limit: '10mb' }));
 app.use((req, _res, next) => {
   if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
@@ -1600,7 +1629,11 @@ app.use((_req, res) => {
 // ????????? Socket.io ???????? ????? ????????????????????????????????????????????????????????????????????????????????????????????????????????????
 const httpServer = http.createServer(app);
 const io = new SocketIOServer(httpServer, {
-  cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
+  cors: {
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
   pingInterval: 25000,
   pingTimeout: 60000,
 });
