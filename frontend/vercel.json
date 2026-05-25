@@ -1,7 +1,7 @@
 {
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "http://54.250.253.123:4000/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://pie.blindlounge.xyz/api/:path*" },
     { "source": "/proxy/coingecko/:path*", "destination": "https://api.coingecko.com/api/v3/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],

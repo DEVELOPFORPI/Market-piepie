@@ -1,21 +1,13 @@
 /**
- * API 클라이언트
- * 개발: http://localhost:4000
- * 프로덕션: VITE_API_URL 환경변수로 설정
+ * API client
+ * - Dev: same-origin `/api` through Vite proxy.
+ * - Production: `VITE_API_URL` / `VITE_API_BASE_URL`, falling back to pie.blindlounge.xyz.
  */
 
 import { getSessionToken } from '@/utils/authStorage';
+import { API_BASE } from '@/utils/apiConfig';
 
-const raw = import.meta.env.VITE_API_URL;
-let _base = raw === undefined ? 'http://localhost:4000' : raw;
-/** Dev: same-origin `/api` → Vite proxy (see vite.config). Avoids browser CORS when opening the app from LAN / Pi Browser while `dev-login` already uses relative `/api`. */
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  _base = '';
-}
-if (typeof window !== 'undefined' && window.location.protocol === 'https:' && _base.startsWith('http:')) {
-  _base = '';
-}
-export const API_BASE = _base;
+export { API_BASE };
 
 interface ApiResponse<T = unknown> {
   ok: boolean;

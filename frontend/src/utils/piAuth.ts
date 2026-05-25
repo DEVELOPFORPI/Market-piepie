@@ -1,3 +1,5 @@
+import { API_BASE } from '@/utils/apiConfig';
+
 type PiSdk = {
   init: (config: { version: string; sandbox?: boolean }) => void;
   authenticate: (
@@ -16,8 +18,6 @@ export interface PiAuthResult {
   username?: string;
   accessToken: string;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
 
 async function postJson(path: string, body: unknown): Promise<boolean> {
   try {

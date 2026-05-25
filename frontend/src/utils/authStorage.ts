@@ -3,6 +3,8 @@
  * Pi-verified users are persisted in localStorage so sessions survive tab close.
  */
 
+import { API_BASE } from '@/utils/apiConfig';
+
 const AUTH_KEY = 'currentUserId';
 const SESSION_TOKEN_KEY = 'marketpiepie_session_token';
 /** After explicit log out: skip auto guest login until user taps Log in on welcome. */
@@ -132,7 +134,7 @@ export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptio
 
 async function requestDevSessionToken(userId: string): Promise<void> {
   try {
-    const r = await fetch('/api/auth/dev-login', {
+    const r = await fetch(`${API_BASE}/api/auth/dev-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, nickname: 'Guest' }),

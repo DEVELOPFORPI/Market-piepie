@@ -23,6 +23,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
+import { API_BASE } from '@/utils/apiConfig';
 import {
   CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
@@ -211,7 +212,7 @@ export const ChatRoom: React.FC = () => {
     const pollInterval = setInterval(async () => {
       if (!roomId) return;
       try {
-        const res = await fetch("/api/chat-rooms/" + roomId + "/messages");
+        const res = await fetch(`${API_BASE}/api/chat-rooms/${roomId}/messages`);
         if (res.ok) {
           const dbMessages = await res.json();
           if (dbMessages.length > 0) {
@@ -242,7 +243,7 @@ export const ChatRoom: React.FC = () => {
       try {
         const uid = getCurrentUserId();
         if (uid) {
-          const orderRes = await fetch(`/api/orders?user_id=${uid}`);
+          const orderRes = await fetch(`${API_BASE}/api/orders?user_id=${uid}`);
           console.log('[ORDERSYNC] poll response', { ok: orderRes.ok, status: orderRes.status, uid });
           if (orderRes.ok) {
             const rows = await orderRes.json();

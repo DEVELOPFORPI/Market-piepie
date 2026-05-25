@@ -24,7 +24,8 @@
 
 | 변수 | 예시 |
 |------|------|
-| `VITE_API_BASE_URL` | `https://api.도메인.com` |
+| `VITE_API_URL` | `https://pie.blindlounge.xyz` |
+| `VITE_API_BASE_URL` | `https://pie.blindlounge.xyz` |
 
 > `VITE_ADMIN_API_KEY` 등은 **공개 앱 빌드에는 넣지 마세요.**
 

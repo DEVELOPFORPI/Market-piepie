@@ -10,7 +10,7 @@ import { getOrders, getShareCountByUserId } from '@/utils/orderStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { profileAvatarObjectClass, resolveDisplayNickname } from '@/utils/profileStorage';
-import { API_BASE } from '@/utils/api';
+import { API_BASE } from '@/utils/apiConfig';
 
 interface ReviewFromDB {
   id: string;
