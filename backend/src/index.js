@@ -151,6 +151,8 @@ const defaultAllowedOrigins = [
   "https://pie.blindlounge.xyz",
   "https://www.pie.blindlounge.xyz",
   "https://market-piepie-frontend.vercel.app",
+  "https://marketpiepeie.vercel.app",
+  "https://merketpiepietest.vercel.app",
   "https://piepie-market.vercel.app",
 ];
 const envAllowedOrigins = process.env.CORS_ORIGIN
