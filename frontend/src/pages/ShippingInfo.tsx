@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { fileToDataUrl, getDisplayImageUrl } from '@/utils/imageUrl';
+import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { uploadImagesToR2 } from '@/utils/imageUpload';
 
 export const ShippingInfo: React.FC = () => {
   const navigate = useNavigate();
@@ -9,17 +10,22 @@ export const ShippingInfo: React.FC = () => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [shippingCompany, setShippingCompany] = useState('');
   const [shippingProof, setShippingProof] = useState<string[]>([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   const shippingCompanies = ['CJ Logistics', 'Hanjin', 'Logen', 'Lotte', 'Other'];
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    setUploadingProof(true);
     try {
-      const dataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
-      setShippingProof([...shippingProof, ...dataUrls.filter((u) => u.length > 0)]);
+      const urls = await uploadImagesToR2(files, { folder: 'shipping' });
+      setShippingProof((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not load image.');
+      alert('Could not upload image.');
+    } finally {
+      setUploadingProof(false);
+      e.target.value = '';
     }
   };
 
@@ -127,10 +133,10 @@ export const ShippingInfo: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
           onClick={handleSubmit}
-          disabled={!trackingNumber || !shippingCompany}
+          disabled={!trackingNumber || !shippingCompany || uploadingProof}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          Mark shipped
+          {uploadingProof ? 'Uploading...' : 'Mark shipped'}
         </button>
       </div>
     </div>

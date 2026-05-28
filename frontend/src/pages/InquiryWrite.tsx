@@ -3,40 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { TopBar } from '@/components/common/TopBar';
 import { getCurrentUserId } from '@/utils/authStorage';
+import { uploadImagesToR2 } from '@/utils/imageUpload';
 
 const CATEGORIES = ['General', 'Bug Report', 'Account', 'Trade', 'Suggestion', 'Other'];
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
-
-async function compressImageFile(file: File, max = 1200): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        let w = img.width;
-        let h = img.height;
-        if (w > max || h > max) {
-          if (w > h) { h = Math.round((h * max) / w); w = max; }
-          else { w = Math.round((w * max) / h); h = max; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(dataUrl); return; }
-        ctx.drawImage(img, 0, 0, w, h);
-        try { resolve(canvas.toDataURL('image/jpeg', 0.82)); }
-        catch { resolve(dataUrl); }
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    };
-    reader.onerror = () => resolve('');
-    reader.readAsDataURL(file);
-  });
-}
 
 export const InquiryWrite: React.FC = () => {
   const navigate = useNavigate();
@@ -48,6 +19,7 @@ export const InquiryWrite: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const uid = getCurrentUserId();
 
@@ -56,9 +28,16 @@ export const InquiryWrite: React.FC = () => {
     const room = MAX_IMAGES - images.length;
     if (room <= 0) return;
     const picks = Array.from(files).slice(0, room);
-    const compressed = await Promise.all(picks.map((f) => compressImageFile(f)));
-    setImages((prev) => [...prev, ...compressed.filter(Boolean)]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setUploadingImages(true);
+    try {
+      const urls = await uploadImagesToR2(picks, { folder: 'inquiries' });
+      setImages((prev) => [...prev, ...urls]);
+    } catch {
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImages(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const removeImage = (idx: number) => {
@@ -200,9 +179,9 @@ export const InquiryWrite: React.FC = () => {
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
-        <button onClick={handleSubmit} disabled={sending || !title.trim() || !content.trim()}
+        <button onClick={handleSubmit} disabled={sending || uploadingImages || !title.trim() || !content.trim()}
           className="w-full py-3 text-sm text-white font-medium rounded-lg disabled:opacity-50 transition-colors" style={{ backgroundColor: TEAL }}>
-          {sending ? 'Submitting...' : 'Submit Inquiry'}
+          {uploadingImages ? 'Uploading...' : sending ? 'Submitting...' : 'Submit Inquiry'}
         </button>
       </div>
     </div>

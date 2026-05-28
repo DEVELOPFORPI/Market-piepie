@@ -6,51 +6,10 @@ import {
   type HomePopupConfig,
 } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
+import { uploadImageToR2 } from '@/utils/imageUpload';
 
 const TEAL = '#00A8A3';
 const CHARCOAL = '#2c2c2e';
-
-/** Wider max for a single hero banner (localStorage size still applies). */
-async function compressImageFile(file: File, max = 900): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        let w = img.width;
-        let h = img.height;
-        if (w > max || h > max) {
-          if (w > h) {
-            h = Math.round((h * max) / w);
-            w = max;
-          } else {
-            w = Math.round((w * max) / h);
-            h = max;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(dataUrl);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        try {
-          resolve(canvas.toDataURL('image/jpeg', 0.82));
-        } catch {
-          resolve(dataUrl);
-        }
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    };
-    reader.onerror = () => resolve('');
-    reader.readAsDataURL(file);
-  });
-}
 
 export const AdminHomePopup: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +17,7 @@ export const AdminHomePopup: React.FC = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [savedHint, setSavedHint] = useState('');
   const [pickedLabel, setPickedLabel] = useState('');
+  const [uploadingHero, setUploadingHero] = useState(false);
 
   const refresh = useCallback(() => {
     setCfg(getHomePopupConfig());
@@ -107,9 +67,15 @@ export const AdminHomePopup: React.FC = () => {
     e.target.value = '';
     if (!file || !file.type.startsWith('image/')) return;
     setPickedLabel(file.name);
-    const data = await compressImageFile(file);
-    if (!data) return;
-    setCfg((c) => ({ ...c, heroImage: data }));
+    setUploadingHero(true);
+    try {
+      const url = await uploadImageToR2(file, { folder: 'home-popup', admin: true });
+      setCfg((c) => ({ ...c, heroImage: url }));
+    } catch {
+      alert('Could not upload image.');
+    } finally {
+      setUploadingHero(false);
+    }
   };
 
   const clearHero = () => {
@@ -173,9 +139,10 @@ export const AdminHomePopup: React.FC = () => {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingHero}
                 className="shrink-0 rounded-xl bg-[#4a4a4c] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#3a3a3c]"
               >
-                파일선택
+                {uploadingHero ? 'Uploading...' : '파일선택'}
               </button>
             </div>
             {cfg.heroImage ? (

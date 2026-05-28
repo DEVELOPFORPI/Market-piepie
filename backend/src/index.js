@@ -29,6 +29,8 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
+const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const xss = require("xss");
 const { createDbPool, jsonObjectSql } = require("./db");
 const http = require("http");
@@ -49,6 +51,136 @@ const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 // Vercel ???? ???? X-Forwarded-For ??? ?? ????? IP ??
 app.set("trust proxy", 1);
+
+const R2_MAX_UPLOAD_MB = Number(process.env.R2_MAX_UPLOAD_MB || 8);
+const R2_MAX_UPLOAD_BYTES = Math.max(1, R2_MAX_UPLOAD_MB) * 1024 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+let r2Client = null;
+
+function trimSlashes(value) {
+  return String(value || "").trim().replace(/^\/+|\/+$/g, "");
+}
+
+function normalizePublicBaseUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function encodeKeyPath(key) {
+  return String(key || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function requestBaseUrl(req) {
+  const configured = normalizePublicBaseUrl(
+    process.env.PUBLIC_API_URL ||
+      process.env.API_PUBLIC_URL ||
+      process.env.BACKEND_PUBLIC_URL ||
+      "",
+  );
+  if (configured) return configured;
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "http";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  return `${proto}://${host}`;
+}
+
+function imageUrlForKey(req, config, key) {
+  if (config.publicBaseUrl) return `${config.publicBaseUrl}/${key}`;
+  return `${requestBaseUrl(req)}/api/uploads/object/${encodeKeyPath(key)}`;
+}
+
+function safePathSegment(value, fallback) {
+  const cleaned = trimSlashes(value || fallback)
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => part.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-"))
+    .filter(Boolean)
+    .join("/");
+  return cleaned || fallback;
+}
+
+function extensionForMime(mimeType, originalName = "") {
+  const fromName = String(originalName).toLowerCase().match(/\.(avif|gif|jpe?g|png|webp)$/);
+  if (fromName) return fromName[0] === ".jpeg" ? ".jpg" : fromName[0];
+  const map = {
+    "image/avif": ".avif",
+    "image/gif": ".gif",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+  };
+  return map[mimeType] || ".jpg";
+}
+
+function getR2Config() {
+  const accountId =
+    process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID || "";
+  const endpoint =
+    process.env.R2_ENDPOINT ||
+    process.env.CLOUDFLARE_R2_ENDPOINT ||
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : "");
+  const bucket =
+    process.env.R2_BUCKET || process.env.CLOUDFLARE_R2_BUCKET || "";
+  const accessKeyId =
+    process.env.R2_ACCESS_KEY_ID ||
+    process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
+    "";
+  const secretAccessKey =
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ||
+    "";
+  const publicBaseUrl = normalizePublicBaseUrl(
+    process.env.R2_PUBLIC_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL || "",
+  );
+  const region = process.env.R2_REGION || "auto";
+
+  const missing = [];
+  if (!endpoint) missing.push("R2_ENDPOINT or R2_ACCOUNT_ID");
+  if (!bucket) missing.push("R2_BUCKET");
+  if (!accessKeyId) missing.push("R2_ACCESS_KEY_ID");
+  if (!secretAccessKey) missing.push("R2_SECRET_ACCESS_KEY");
+
+  return {
+    ok: missing.length === 0,
+    missing,
+    endpoint,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    publicBaseUrl,
+    region,
+    uploadPrefix: safePathSegment(process.env.R2_UPLOAD_PREFIX || "uploads", "uploads"),
+  };
+}
+
+function getR2Client() {
+  const config = getR2Config();
+  if (!config.ok) {
+    const err = new Error(`R2 is not configured: ${config.missing.join(", ")}`);
+    err.statusCode = 503;
+    throw err;
+  }
+  if (!r2Client) {
+    r2Client = new S3Client({
+      region: config.region,
+      endpoint: config.endpoint,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle: true,
+    });
+  }
+  return { client: r2Client, config };
+}
 
 // ????????? ?????? ???????? (DB ???, ????? ???? ?????) ??????????????????????????????????????????
 const sessionCache = new Map();
@@ -213,9 +345,72 @@ const paymentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use("/api/", generalLimiter);
 app.use("/api/auth/", authLimiter);
 app.use("/api/payments/", paymentLimiter);
+app.use("/api/uploads/", uploadLimiter);
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 1,
+    fileSize: R2_MAX_UPLOAD_BYTES,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Only JPG, PNG, WebP, GIF, or AVIF images are allowed"));
+  },
+});
+
+function parseImageUpload(req, res, next) {
+  imageUpload.single("image")(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+      const message =
+        err.code === "LIMIT_FILE_SIZE"
+          ? `Image must be ${R2_MAX_UPLOAD_MB}MB or smaller`
+          : err.message;
+      return res.status(status).json({ error: message });
+    }
+    return res.status(400).json({ error: err.message || "Invalid image upload" });
+  });
+}
+
+async function requireUploadActor(req, res, next) {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const suppliedAdminPassword = req.headers["x-admin-password"];
+  if (adminPassword && suppliedAdminPassword === adminPassword) {
+    req.uploadActorId = "admin";
+    return next();
+  }
+
+  if (req.authUserId) {
+    req.uploadActorId = req.authUserId;
+    return next();
+  }
+
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    const userId = await getUserIdFromToken(auth.slice(7));
+    if (userId) {
+      req.authUserId = userId;
+      req.uploadActorId = userId;
+      return next();
+    }
+  }
+
+  return res.status(401).json({ error: "Authentication required" });
+}
 
 let pool = null;
 pool = createDbPool();
@@ -250,6 +445,87 @@ app.get("/api/health", async (_req, res) => {
     out.ok = false;
     out.db = "error";
     return res.status(503).json(out);
+  }
+});
+
+app.post(
+  "/api/uploads/image",
+  requireUploadActor,
+  parseImageUpload,
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "image file is required" });
+    }
+
+    try {
+      const { client, config } = getR2Client();
+      const folder = safePathSegment(req.body?.folder || "images", "images");
+      const actor = safePathSegment(req.uploadActorId || "user", "user");
+      const date = new Date().toISOString().slice(0, 10);
+      const ext = extensionForMime(req.file.mimetype, req.file.originalname);
+      const key = [
+        config.uploadPrefix,
+        folder,
+        actor,
+        date,
+        `${crypto.randomUUID()}${ext}`,
+      ].join("/");
+
+      await client.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          Body: req.file.buffer,
+          ContentType: req.file.mimetype,
+          CacheControl: "public, max-age=31536000, immutable",
+        }),
+      );
+
+      res.status(201).json({
+        ok: true,
+        url: imageUrlForKey(req, config, key),
+        key,
+        contentType: req.file.mimetype,
+        size: req.file.size,
+      });
+    } catch (e) {
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || "Image upload failed" });
+    }
+  },
+);
+
+app.get("/api/uploads/object/*", async (req, res) => {
+  const key = req.params[0];
+  if (!key) return res.status(400).json({ error: "object key is required" });
+
+  try {
+    const { client, config } = getR2Client();
+    const object = await client.send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+      }),
+    );
+
+    if (object.ContentType) res.setHeader("Content-Type", object.ContentType);
+    if (object.ContentLength != null) res.setHeader("Content-Length", String(object.ContentLength));
+    if (object.ETag) res.setHeader("ETag", object.ETag);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+    if (object.Body && typeof object.Body.pipe === "function") {
+      object.Body.pipe(res);
+      return;
+    }
+
+    const bytes = object.Body && typeof object.Body.transformToByteArray === "function"
+      ? await object.Body.transformToByteArray()
+      : null;
+    if (!bytes) return res.status(500).json({ error: "Could not read object" });
+    return res.send(Buffer.from(bytes));
+  } catch (e) {
+    const status = e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404 ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? "Object not found" : e.message || "Could not load object" });
   }
 });
 

@@ -21,6 +21,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { getShareCountByUserId } from '@/utils/orderStorage';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 
 export const ProfileEdit: React.FC = () => {
   const myUser = getMyUser();
@@ -38,6 +39,7 @@ export const ProfileEdit: React.FC = () => {
   const [bio, setBio] = useState(stored.bio ?? 'I value safe, quick trades.');
   const [activityRegion, setActivityRegion] = useState(stored.activityRegion ?? '');
   const [hasChanges, setHasChanges] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [unlockedBadgeBump, setUnlockedBadgeBump] = useState(0);
   const unlockedBadges = useMemo(() => {
     void unlockedBadgeBump;
@@ -75,68 +77,30 @@ export const ProfileEdit: React.FC = () => {
     return () => window.removeEventListener('regionChanged', onRegionChanged);
   }, []);
 
-  /** Compress profile photo to small JPEG (max 256px) for storage */
-  const compressProfileImage = (dataUrl: string): Promise<string> => {
-    return new Promise((resolve) => {
-      if (!dataUrl.startsWith('data:image')) {
-        resolve(dataUrl);
-        return;
-      }
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const max = 256;
-        let w = img.width;
-        let h = img.height;
-        if (w > max || h > max) {
-          if (w > h) {
-            h = Math.round((h * max) / w);
-            w = max;
-          } else {
-            w = Math.round((w * max) / h);
-            h = max;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(dataUrl);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        try {
-          const compressed = canvas.toDataURL('image/jpeg', 0.8);
-          resolve(compressed);
-        } catch {
-          resolve(dataUrl);
-        }
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    });
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const dataUrl = reader.result as string;
-        const compressed = await compressProfileImage(dataUrl);
-        setProfileImage(compressed);
-        setHasChanges(true);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const url = await uploadImageToR2(file, { folder: 'profiles' });
+      setProfileImage(url);
+      setHasChanges(true);
+    } catch {
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
     }
   };
 
   const handleSave = () => {
     (async () => {
       let img = profileImage;
-      if (img.startsWith('data:') && img.length > 100_000) {
-        img = await compressProfileImage(img);
+      try {
+        img = await uploadImageReferenceToR2(profileImage, { folder: 'profiles' });
+      } catch {
+        alert('Could not upload image.');
+        return;
       }
       saveProfile({
         profileImage: img,
@@ -172,10 +136,10 @@ export const ProfileEdit: React.FC = () => {
         rightContent={
           <button
             onClick={handleSave}
-            disabled={!hasChanges}
+            disabled={!hasChanges || uploadingImage}
             className="px-3 py-1.5 text-sm font-medium text-primary disabled:text-gray-400"
           >
-            Save
+            {uploadingImage ? 'Uploading...' : 'Save'}
           </button>
         }
       />

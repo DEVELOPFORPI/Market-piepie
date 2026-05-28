@@ -9,28 +9,30 @@ import { setItem, getItem } from '@/utils/heavyStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
 
-const _userSyncedCache = new Set<string>();
+const _userSyncedCache = new Map<string, string>();
 
 /** 유저를 DB에 upsert */
 export async function syncUserToDB(user: User): Promise<void> {
-  if (_userSyncedCache.has(user.id)) return;
+  const payload = {
+    id: user.id,
+    nickname: (user.nickname && user.nickname !== user.id && !user.nickname.startsWith('guest_') && !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(user.nickname)) ? user.nickname : undefined,
+    profile_image: user.profileImage,
+    bio: user.bio,
+    kyc_status: user.kycStatus || 'unverified',
+    trust_score: user.trustScore || 0,
+    rating: user.rating || 0,
+    trade_count: user.tradeCount || 0,
+    activity_region: user.activityRegion,
+    verified_region: user.verifiedRegion,
+    display_activity_badge_id: user.displayActivityBadgeId,
+    seller_type: user.sellerType,
+  };
+  const cacheKey = JSON.stringify(payload);
+  if (_userSyncedCache.get(user.id) === cacheKey) return;
   try {
-    const res = await api.post('/api/users', {
-      id: user.id,
-      nickname: (user.nickname && user.nickname !== user.id && !user.nickname.startsWith('guest_') && !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(user.nickname)) ? user.nickname : undefined,
-      profile_image: user.profileImage,
-      bio: user.bio,
-      kyc_status: user.kycStatus || 'unverified',
-      trust_score: user.trustScore || 0,
-      rating: user.rating || 0,
-      trade_count: user.tradeCount || 0,
-      activity_region: user.activityRegion,
-      verified_region: user.verifiedRegion,
-      display_activity_badge_id: user.displayActivityBadgeId,
-      seller_type: user.sellerType,
-    });
+    const res = await api.post('/api/users', payload);
     if (res.ok) {
-      _userSyncedCache.add(user.id);
+      _userSyncedCache.set(user.id, cacheKey);
     }
   } catch {
     // 오프라인 시 무시
@@ -680,10 +682,10 @@ export async function syncReviewToDB(review: {
   try {
     const userSyncs: Promise<void>[] = [];
     if (review.reviewerId && !_userSyncedCache.has(review.reviewerId)) userSyncs.push(
-      api.post('/api/users', { id: review.reviewerId, kyc_status: 'unverified' }).then((r) => { if (r.ok) _userSyncedCache.add(review.reviewerId); }).catch(() => {})
+      api.post('/api/users', { id: review.reviewerId, kyc_status: 'unverified' }).then((r) => { if (r.ok) _userSyncedCache.set(review.reviewerId, JSON.stringify({ id: review.reviewerId, kyc_status: 'unverified' })); }).catch(() => {})
     );
     if (review.revieweeId && !_userSyncedCache.has(review.revieweeId)) userSyncs.push(
-      api.post('/api/users', { id: review.revieweeId, kyc_status: 'unverified' }).then((r) => { if (r.ok) _userSyncedCache.add(review.revieweeId); }).catch(() => {})
+      api.post('/api/users', { id: review.revieweeId, kyc_status: 'unverified' }).then((r) => { if (r.ok) _userSyncedCache.set(review.revieweeId, JSON.stringify({ id: review.revieweeId, kyc_status: 'unverified' })); }).catch(() => {})
     );
     if (userSyncs.length) await Promise.all(userSyncs);
     const res = await api.post('/api/reviews', {
@@ -739,7 +741,7 @@ export async function syncFavoriteAddToDB(userId: string, productId: string): Pr
   try {
     if (!_userSyncedCache.has(userId)) {
       const uRes = await api.post('/api/users', { id: userId, kyc_status: 'unverified' }).catch(() => null);
-      if (uRes && uRes.ok) _userSyncedCache.add(userId);
+      if (uRes && uRes.ok) _userSyncedCache.set(userId, JSON.stringify({ id: userId, kyc_status: 'unverified' }));
     }
     await api.post('/api/favorites', { user_id: userId, product_id: productId });
   } catch {
@@ -786,7 +788,7 @@ export async function syncNotificationToDB(notification: {
   try {
     if (!_userSyncedCache.has(notification.targetUserId)) {
       const uRes = await api.post('/api/users', { id: notification.targetUserId, kyc_status: 'unverified' }).catch(() => null);
-      if (uRes && uRes.ok) _userSyncedCache.add(notification.targetUserId);
+      if (uRes && uRes.ok) _userSyncedCache.set(notification.targetUserId, JSON.stringify({ id: notification.targetUserId, kyc_status: 'unverified' }));
     }
     await api.post('/api/notifications', {
       id: notification.id,

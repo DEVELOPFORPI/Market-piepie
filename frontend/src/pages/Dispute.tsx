@@ -13,7 +13,8 @@ import {
 import { addDisputePost } from '@/utils/communityStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { fileToDataUrl, convertBlobUrlsToDataUrls, getDisplayImageUrl } from '@/utils/imageUrl';
+import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { labelTradeMethod } from '@/locale/enUI';
 
@@ -35,6 +36,7 @@ export const Dispute: React.FC = () => {
   const [description, setDescription] = useState('');
   const [evidence, setEvidence] = useState<string[]>([]);
   const [dispute, setDispute] = useState<DisputeType | null>(null);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
 
   const order = orderId ? getOrderById(orderId) : undefined;
 
@@ -63,20 +65,30 @@ export const Dispute: React.FC = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    setUploadingEvidence(true);
     try {
-      const dataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
-      setEvidence([...evidence, ...dataUrls.filter((u) => u.length > 0)]);
+      const urls = await uploadImagesToR2(files, { folder: 'disputes' });
+      setEvidence((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not load images.');
+      alert('Could not upload images.');
+    } finally {
+      setUploadingEvidence(false);
+      e.target.value = '';
     }
   };
 
   const handleSubmit = async () => {
     if (!orderId || !order) return;
 
-    const evidenceToSave = evidence.length > 0
-      ? (evidence.every((u) => u.startsWith('data:')) ? evidence : await convertBlobUrlsToDataUrls(evidence))
-      : [];
+    let evidenceToSave: string[] = [];
+    try {
+      evidenceToSave = evidence.length > 0
+        ? await uploadImageReferencesToR2(evidence, { folder: 'disputes' })
+        : [];
+    } catch {
+      alert('Could not upload images.');
+      return;
+    }
     const newDispute = createDispute({
       orderId,
       productTitle: order.product.title,
@@ -383,11 +395,11 @@ export const Dispute: React.FC = () => {
         {!dispute && order ? (
           <button
             onClick={handleSubmit}
-            disabled={!reason || !action || !description}
+            disabled={!reason || !action || !description || uploadingEvidence}
             className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-            style={reason && action && description ? { backgroundColor: '#EF4444' } : undefined}
+            style={reason && action && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
           >
-            Submit dispute
+            {uploadingEvidence ? 'Uploading...' : 'Submit dispute'}
           </button>
         ) : dispute && dispute.status === 'OPEN' ? (
           <div className="space-y-2">

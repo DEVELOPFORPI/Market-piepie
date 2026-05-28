@@ -8,7 +8,8 @@ import { addUserPost, getPostById, updateUserPost, updateDisputePost, COMMUNITY_
 import { getMyProducts } from '@/utils/productStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { fileToDataUrl, convertBlobUrlsToDataUrls, compressDataUrls, getDisplayImageUrl } from '@/utils/imageUrl';
+import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
 import { isGuest } from '@/utils/guestGate';
@@ -30,6 +31,7 @@ export const PostWrite: React.FC = () => {
   const [attachedProduct, setAttachedProduct] = useState<Product | null>(null);
   const [myProducts, setMyProducts] = useState<Product[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const categories: PostCategory[] = [
     POST_CATEGORY_VALUE.QUESTION,
@@ -73,11 +75,15 @@ export const PostWrite: React.FC = () => {
       alert('You can upload up to 5 images.');
       return;
     }
+    setUploadingImages(true);
     try {
-      const dataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
-      setImages([...images, ...dataUrls.filter((u) => u.length > 0)]);
+      const urls = await uploadImagesToR2(files, { folder: 'posts' });
+      setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not load image.');
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = '';
     }
   };
 
@@ -100,8 +106,9 @@ export const PostWrite: React.FC = () => {
       const region = isEdit && existingForEdit?.region ? existingForEdit.region : (getRegion() || '');
       // Save coordinates; keep existing on edit
       const coords = await getCurrentCoordinates();
-      const toSave = images.every((u) => u.startsWith('data:')) ? images : await convertBlobUrlsToDataUrls(images);
-      const imagesToSave = toSave.length > 0 ? await compressDataUrls(toSave) : [];
+      const imagesToSave = images.length > 0
+        ? await uploadImageReferencesToR2(images, { folder: 'posts' })
+        : [];
 
       const post: Post = {
         id: isEdit ? postId! : `post_${Date.now()}`,
@@ -286,7 +293,7 @@ export const PostWrite: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/40 flex flex-col items-center justify-center" aria-busy="true">
           <div className="bg-white rounded-xl px-6 py-5 flex flex-col items-center gap-3 shadow-lg">
             <div className="w-10 h-10 border-4 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-medium text-gray-700">{isEdit ? 'Saving…' : 'Publishing…'}</p>
+            <p className="text-sm font-medium text-gray-700">{isEdit ? 'Saving...' : 'Publishing...'}</p>
           </div>
         </div>
       )}
@@ -295,11 +302,11 @@ export const PostWrite: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
           onClick={handleSubmit}
-          disabled={!title.trim() || !content.trim() || isSubmitting}
+          disabled={!title.trim() || !content.trim() || isSubmitting || uploadingImages}
           className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-          style={title.trim() && content.trim() && !isSubmitting ? { backgroundColor: '#00A8A3' } : undefined}
+          style={title.trim() && content.trim() && !isSubmitting && !uploadingImages ? { backgroundColor: '#00A8A3' } : undefined}
         >
-          {isSubmitting ? (isEdit ? 'Saving…' : 'Publishing…') : isEdit ? 'Save changes' : 'Publish'}
+          {uploadingImages ? 'Uploading...' : isSubmitting ? (isEdit ? 'Saving...' : 'Publishing...') : isEdit ? 'Save changes' : 'Publish'}
         </button>
       </div>
 

@@ -5,7 +5,8 @@ import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { saveProduct, getAllProducts } from '@/utils/productStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { fileToDataUrl, convertBlobUrlsToDataUrls, compressDataUrls, getDisplayImageUrl } from '@/utils/imageUrl';
+import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getMyUser } from '@/utils/profileStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { isGuest } from '@/utils/guestGate';
@@ -41,6 +42,7 @@ export const Register: React.FC = () => {
   const [region, setRegion] = useState('');
   const [description, setDescription] = useState('');
   const [originalProduct, setOriginalProduct] = useState<Product | null>(null);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const draftKey = `${REGISTER_DRAFT_KEY_PREFIX}${editId || 'new'}`;
 
   const saveRegisterDraft = () => {
@@ -151,11 +153,15 @@ export const Register: React.FC = () => {
       alert(`You can upload up to ${MAX_IMAGES} photos.`);
       return;
     }
+    setUploadingImages(true);
     try {
-      const dataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
-      setImages([...images, ...dataUrls.filter((u) => u.length > 0)]);
+      const urls = await uploadImagesToR2(files, { folder: 'products' });
+      setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not load image.');
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = '';
     }
   };
 
@@ -169,14 +175,20 @@ export const Register: React.FC = () => {
       return;
     }
 
-    const rawDataUrls = await convertBlobUrlsToDataUrls(images);
-    const imagesToSave = await compressDataUrls(rawDataUrls.length > 0 ? rawDataUrls : images.filter((u) => u.startsWith('data:')));
+    let imagesToSave: string[] = [];
+    try {
+      imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
+    } catch {
+      alert('Could not upload image.');
+      return;
+    }
+
     const product: Product = {
       id: isEdit && originalProduct ? originalProduct.id : `product-${Date.now()}`,
       title,
       category: originalProduct?.category || 'Other',
       price: isFreeShare ? 0 : Number(price),
-      images: imagesToSave.length > 0 ? imagesToSave : images.filter((u) => u.startsWith('data:')),
+      images: imagesToSave,
       region,
       status: originalProduct?.status || PRODUCT_STATUS_VALUE.FOR_SALE,
       description: description || '-',
@@ -377,11 +389,11 @@ export const Register: React.FC = () => {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!title || (!isFreeShare && !price) || !region}
+          disabled={!title || (!isFreeShare && !price) || !region || uploadingImages}
           className="w-full py-3.5 text-white rounded-lg font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: '#00A8A3' }}
         >
-          {isEdit ? 'Save changes' : 'Publish listing'}
+          {uploadingImages ? 'Uploading...' : isEdit ? 'Save changes' : 'Publish listing'}
         </button>
       </div>
     </div>

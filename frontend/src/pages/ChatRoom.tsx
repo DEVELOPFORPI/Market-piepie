@@ -20,6 +20,7 @@ import { getProductById } from '@/utils/productStorage';
 import { getDisputeByOrderId } from '@/utils/disputeStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -63,6 +64,7 @@ export const ChatRoom: React.FC = () => {
   const [input, setInput] = useState('');
   const [showBarterPanel, setShowBarterPanel] = useState(false);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
@@ -413,63 +415,20 @@ export const ChatRoom: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  /** Resize/compress images for localStorage limits */
-  const compressImage = (dataUrl: string, maxWidth = 800, quality = 0.85): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let { width, height } = img;
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(dataUrl);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        try {
-          const compressed = canvas.toDataURL('image/jpeg', quality);
-          resolve(compressed);
-        } catch {
-          resolve(dataUrl);
-        }
-      };
-      img.onerror = () => reject(new Error('Image load failed'));
-      img.src = dataUrl;
-    });
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    const readAndCompress = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Read failed'));
-        reader.readAsDataURL(file);
-      });
-    Promise.all(fileArray.map(readAndCompress))
-      .then((dataUrls) => Promise.all(dataUrls.map((url) => compressImage(url).catch(() => url))))
-      .then((compressed) => {
-        setPreviewImages((prev) => [...prev, ...compressed]);
-      })
-      .catch(() => {
-        // fallback: try without compression
-        Promise.all(fileArray.map((f) => new Promise<string>((res) => {
-          const r = new FileReader();
-          r.onloadend = () => res(r.result as string);
-          r.readAsDataURL(f);
-        }))).then((urls) => setPreviewImages((prev) => [...prev, ...urls]));
-      });
-    e.target.value = '';
+    setUploadingImages(true);
+    try {
+      const urls = await uploadImagesToR2(fileArray, { folder: 'chat' });
+      setPreviewImages((prev) => [...prev, ...urls]);
+    } catch {
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = '';
+    }
   };
 
   const removePreviewImage = (idx: number) => {
@@ -477,6 +436,7 @@ export const ChatRoom: React.FC = () => {
   };
 
   const handleSend = () => {
+    if (uploadingImages) return;
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
 
@@ -1159,9 +1119,14 @@ export const ChatRoom: React.FC = () => {
       </div>
 
       {/* Image Preview */}
-      {previewImages.length > 0 && (
+      {(previewImages.length > 0 || uploadingImages) && (
         <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
           <div className="flex gap-2 overflow-x-auto">
+            {uploadingImages && (
+              <div className="w-16 h-16 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] text-gray-500">
+                Uploading...
+              </div>
+            )}
             {previewImages.map((img, idx) => (
               <div key={idx} className="relative flex-shrink-0">
                 <img
@@ -1211,6 +1176,7 @@ export const ChatRoom: React.FC = () => {
             <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg shrink-0">
               <button
                 onClick={() => galleryInputRef.current?.click()}
+                disabled={uploadingImages}
                 className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1219,6 +1185,7 @@ export const ChatRoom: React.FC = () => {
               </button>
               <button
                 onClick={() => cameraInputRef.current?.click()}
+                disabled={uploadingImages}
                 className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1232,14 +1199,14 @@ export const ChatRoom: React.FC = () => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              onKeyPress={(e) => e.key === 'Enter' && !uploadingImages && handleSend()}
               placeholder="Type a message"
               className="flex-1 min-w-0 px-3 py-2.5 bg-white border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3] focus:border-transparent"
             />
 
             <button
               onClick={handleSend}
-              disabled={!input.trim() && previewImages.length === 0}
+              disabled={uploadingImages || (!input.trim() && previewImages.length === 0)}
               className="w-9 h-9 flex items-center justify-center rounded-full text-white shrink-0 disabled:opacity-40"
               style={{ backgroundColor: '#00A8A3' }}
             >

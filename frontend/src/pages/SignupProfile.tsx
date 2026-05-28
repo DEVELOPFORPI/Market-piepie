@@ -6,49 +6,9 @@ import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isDeviceProfileOnce, setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 
 const TEAL = '#00A8A3';
-
-const compressProfileImage = (dataUrl: string): Promise<string> => {
-  return new Promise((resolve) => {
-    if (!dataUrl.startsWith('data:image')) {
-      resolve(dataUrl);
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const max = 256;
-      let w = img.width;
-      let h = img.height;
-      if (w > max || h > max) {
-        if (w > h) {
-          h = Math.round((h * max) / w);
-          w = max;
-        } else {
-          w = Math.round((w * max) / h);
-          h = max;
-        }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(dataUrl);
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      try {
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      } catch {
-        resolve(dataUrl);
-      }
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-};
 
 const DRAFT_KEY = 'signup_profile_draft';
 
@@ -77,6 +37,7 @@ export const SignupProfile: React.FC = () => {
   /** null = gray circle + icon; set = uploaded image */
   const [profileImage, setProfileImage] = useState<string | null>(draft?.profileImage ?? null);
   const [activityRegion, setActivityRegion] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     const uid = getCurrentUserId();
@@ -104,18 +65,21 @@ export const SignupProfile: React.FC = () => {
     return () => window.removeEventListener('regionChanged', onRegion);
   }, []);
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const dataUrl = reader.result as string;
-      setProfileImage(await compressProfileImage(dataUrl));
-    };
-    reader.readAsDataURL(file);
+    setUploadingImage(true);
+    try {
+      setProfileImage(await uploadImageToR2(file, { folder: 'profiles' }));
+    } catch {
+      alert('Could not upload image.');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
+    }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const n = nickname.trim();
     if (n.length < 2) {
       alert('Nickname must be at least 2 characters.');
@@ -126,11 +90,20 @@ export const SignupProfile: React.FC = () => {
       return;
     }
     const region = activityRegion.trim() || getRegion() || '';
+    let uploadedProfileImage = profileImage;
+    if (uploadedProfileImage) {
+      try {
+        uploadedProfileImage = await uploadImageReferenceToR2(uploadedProfileImage, { folder: 'profiles' });
+      } catch {
+        alert('Could not upload image.');
+        return;
+      }
+    }
     saveProfile({
       nickname: n,
       bio: bio.trim() || 'I value safe, quick trades.',
       activityRegion: region,
-      profileImage: profileImage ?? '/default-avatar.jpg',
+      profileImage: uploadedProfileImage ?? '/default-avatar.jpg',
     });
     clearDraft();
     setOnboardingComplete();
@@ -236,10 +209,11 @@ export const SignupProfile: React.FC = () => {
         <button
           type="button"
           onClick={handleSubmit}
+          disabled={uploadingImage}
           className="w-full py-4 rounded-full text-white text-base font-bold"
           style={{ backgroundColor: TEAL }}
         >
-          Get started
+          {uploadingImage ? 'Uploading...' : 'Get started'}
         </button>
       </div>
     </div>
