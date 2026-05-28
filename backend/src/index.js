@@ -153,6 +153,8 @@ const defaultAllowedOrigins = [
   "https://market-piepie-frontend.vercel.app",
   "https://marketpiepeie.vercel.app",
   "https://merketpiepietest.vercel.app",
+  "https://marketpiepietest.vercel.app",
+  "https://marketpiepie.vercel.app",
   "https://piepie-market.vercel.app",
 ];
 const envAllowedOrigins = process.env.CORS_ORIGIN
