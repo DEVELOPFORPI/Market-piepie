@@ -1,7 +1,8 @@
 /**
  * API client
  * - Dev: same-origin `/api` through Vite proxy.
- * - Production: `VITE_API_URL` / `VITE_API_BASE_URL`, falling back to pie.blindlounge.xyz.
+ * - Production: `VITE_API_URL` / `VITE_API_BASE_URL`, or same-origin on Vercel
+ *   (marketpiepie.vercel.app / marketpiepietest.vercel.app).
  */
 
 import { getSessionToken } from '@/utils/authStorage';

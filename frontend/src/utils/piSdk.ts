@@ -1,10 +1,16 @@
+import {
+  isMainnetAppHost,
+  isTestnetAppHost,
+} from '@/constants/appUrls';
+
 /**
  * Pi SDK initialization driven by env, never hard-coded in index.html.
  *
  * VITE_PI_SANDBOX:
- *   "true"  → testnet (sandbox = true)   — for `test` branch / dev
- *   "false" → mainnet (sandbox = false)  — for `main` branch
- *   unset   → defaults to true in DEV builds, false in PROD builds (safe default)
+ *   "true"  → testnet (sandbox = true)
+ *   "false" → mainnet (sandbox = false)
+ *   unset   → marketpiepietest.vercel.app = testnet, marketpiepie.vercel.app = mainnet,
+ *             otherwise DEV = sandbox, PROD = mainnet
  */
 
 type PiInitConfig = { version: string; sandbox?: boolean };
@@ -22,6 +28,10 @@ function resolveSandbox(): boolean {
   const raw = import.meta.env.VITE_PI_SANDBOX;
   if (raw === 'true') return true;
   if (raw === 'false') return false;
+  if (typeof window !== 'undefined') {
+    if (isTestnetAppHost()) return true;
+    if (isMainnetAppHost()) return false;
+  }
   return import.meta.env.DEV;
 }
 

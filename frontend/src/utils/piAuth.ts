@@ -85,9 +85,11 @@ function runPiPayment(paymentData: {
   });
 }
 
+export const PI_VERIFICATION_AMOUNT = 3.14;
+
 export function piVerificationPayment(): Promise<boolean> {
   return runPiPayment({
-    amount: 0.01,
+    amount: PI_VERIFICATION_AMOUNT,
     memo: 'MarketPiePie identity verification',
     metadata: { type: 'verification' },
   });

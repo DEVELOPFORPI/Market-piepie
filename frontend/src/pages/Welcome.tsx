@@ -4,7 +4,7 @@ import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { isTestLoginEnabled } from '@/config/features';
 import { isLoggedIn, clearImplicitSessionSkip, ensureImplicitSession, login, setSessionToken } from '@/utils/authStorage';
 import { isOnboardingComplete } from '@/utils/onboardingStorage';
-import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
+import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser, PI_VERIFICATION_AMOUNT } from '@/utils/piAuth';
 
 const TEAL = '#00A8A3';
 const PI_PURPLE = '#7B2D8E';
@@ -189,7 +189,7 @@ export const Welcome: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold text-gray-900 text-center mb-2">Identity Verification</h3>
             <p className="text-sm text-gray-600 text-center leading-relaxed mb-1">
-              A one-time verification fee of <strong className="text-gray-900">0.01 Pi</strong> is required to confirm your identity and prevent fraud.
+              A one-time verification fee of <strong className="text-gray-900">{PI_VERIFICATION_AMOUNT} Pi</strong> is required to confirm your identity and prevent fraud.
             </p>
             <p className="text-xs text-gray-400 text-center mb-6">
               This is charged only once and cannot be refunded.
@@ -200,7 +200,7 @@ export const Welcome: React.FC = () => {
               className="w-full py-3.5 rounded-full text-white text-sm font-bold mb-2"
               style={{ backgroundColor: PI_PURPLE }}
             >
-              Proceed with 0.01 Pi
+              Proceed with {PI_VERIFICATION_AMOUNT} Pi
             </button>
             <button
               type="button"
