@@ -48,7 +48,7 @@ export const AppLogin: React.FC = () => {
 
       setPiStep('Verifying identity...');
 
-      const verified = await verifyPiAuth(authResult.accessToken);
+      const verified = await verifyPiAuth(authResult.accessToken, getCurrentUserId());
       console.log('verified response:', verified);
 
       if (!verified.piVerified) {

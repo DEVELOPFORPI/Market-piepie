@@ -57,7 +57,7 @@ export const AdminInquiries: React.FC = () => {
         setInquiries(
           res.data.map((d: any) => ({
             ...d,
-            user_nickname: d.user_nickname || d.user_id?.substring(0, 8) || 'Guest',
+            user_nickname: d.user_nickname || d.user_id?.substring(0, 8) || '게스트',
           }))
         );
       }

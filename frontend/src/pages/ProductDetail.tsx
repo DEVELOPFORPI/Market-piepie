@@ -188,7 +188,7 @@ export const ProductDetail: React.FC = () => {
             </svg>
           </button>
         }
-        rightContent={
+        rightContent={!isMine ? (
           <div className="relative">
             <button
               onClick={() => setShowProductMenu((v) => !v)}
@@ -210,7 +210,7 @@ export const ProductDetail: React.FC = () => {
               </div>
             )}
           </div>
-        }
+        ) : undefined}
       />
       <ReportModal
         open={showReport}

@@ -53,7 +53,7 @@ export const AdminPosts: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(`Delete post ${id}? This cannot be undone.`)) return;
+    if (!confirm(`게시물 ${id}를 삭제할까요? 되돌릴 수 없습니다.`)) return;
     const res = await api.delete(`/api/admin/posts/${id}`, { headers: adminPasswordHeaders() });
     if (!res.ok) {
       alert(`삭제 실패: ${res.error || `HTTP ${res.status}`}`);
@@ -75,7 +75,7 @@ export const AdminPosts: React.FC = () => {
               분쟁 {disputeCount}건
             </span>
           )}
-          <span className="text-sm text-gray-500">{posts.length} posts</span>
+          <span className="text-sm text-gray-500">{posts.length}개</span>
         </div>
       </div>
 
@@ -101,7 +101,7 @@ export const AdminPosts: React.FC = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-          Loading...
+          불러오는 중…
         </div>
       ) : posts.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">

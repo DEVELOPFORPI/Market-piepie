@@ -36,8 +36,8 @@ export const AdminHomePopup: React.FC = () => {
     if (enabled) {
       const next = publishHomePopupConfig({
         enabled: true,
-        title: cfg.title.trim() || 'Meet in person for safer trades',
-        subtitle: cfg.subtitle.trim() || 'Start every deal safely.',
+        title: cfg.title.trim() || '직거래로 더 안전하게',
+        subtitle: cfg.subtitle.trim() || '모든 거래를 안전하게 시작하세요.',
         heroImage: cfg.heroImage,
       });
       setCfg(next);
@@ -53,8 +53,8 @@ export const AdminHomePopup: React.FC = () => {
   const handlePublish = () => {
     const next = publishHomePopupConfig({
       enabled: cfg.enabled,
-      title: cfg.title.trim() || 'Meet in person for safer trades',
-      subtitle: cfg.subtitle.trim() || 'Start every deal safely.',
+      title: cfg.title.trim() || '직거래로 더 안전하게',
+      subtitle: cfg.subtitle.trim() || '모든 거래를 안전하게 시작하세요.',
       heroImage: cfg.heroImage,
     });
     setCfg(next);
@@ -72,7 +72,7 @@ export const AdminHomePopup: React.FC = () => {
       const url = await uploadImageToR2(file, { folder: 'home-popup', admin: true });
       setCfg((c) => ({ ...c, heroImage: url }));
     } catch {
-      alert('Could not upload image.');
+      alert('이미지를 업로드하지 못했습니다.');
     } finally {
       setUploadingHero(false);
     }
@@ -142,7 +142,7 @@ export const AdminHomePopup: React.FC = () => {
                 disabled={uploadingHero}
                 className="shrink-0 rounded-xl bg-[#4a4a4c] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#3a3a3c]"
               >
-                {uploadingHero ? 'Uploading...' : '파일선택'}
+                {uploadingHero ? '업로드 중…' : '파일선택'}
               </button>
             </div>
             {cfg.heroImage ? (

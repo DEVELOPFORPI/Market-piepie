@@ -86,29 +86,29 @@ export const AdminLayout: React.FC = () => {
       <aside className="flex w-[248px] shrink-0 flex-col border-r border-black/20 bg-[#1c1c1e] text-white">
         <div className="flex flex-col items-center border-b border-white/10 px-4 py-8">
           <div className="mb-4 h-14 w-14 shrink-0 rounded-full bg-white/20" aria-hidden />
-          <span className="text-[15px] font-semibold tracking-tight">Admin Panel</span>
+          <span className="text-[15px] font-semibold tracking-tight">관리자 패널</span>
         </div>
 
         <nav className="flex flex-1 flex-col gap-0.5 py-4">
           <NavLink to="/admin/data" className={linkClass}>
             <IconChart />
-            Dashboard
+            대시보드
           </NavLink>
           <NavLink to="/admin/users" className={linkClass}>
             <IconUser />
-            Users
+            사용자
           </NavLink>
           <NavLink to="/admin/products" className={linkClass}>
             <IconBox />
-            Products
+            상품
           </NavLink>
           <NavLink to="/admin/posts" className={linkClass}>
             <IconDocument />
-            Posts
+            게시물
           </NavLink>
           <NavLink to="/admin/disputes" className={linkClass}>
             <IconGavel />
-            Disputes
+            분쟁
           </NavLink>
           <NavLink to="/admin/reports" className={linkClass}>
             <IconFlag />
@@ -120,7 +120,7 @@ export const AdminLayout: React.FC = () => {
           </NavLink>
           <NavLink to="/admin/popup" className={linkClass}>
             <IconPopup />
-            Popup
+            홈 팝업
           </NavLink>
         </nav>
 
@@ -130,7 +130,7 @@ export const AdminLayout: React.FC = () => {
             onClick={() => navigate('/')}
             className="w-full rounded-lg py-2.5 text-center text-xs font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
           >
-            Back to App
+            앱으로 돌아가기
           </button>
         </div>
       </aside>

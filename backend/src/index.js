@@ -186,18 +186,104 @@ function getR2Client() {
 const sessionCache = new Map();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7?
 
+function purgeSessionCacheForUser(userId) {
+  for (const [token, session] of sessionCache) {
+    if (session.userId === userId) sessionCache.delete(token);
+  }
+}
+
 async function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
-  sessionCache.set(token, { userId, createdAt: Date.now() });
+  purgeSessionCacheForUser(userId);
   if (pool) {
     try {
+      await pool.query("DELETE FROM sessions WHERE user_id = $1", [userId]);
       await pool.query(
-        "INSERT INTO sessions (token, user_id) VALUES ($1, $2) ON DUPLICATE KEY UPDATE token=token",
+        "INSERT INTO sessions (token, user_id) VALUES ($1, $2)",
         [token, userId],
       );
     } catch {}
   }
+  sessionCache.set(token, { userId, createdAt: Date.now() });
   return token;
+}
+
+/** Pi @username — admin/DB only; users row is created on verification payment */
+function isGuestId(id) {
+  return typeof id === "string" && id.startsWith("guest_");
+}
+
+async function upsertGuest(guestId, { deviceId, region } = {}) {
+  if (!pool || !isGuestId(guestId)) return;
+  try {
+    await pool.query(
+      `INSERT INTO guests (id, device_id, region, last_seen_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP(3))
+       ON DUPLICATE KEY UPDATE
+         device_id = COALESCE($2, device_id),
+         region = COALESCE($3, region),
+         last_seen_at = CURRENT_TIMESTAMP(3)`,
+      [guestId, deviceId || null, region || null],
+    );
+  } catch (e) {
+    console.warn("[guests] upsert failed:", e.message);
+  }
+}
+
+async function linkGuestToPi(guestId, piUid, piUsername) {
+  if (!pool || !isGuestId(guestId) || !piUid) return;
+  try {
+    await pool.query(
+      `UPDATE guests
+       SET pi_uid = $1,
+           pi_username = COALESCE($2, pi_username),
+           last_seen_at = CURRENT_TIMESTAMP(3)
+       WHERE id = $3 AND converted_user_id IS NULL`,
+      [piUid, piUsername || null, guestId],
+    );
+  } catch (e) {
+    console.warn("[guests] link Pi failed:", e.message);
+  }
+}
+
+async function promoteGuestToUser(piUid, piUsername) {
+  if (!pool || !piUid) return;
+  const username =
+    typeof piUsername === "string" && piUsername.trim()
+      ? piUsername.trim()
+      : null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, pi_username FROM guests
+       WHERE pi_uid = $1 AND converted_user_id IS NULL
+       ORDER BY last_seen_at DESC LIMIT 1`,
+      [piUid],
+    );
+    const guest = rows[0];
+    const resolvedUsername = username || guest?.pi_username || null;
+    await pool.query(
+      `INSERT INTO users (id, nickname, pi_username, pi_verified, kyc_status)
+       VALUES ($1, $1, $2, true, 'unverified')
+       ON DUPLICATE KEY UPDATE
+         pi_verified = true,
+         pi_username = COALESCE($2, users.pi_username)`,
+      [piUid, resolvedUsername],
+    );
+    if (guest?.id) {
+      await pool.query(
+        "UPDATE guests SET converted_user_id = $1 WHERE id = $2",
+        [piUid, guest.id],
+      );
+    }
+  } catch (e) {
+    console.warn("[guests] promote to user failed:", e.message);
+  }
+}
+
+function stripPrivateUserFields(row) {
+  if (!row || typeof row !== "object") return row;
+  const { pi_username, ...publicUser } = row;
+  return publicUser;
 }
 
 async function getUserIdFromToken(token) {
@@ -349,6 +435,7 @@ const uploadLimiter = rateLimit({
 });
 app.use("/api/", generalLimiter);
 app.use("/api/auth/", authLimiter);
+app.use("/api/guests/", authLimiter);
 app.use("/api/payments/", paymentLimiter);
 app.use("/api/uploads/", uploadLimiter);
 
@@ -526,20 +613,70 @@ app.get("/api/uploads/object/*", async (req, res) => {
 });
 
 // ????????? ??? ??????? ????????? ???? (?????????? ?? ??? NODE_ENV=production ?????) ?????????
+const DEV_USER_PRESETS = {
+  user1: { nickname: "Seller Pingoo", pi_username: "local-user1" },
+  user2: { nickname: "Buyer Pororo", pi_username: "local-user2" },
+};
+
+// Guest session (all environments) — guests table only, not users
+app.post("/api/guests/session", async (req, res) => {
+  const guestId = req.body.guestId;
+  if (!isGuestId(guestId)) {
+    return res.status(400).json({ error: "guestId required (guest_...)" });
+  }
+  await upsertGuest(guestId, {
+    deviceId: req.body.deviceId,
+    region: req.body.region,
+  });
+  const sessionToken = await createSession(guestId);
+  res.json({ guestId, sessionToken });
+});
+
 if (process.env.NODE_ENV !== "production") {
   app.post("/api/auth/dev-login", async (req, res) => {
-    const userId =
-      req.body.userId || `guest_${crypto.randomBytes(8).toString("hex")}`;
-    const nickname = req.body.nickname || "TestUser";
+    const userId = req.body.userId;
+    if (!userId || isGuestId(userId)) {
+      return res.status(400).json({
+        error: "dev-login is for local preset users only; use POST /api/guests/session for guests",
+      });
+    }
+    const preset = DEV_USER_PRESETS[userId];
+    if (!preset) {
+      return res.status(400).json({ error: "Unknown dev user" });
+    }
+    const { nickname, pi_username: piUsername } = preset;
     if (pool) {
-      try {
+      const upsertUser = async (withPiUsername) => {
+        if (withPiUsername) {
+          await pool.query(
+            `INSERT INTO users (id, nickname, pi_username, kyc_status) VALUES ($1, $2, $3, 'verified')
+             ON DUPLICATE KEY UPDATE
+               nickname = COALESCE($2, users.nickname),
+               pi_username = COALESCE($3, users.pi_username),
+               id = id`,
+            [userId, nickname, piUsername],
+          );
+          return;
+        }
         await pool.query(
           `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $2, 'verified')
-           ON DUPLICATE KEY UPDATE id=id`,
+           ON DUPLICATE KEY UPDATE nickname = COALESCE($2, users.nickname), id = id`,
           [userId, nickname],
         );
-      } catch {
-        /* ignore if no DB */
+      };
+      try {
+        await upsertUser(Boolean(piUsername));
+      } catch (e) {
+        if (piUsername && /pi_username|Unknown column/i.test(String(e.message))) {
+          console.warn("[dev-login] pi_username column missing — run ALTER TABLE; saving without it");
+          try {
+            await upsertUser(false);
+          } catch (e2) {
+            console.error("[dev-login] users upsert failed:", e2.message);
+          }
+        } else {
+          console.error("[dev-login] users upsert failed:", e.message);
+        }
       }
     }
     const sessionToken = await createSession(userId);
@@ -643,10 +780,9 @@ app.post("/api/payments/complete", async (req, res) => {
       const paymentInfo = await piApiCall("GET", "/payments/" + paymentId);
 
       if (paymentInfo && paymentInfo.user_uid) {
-        await pool.query(
-          "INSERT INTO users (id, nickname, pi_verified) VALUES ($1, $2, true) ON DUPLICATE KEY UPDATE pi_verified = true",
-
-          [paymentInfo.user_uid, paymentInfo.user_uid],
+        await promoteGuestToUser(
+          paymentInfo.user_uid,
+          paymentInfo.metadata?.username,
         );
       }
     }
@@ -688,6 +824,10 @@ app.post("/api/payments/incomplete", async (req, res) => {
 
       console.log("Incomplete payment completed:", paymentId);
 
+      if (pool && payment.user_uid) {
+        await promoteGuestToUser(payment.user_uid, payment.metadata?.username);
+      }
+
       res.json(result);
     } else {
       const result = await piApiCall(
@@ -715,7 +855,7 @@ function requireDb(req, res, next) {
 
 // ????????? Pi Network ?? ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.post("/api/auth/pi/verify", async (req, res) => {
-  const { accessToken } = req.body;
+  const { accessToken, guestId } = req.body;
   if (!accessToken)
     return res.status(400).json({ error: "accessToken required" });
   try {
@@ -747,6 +887,9 @@ app.post("/api/auth/pi/verify", async (req, res) => {
       );
       if (rows.length > 0) piVerified = !!rows[0].pi_verified;
     }
+    if (!piVerified && isGuestId(guestId)) {
+      await linkGuestToPi(guestId, piRes.uid, piRes.username);
+    }
     const sessionToken = await createSession(piRes.uid);
     res.json({
       uid: piRes.uid,
@@ -768,7 +911,7 @@ app.get("/api/users/:id", requireDb, async (req, res) => {
       req.params.id,
     ]);
     if (!rows.length) return res.status(404).json({ error: "User not found" });
-    res.json(rows[0]);
+    res.json(stripPrivateUserFields(rows[0]));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -789,6 +932,11 @@ app.post("/api/users", requireDb, async (req, res) => {
     display_activity_badge_id,
     seller_type,
   } = req.body;
+  if (isGuestId(id)) {
+    return res.status(400).json({
+      error: "Guest accounts belong in guests until Pi verification payment completes",
+    });
+  }
   const isUuidLike = (s) => s && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s);
   const safeNickname =
     !nickname || nickname === id || isUuidLike(nickname) ? null : nickname;
@@ -2113,7 +2261,7 @@ app.get("/api/admin/users", requireDb, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
-              trade_count, activity_region, seller_type, created_at
+              trade_count, activity_region, seller_type, pi_verified, pi_username, created_at
        FROM users ORDER BY created_at DESC LIMIT 500`,
     );
     res.json(rows);

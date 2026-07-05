@@ -56,7 +56,7 @@ export const AdminProducts: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(`Delete product ${id}? This cannot be undone.`)) return;
+    if (!confirm(`상품 ${id}를 삭제할까요? 되돌릴 수 없습니다.`)) return;
     const res = await api.delete(`/api/admin/products/${id}`, { headers: adminPasswordHeaders() });
     if (!res.ok) {
       alert(`삭제 실패: ${res.error || `HTTP ${res.status}`}`);
@@ -70,7 +70,7 @@ export const AdminProducts: React.FC = () => {
     <div className="p-6 lg:p-10">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">상품 관리</h1>
-        <span className="text-sm text-gray-500">{products.length} products</span>
+        <span className="text-sm text-gray-500">{products.length}개</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -99,7 +99,7 @@ export const AdminProducts: React.FC = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-          Loading...
+          불러오는 중…
         </div>
       ) : products.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">

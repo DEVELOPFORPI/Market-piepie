@@ -31,8 +31,7 @@ function clearDraft() {
 export const SignupProfile: React.FC = () => {
   const navigate = useNavigate();
   const draft = loadDraft();
-  const piNickname = (() => { try { return sessionStorage.getItem('pi_suggested_nickname') || ''; } catch { return ''; } })();
-  const [nickname, setNickname] = useState(draft?.nickname || piNickname || '');
+  const [nickname, setNickname] = useState(draft?.nickname || '');
   const [bio, setBio] = useState(draft?.bio ?? '');
   /** null = gray circle + icon; set = uploaded image */
   const [profileImage, setProfileImage] = useState<string | null>(draft?.profileImage ?? null);

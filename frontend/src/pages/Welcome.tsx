@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { isTestLoginEnabled } from '@/config/features';
-import { isLoggedIn, clearImplicitSessionSkip, ensureImplicitSession, login, setSessionToken } from '@/utils/authStorage';
+import { isLoggedIn, clearImplicitSessionSkip, ensureImplicitSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
 import { isOnboardingComplete } from '@/utils/onboardingStorage';
 import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser, PI_VERIFICATION_AMOUNT } from '@/utils/piAuth';
 
@@ -31,7 +31,7 @@ export const Welcome: React.FC = () => {
       const authResult = await piAuthenticate();
 
       setPiStep('Verifying identity...');
-      const verified = await verifyPiAuth(authResult.accessToken);
+      const verified = await verifyPiAuth(authResult.accessToken, getCurrentUserId());
       console.log('verified response:', verified);
 
       if (!verified.piVerified) {

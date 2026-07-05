@@ -134,18 +134,24 @@ export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptio
 
 async function requestDevSessionToken(userId: string): Promise<void> {
   try {
-    const r = await fetch(`${API_BASE}/api/auth/dev-login`, {
+    const isGuest = userId.startsWith('guest_');
+    const preset = USER_PRESETS[userId];
+    const url = isGuest ? `${API_BASE}/api/guests/session` : `${API_BASE}/api/auth/dev-login`;
+    const body = isGuest
+      ? { guestId: userId, deviceId: userId }
+      : { userId, nickname: preset?.nickname || 'Guest' };
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, nickname: 'Guest' }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
     if (data.sessionToken) {
       setSessionToken(data.sessionToken);
-      console.log('[auth] dev session token acquired for', userId);
+      console.log('[auth] session token acquired for', userId);
     }
   } catch {
-    console.warn('[auth] dev-login failed');
+    console.warn('[auth] session request failed');
   }
 }
 

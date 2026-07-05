@@ -21,7 +21,20 @@ CREATE TABLE IF NOT EXISTS users (
   display_activity_badge_id VARCHAR(191),
   seller_type VARCHAR(50),
   pi_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  pi_username VARCHAR(255) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS guests (
+  id VARCHAR(191) PRIMARY KEY,
+  pi_username VARCHAR(255) NULL,
+  pi_uid VARCHAR(191) NULL,
+  device_id VARCHAR(191) NULL,
+  region VARCHAR(255) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  last_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  converted_user_id VARCHAR(191) NULL,
+  CONSTRAINT fk_guests_converted_user FOREIGN KEY (converted_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS products (
@@ -230,8 +243,7 @@ CREATE TABLE IF NOT EXISTS inquiries (
 CREATE TABLE IF NOT EXISTS sessions (
   token VARCHAR(191) PRIMARY KEY,
   user_id VARCHAR(191) NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS reports (
@@ -271,9 +283,17 @@ CREATE INDEX idx_favorites_user ON favorites(user_id);
 CREATE INDEX idx_inquiries_status ON inquiries(status);
 CREATE INDEX idx_inquiries_user ON inquiries(user_id);
 CREATE INDEX idx_inquiries_created ON inquiries(created_at DESC);
+CREATE INDEX idx_guests_pi_uid ON guests(pi_uid);
+CREATE INDEX idx_guests_converted ON guests(converted_user_id);
+CREATE INDEX idx_guests_last_seen ON guests(last_seen_at);
 CREATE INDEX idx_sessions_user ON sessions(user_id);
 CREATE INDEX idx_sessions_created ON sessions(created_at);
 CREATE INDEX idx_reports_status ON reports(status);
 CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 CREATE INDEX idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX idx_reports_created ON reports(created_at DESC);
+
+-- Existing DB migration (run once on live DBs):
+-- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified;
+-- CREATE TABLE guests (...);  -- copy from CREATE TABLE guests above
+-- ALTER TABLE sessions DROP FOREIGN KEY fk_sessions_user;

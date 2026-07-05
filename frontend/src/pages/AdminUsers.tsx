@@ -13,8 +13,15 @@ interface User {
   trade_count: number;
   activity_region: string | null;
   seller_type: string | null;
+  pi_username: string | null;
   created_at: string;
 }
+
+const KYC_LABEL: Record<string, string> = {
+  verified: '인증됨',
+  unverified: '미인증',
+  suspended: '정지',
+};
 
 export const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -38,6 +45,7 @@ export const AdminUsers: React.FC = () => {
     (u) =>
       u.nickname?.toLowerCase().includes(search.toLowerCase()) ||
       u.id?.toLowerCase().includes(search.toLowerCase()) ||
+      u.pi_username?.toLowerCase().includes(search.toLowerCase()) ||
       u.activity_region?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -62,7 +70,7 @@ export const AdminUsers: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(`Delete user ${id}?`)) return;
+    if (!confirm(`사용자 ${id}를 삭제할까요?`)) return;
     await api.delete(`/api/admin/users/${id}`, { headers: adminPasswordHeaders() });
     setSelected(null);
     load();
@@ -71,13 +79,13 @@ export const AdminUsers: React.FC = () => {
   return (
     <div className="p-6 lg:p-10">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-        <span className="text-sm text-gray-500">{users.length} users</span>
+        <h1 className="text-2xl font-bold text-gray-900">사용자 관리</h1>
+        <span className="text-sm text-gray-500">{users.length}명</span>
       </div>
 
       <input
         type="text"
-        placeholder="Search by nickname, ID, region..."
+        placeholder="닉네임, Pi @, ID, 지역으로 검색"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full max-w-md mb-6 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
@@ -86,19 +94,19 @@ export const AdminUsers: React.FC = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-          Loading...
+          불러오는 중…
         </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-xl border border-gray-200 shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">KYC</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Trust</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Trades</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Region</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Joined</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">사용자</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">본인인증</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">신뢰점수</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">거래</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">지역</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">가입일</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -112,6 +120,9 @@ export const AdminUsers: React.FC = () => {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{u.nickname}</p>
+                        {u.pi_username && (
+                          <p className="text-xs text-gray-500">@{u.pi_username}</p>
+                        )}
                         <p className="text-xs text-gray-400 truncate max-w-[120px]">{u.id}</p>
                       </div>
                     </div>
@@ -120,7 +131,7 @@ export const AdminUsers: React.FC = () => {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       u.kyc_status === 'verified' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                     }`}>
-                      {u.kyc_status}
+                      {KYC_LABEL[u.kyc_status] || u.kyc_status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{u.trust_score}</td>
@@ -129,13 +140,13 @@ export const AdminUsers: React.FC = () => {
                   <td className="px-4 py-3 text-gray-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <button onClick={() => openDetail(u)} className="text-[#00A8A3] text-xs font-medium hover:underline">
-                      Edit
+                      수정
                     </button>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-400 text-sm">No users found</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400 text-sm">사용자를 찾을 수 없습니다</td></tr>
               )}
             </tbody>
           </table>
@@ -145,43 +156,47 @@ export const AdminUsers: React.FC = () => {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelected(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Edit User</h2>
-            <p className="text-xs text-gray-400 mb-4 break-all">{selected.id}</p>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">사용자 수정</h2>
+            <p className="text-xs text-gray-400 mb-1 break-all">{selected.id}</p>
+            {selected.pi_username && (
+              <p className="text-xs text-gray-500 mb-4">Pi @{selected.pi_username}</p>
+            )}
+            {!selected.pi_username && <div className="mb-4" />}
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-500">Nickname</label>
+                <label className="text-xs text-gray-500">닉네임</label>
                 <input value={editForm.nickname} onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
-                <label className="text-xs text-gray-500">KYC Status</label>
+                <label className="text-xs text-gray-500">본인인증 상태</label>
                 <select value={editForm.kyc_status} onChange={(e) => setEditForm({ ...editForm, kyc_status: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  <option value="unverified">unverified</option>
-                  <option value="verified">verified</option>
-                  <option value="suspended">suspended</option>
+                  <option value="unverified">미인증</option>
+                  <option value="verified">인증됨</option>
+                  <option value="suspended">정지</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500">Trust Score</label>
+                <label className="text-xs text-gray-500">신뢰 점수</label>
                 <input type="number" value={editForm.trust_score} onChange={(e) => setEditForm({ ...editForm, trust_score: +e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
-                <label className="text-xs text-gray-500">Bio</label>
+                <label className="text-xs text-gray-500">소개</label>
                 <textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} />
               </div>
             </div>
             <div className="flex gap-2 mt-6">
-              <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
               <button onClick={handleSave} disabled={saving}
                 className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg disabled:opacity-50" style={{ backgroundColor: '#00A8A3' }}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? '저장 중…' : '저장'}
               </button>
             </div>
             <button onClick={() => handleDelete(selected.id)} className="w-full mt-3 py-2 text-xs text-red-500 hover:text-red-700">
-              Delete User
+              사용자 삭제
             </button>
           </div>
         </div>

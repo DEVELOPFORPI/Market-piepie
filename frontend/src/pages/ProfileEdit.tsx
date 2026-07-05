@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import {
@@ -8,8 +8,6 @@ import {
   isProfileImageActivityBadge,
   profileAvatarObjectClass,
 } from '@/utils/profileStorage';
-import { ACTIVITY_BADGE_DEFINITIONS } from '@/constants/activityBadges';
-import { getUnlockedBadgeIds } from '@/utils/activityBadgeStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import {
   DEFAULT_AVATAR_PATH,
@@ -40,17 +38,6 @@ export const ProfileEdit: React.FC = () => {
   const [activityRegion, setActivityRegion] = useState(stored.activityRegion ?? '');
   const [hasChanges, setHasChanges] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [unlockedBadgeBump, setUnlockedBadgeBump] = useState(0);
-  const unlockedBadges = useMemo(() => {
-    void unlockedBadgeBump;
-    return getUnlockedBadgeIds();
-  }, [unlockedBadgeBump]);
-
-  useEffect(() => {
-    const onBadges = () => setUnlockedBadgeBump((n) => n + 1);
-    window.addEventListener('activityBadgesChanged', onBadges);
-    return () => window.removeEventListener('activityBadgesChanged', onBadges);
-  }, []);
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -182,63 +169,6 @@ export const ProfileEdit: React.FC = () => {
               </svg>
             </label>
           </div>
-          <p className="text-xs text-gray-400 mt-2 text-center px-2 max-w-xs">
-            Tap the camera icon to choose a photo
-          </p>
-        </div>
-
-        <div className="w-full max-w-md mx-auto text-center">
-          <h3 className="text-sm font-semibold text-gray-800 mb-1">Use an activity badge as photo</h3>
-          <p className="text-xs text-gray-500 mb-3 px-1">
-            Tap an unlocked badge to set it as your profile image.
-          </p>
-          {unlockedBadges.size === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4 px-3 bg-gray-50 rounded-xl">
-              No badges yet.
-            </p>
-          ) : (
-            <div className="-mx-4 md:mx-0 py-1">
-              <div
-                className="flex flex-nowrap gap-3 overflow-x-auto overflow-y-visible overscroll-x-contain py-4 px-4 snap-x snap-mandatory touch-pan-x [scrollbar-width:thin]"
-                style={{ WebkitOverflowScrolling: 'touch' }}
-              >
-                {ACTIVITY_BADGE_DEFINITIONS.filter((d) => unlockedBadges.has(d.id)).map(({ id, label }) => {
-                  const path = `/Batch/${id}.svg`;
-                  const selected = profileImage === path;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => {
-                        setProfileImage(path);
-                        setHasChanges(true);
-                      }}
-                      className={`flex-shrink-0 snap-center w-[68px] h-[68px] rounded-full bg-white flex items-center justify-center p-1.5 transition shadow-sm ${
-                        selected ? 'ring-[3px] ring-[#00A8A3] ring-offset-2 ring-offset-white' : 'ring-1 ring-gray-200'
-                      }`}
-                      title={label}
-                      aria-label={`Use ${label} as profile photo`}
-                    >
-                      <span className="block w-full h-full rounded-full overflow-hidden flex items-center justify-center pointer-events-none">
-                        <img src={path} alt="" className="w-full h-full object-contain" draggable={false} />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-gray-400 text-center mt-2 px-4">Swipe sideways for more</p>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setProfileImage(DEFAULT_AVATAR_PATH);
-              setHasChanges(true);
-            }}
-            className="mt-4 w-full text-center text-xs text-gray-500 underline py-1"
-          >
-            Reset to default avatar
-          </button>
         </div>
 
         {/* Read-only Info Rows */}

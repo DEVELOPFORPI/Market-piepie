@@ -103,7 +103,10 @@ export function piBadgePurchasePayment(badgeId: string, badgeLabel: string): Pro
   });
 }
 
-export async function verifyPiAuth(accessToken: string): Promise<{
+export async function verifyPiAuth(
+  accessToken: string,
+  guestId?: string | null,
+): Promise<{
   uid: string;
   username?: string;
   piVerified?: boolean;
@@ -112,7 +115,10 @@ export async function verifyPiAuth(accessToken: string): Promise<{
   const res = await fetch(API_BASE + '/api/auth/pi/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accessToken }),
+    body: JSON.stringify({
+      accessToken,
+      guestId: guestId && guestId.startsWith('guest_') ? guestId : undefined,
+    }),
   });
   if (!res.ok) throw new Error('Pi auth verification failed');
   return res.json();

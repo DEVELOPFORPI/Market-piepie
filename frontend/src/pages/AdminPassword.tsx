@@ -17,7 +17,7 @@ export const AdminPassword: React.FC = () => {
     e.preventDefault();
     const trimmed = password.trim();
     if (!trimmed) {
-      setError('Please enter the admin password.');
+      setError('관리자 비밀번호를 입력하세요.');
       return;
     }
 
@@ -29,7 +29,7 @@ export const AdminPassword: React.FC = () => {
 
     if (!res.ok) {
       setAdminVerified(false);
-      setError(res.status === 503 ? 'Admin is not configured.' : 'Incorrect password.');
+      setError(res.status === 503 ? '관리자 설정이 되어 있지 않습니다.' : '비밀번호가 올바르지 않습니다.');
       return;
     }
 
@@ -39,11 +39,11 @@ export const AdminPassword: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f0f2f5] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#f0f2f5] px-4" lang="ko">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-[#1a1a1a]">Admin</h1>
-        <p className="mt-2 text-sm text-gray-600">Please enter the admin password.</p>
-        <label className="mt-5 block text-xs font-medium text-gray-600">Password</label>
+        <h1 className="text-xl font-bold text-[#1a1a1a]">관리자 로그인</h1>
+        <p className="mt-2 text-sm text-gray-600">관리자 비밀번호를 입력하세요.</p>
+        <label className="mt-5 block text-xs font-medium text-gray-600">비밀번호</label>
         <input
           type="password"
           value={password}
@@ -60,7 +60,7 @@ export const AdminPassword: React.FC = () => {
           disabled={submitting}
           className="mt-5 w-full rounded-xl bg-[#00A8A3] py-2.5 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
         >
-          {submitting ? 'Checking...' : 'Login'}
+          {submitting ? '확인 중…' : '로그인'}
         </button>
       </form>
     </div>

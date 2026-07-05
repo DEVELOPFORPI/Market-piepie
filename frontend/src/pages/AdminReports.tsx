@@ -33,11 +33,11 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const TARGET_LABEL: Record<string, string> = {
-  product: 'Product',
-  post: 'Post',
-  review: 'Review',
-  user: 'User',
-  comment: 'Comment',
+  product: '상품',
+  post: '게시물',
+  review: '리뷰',
+  user: '사용자',
+  comment: '댓글',
 };
 
 export const AdminReports: React.FC = () => {
@@ -132,7 +132,7 @@ export const AdminReports: React.FC = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-          Loading...
+          불러오는 중…
         </div>
       ) : reports.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">

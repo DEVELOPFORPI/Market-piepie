@@ -19,11 +19,24 @@ interface Dispute {
   resolved_at: string | null;
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: '접수',
+  IN_REVIEW: '검토 중',
+  RESOLVED: '해결됨',
+};
+
 const STATUS_COLORS: Record<string, string> = {
   OPEN: 'bg-red-100 text-red-700',
   IN_REVIEW: 'bg-yellow-100 text-yellow-700',
   RESOLVED: 'bg-green-100 text-green-700',
 };
+
+const FILTER_OPTIONS = [
+  { value: 'ALL', label: '전체' },
+  { value: 'OPEN', label: '접수' },
+  { value: 'IN_REVIEW', label: '검토 중' },
+  { value: 'RESOLVED', label: '해결됨' },
+] as const;
 
 export const AdminDisputes: React.FC = () => {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -78,20 +91,20 @@ export const AdminDisputes: React.FC = () => {
   return (
     <div className="p-6 lg:p-10">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dispute Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900">분쟁 관리</h1>
         <div className="flex gap-2">
-          {openCount > 0 && <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">{openCount} Open</span>}
-          {reviewCount > 0 && <span className="px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">{reviewCount} In Review</span>}
+          {openCount > 0 && <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">접수 {openCount}건</span>}
+          {reviewCount > 0 && <span className="px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">검토 중 {reviewCount}건</span>}
         </div>
       </div>
 
       <div className="flex gap-2 mb-6">
-        {['ALL', 'OPEN', 'IN_REVIEW', 'RESOLVED'].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
+        {FILTER_OPTIONS.map(({ value, label }) => (
+          <button key={value} onClick={() => setFilter(value)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === s ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              filter === value ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}>
-            {s === 'ALL' ? 'All' : s === 'IN_REVIEW' ? 'In Review' : s.charAt(0) + s.slice(1).toLowerCase()}
+            {label}
           </button>
         ))}
       </div>
@@ -99,7 +112,7 @@ export const AdminDisputes: React.FC = () => {
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-          Loading...
+          불러오는 중…
         </div>
       ) : (
         <div className="space-y-3">
@@ -110,13 +123,13 @@ export const AdminDisputes: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-500'}`}>
-                      {d.status}
+                      {STATUS_LABEL[d.status] || d.status}
                     </span>
                     <span className="text-xs text-gray-400">{new Date(d.created_at).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{d.product_title || 'Unknown product'}</p>
+                  <p className="text-sm font-medium text-gray-900">{d.product_title || '상품명 없음'}</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Buyer: {d.buyer_nickname} / Seller: {d.seller_nickname}
+                    구매자: {d.buyer_nickname} / 판매자: {d.seller_nickname}
                   </p>
                   {d.reason && <p className="text-xs text-gray-400 mt-1 truncate">{d.reason}</p>}
                 </div>
@@ -124,7 +137,7 @@ export const AdminDisputes: React.FC = () => {
             </div>
           ))}
           {filtered.length === 0 && (
-            <p className="text-center py-12 text-gray-400 text-sm">No disputes found</p>
+            <p className="text-center py-12 text-gray-400 text-sm">분쟁 내역이 없습니다</p>
           )}
         </div>
       )}
@@ -133,48 +146,48 @@ export const AdminDisputes: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelected(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Dispute Detail</h2>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[selected.status] || ''}`}>{selected.status}</span>
+              <h2 className="text-lg font-bold text-gray-900">분쟁 상세</h2>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[selected.status] || ''}`}>{STATUS_LABEL[selected.status] || selected.status}</span>
             </div>
 
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-gray-400 text-xs">Product</span><p className="font-medium">{selected.product_title || '-'}</p></div>
-                <div><span className="text-gray-400 text-xs">Order ID</span><p className="font-medium truncate">{selected.order_id || '-'}</p></div>
-                <div><span className="text-gray-400 text-xs">Buyer</span><p>{selected.buyer_nickname}</p></div>
-                <div><span className="text-gray-400 text-xs">Seller</span><p>{selected.seller_nickname}</p></div>
+                <div><span className="text-gray-400 text-xs">상품</span><p className="font-medium">{selected.product_title || '-'}</p></div>
+                <div><span className="text-gray-400 text-xs">주문 ID</span><p className="font-medium truncate">{selected.order_id || '-'}</p></div>
+                <div><span className="text-gray-400 text-xs">구매자</span><p>{selected.buyer_nickname}</p></div>
+                <div><span className="text-gray-400 text-xs">판매자</span><p>{selected.seller_nickname}</p></div>
               </div>
 
               {selected.reason && (
-                <div><span className="text-gray-400 text-xs">Reason</span><p className="text-gray-700">{selected.reason}</p></div>
+                <div><span className="text-gray-400 text-xs">사유</span><p className="text-gray-700">{selected.reason}</p></div>
               )}
               {selected.description && (
-                <div><span className="text-gray-400 text-xs">Description</span><p className="text-gray-700">{selected.description}</p></div>
+                <div><span className="text-gray-400 text-xs">상세 설명</span><p className="text-gray-700">{selected.description}</p></div>
               )}
               {selected.action && (
-                <div><span className="text-gray-400 text-xs">User Action</span><p className="text-gray-700">{selected.action}</p></div>
+                <div><span className="text-gray-400 text-xs">사용자 요청</span><p className="text-gray-700">{selected.action}</p></div>
               )}
 
               <div>
-                <label className="text-gray-400 text-xs">Admin Note</label>
+                <label className="text-gray-400 text-xs">관리자 메모</label>
                 <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={3}
-                  placeholder="Write admin response..." />
+                  placeholder="처리 내용을 입력하세요" />
               </div>
             </div>
 
             <div className="flex gap-2 mt-6">
-              <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
+              <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">닫기</button>
               {selected.status === 'OPEN' && (
                 <button onClick={() => updateStatus('IN_REVIEW')} disabled={saving}
                   className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50">
-                  {saving ? '...' : 'Start Review'}
+                  {saving ? '…' : '검토 시작'}
                 </button>
               )}
               {(selected.status === 'OPEN' || selected.status === 'IN_REVIEW') && (
                 <button onClick={() => updateStatus('RESOLVED')} disabled={saving}
                   className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50">
-                  {saving ? '...' : 'Resolve'}
+                  {saving ? '…' : '해결 처리'}
                 </button>
               )}
             </div>

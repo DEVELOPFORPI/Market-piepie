@@ -13,6 +13,7 @@ const _userSyncedCache = new Map<string, string>();
 
 /** 유저를 DB에 upsert */
 export async function syncUserToDB(user: User): Promise<void> {
+  if (!user.id || user.id.startsWith('guest_')) return;
   const payload = {
     id: user.id,
     nickname: (user.nickname && user.nickname !== user.id && !user.nickname.startsWith('guest_') && !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(user.nickname)) ? user.nickname : undefined,
