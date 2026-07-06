@@ -262,6 +262,23 @@ CREATE TABLE IF NOT EXISTS reports (
   CONSTRAINT fk_reports_resolved_by FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS payments (
+  id VARCHAR(191) PRIMARY KEY COMMENT 'Pi payment identifier',
+  user_id VARCHAR(191) NULL COMMENT 'Pi uid (users.id)',
+  payment_type VARCHAR(50) NOT NULL DEFAULT 'other',
+  amount DECIMAL(12, 4) NOT NULL DEFAULT 0,
+  memo TEXT,
+  txid VARCHAR(255) NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'created',
+  pi_username VARCHAR(255) NULL COMMENT 'Pi @username',
+  wallet_address VARCHAR(255) NULL COMMENT 'Payer wallet (from_address)',
+  metadata JSON NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  approved_at DATETIME(3) NULL,
+  completed_at DATETIME(3) NULL,
+  cancelled_at DATETIME(3) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE INDEX idx_products_seller ON products(seller_id);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_products_category ON products(category);
@@ -286,6 +303,12 @@ CREATE INDEX idx_inquiries_created ON inquiries(created_at DESC);
 CREATE INDEX idx_guests_pi_uid ON guests(pi_uid);
 CREATE INDEX idx_guests_converted ON guests(converted_user_id);
 CREATE INDEX idx_guests_last_seen ON guests(last_seen_at);
+CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_payments_type ON payments(payment_type);
+CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_pi_username ON payments(pi_username);
+CREATE INDEX idx_payments_wallet ON payments(wallet_address);
+CREATE INDEX idx_payments_created ON payments(created_at DESC);
 CREATE INDEX idx_sessions_user ON sessions(user_id);
 CREATE INDEX idx_sessions_created ON sessions(created_at);
 CREATE INDEX idx_reports_status ON reports(status);
@@ -297,3 +320,4 @@ CREATE INDEX idx_reports_created ON reports(created_at DESC);
 -- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified;
 -- CREATE TABLE guests (...);  -- copy from CREATE TABLE guests above
 -- ALTER TABLE sessions DROP FOREIGN KEY fk_sessions_user;
+-- CREATE TABLE payments (...);  -- backend/migrations/002_payments.sql

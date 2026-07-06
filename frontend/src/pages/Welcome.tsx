@@ -64,7 +64,7 @@ export const Welcome: React.FC = () => {
     setPiLoading(true);
     setPiStep('Processing verification payment...');
     try {
-      const paid = await piVerificationPayment();
+      const paid = await piVerificationPayment(pendingVerified.username);
       if (!paid) {
         setPiError('Payment cancelled. Please try again.');
         setPendingVerified(null);

@@ -87,11 +87,14 @@ function runPiPayment(paymentData: {
 
 export const PI_VERIFICATION_AMOUNT = 3.14;
 
-export function piVerificationPayment(): Promise<boolean> {
+export function piVerificationPayment(piUsername?: string): Promise<boolean> {
   return runPiPayment({
     amount: PI_VERIFICATION_AMOUNT,
     memo: 'MarketPiePie identity verification',
-    metadata: { type: 'verification' },
+    metadata: {
+      type: 'profile_verification',
+      ...(piUsername?.trim() ? { username: piUsername.trim() } : {}),
+    },
   });
 }
 

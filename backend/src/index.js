@@ -725,6 +725,115 @@ async function piApiCall(method, path, data) {
   return res.json();
 }
 
+/** Pi 결제 종류 — metadata.type 과 매핑 */
+const PAYMENT_TYPE = {
+  PROFILE_VERIFICATION: "profile_verification",
+  BADGE_PURCHASE: "badge_purchase",
+  OTHER: "other",
+};
+
+function normalizePaymentType(metadata) {
+  const t = metadata?.type;
+  if (t === "verification" || t === PAYMENT_TYPE.PROFILE_VERIFICATION) {
+    return PAYMENT_TYPE.PROFILE_VERIFICATION;
+  }
+  if (t === PAYMENT_TYPE.BADGE_PURCHASE) return PAYMENT_TYPE.BADGE_PURCHASE;
+  if (typeof t === "string" && t.trim()) return t.trim();
+  return PAYMENT_TYPE.OTHER;
+}
+
+function isProfileVerificationPayment(metadata) {
+  return normalizePaymentType(metadata) === PAYMENT_TYPE.PROFILE_VERIFICATION;
+}
+
+async function resolvePaymentPiUsername(info) {
+  const fromMeta = info.metadata?.username;
+  if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta.trim();
+  const uid = info.user_uid;
+  if (pool && uid) {
+    try {
+      const { rows } = await pool.query(
+        "SELECT pi_username FROM users WHERE id = $1",
+        [uid],
+      );
+      if (rows[0]?.pi_username) return String(rows[0].pi_username);
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function resolvePaymentWalletAddress(info) {
+  // user → app: 결제자 지갑 = from_address
+  if (typeof info.from_address === "string" && info.from_address.trim()) {
+    return info.from_address.trim();
+  }
+  return null;
+}
+
+async function upsertPaymentRecord(paymentId, status, { txid, paymentInfo } = {}) {
+  if (!pool || !paymentId) return paymentInfo || null;
+  let info = paymentInfo;
+  try {
+    if (!info) info = await piApiCall("GET", "/payments/" + paymentId);
+    const paymentType = normalizePaymentType(info.metadata);
+    const userId = info.user_uid || null;
+    const amount = Number(info.amount) || 0;
+    const memo = info.memo || null;
+    const metadataJson = info.metadata ? JSON.stringify(info.metadata) : null;
+    const resolvedTxid = txid || info.transaction?.txid || null;
+    const piUsername = await resolvePaymentPiUsername(info);
+    const walletAddress = resolvePaymentWalletAddress(info);
+
+    await pool.query(
+      `INSERT INTO payments (id, user_id, payment_type, amount, memo, txid, status, pi_username, wallet_address, metadata, approved_at, completed_at, cancelled_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+         CASE WHEN $7 IN ('approved','completed') THEN CURRENT_TIMESTAMP(3) ELSE NULL END,
+         CASE WHEN $7 = 'completed' THEN CURRENT_TIMESTAMP(3) ELSE NULL END,
+         CASE WHEN $7 = 'cancelled' THEN CURRENT_TIMESTAMP(3) ELSE NULL END)
+       ON DUPLICATE KEY UPDATE
+         user_id = COALESCE($2, user_id),
+         payment_type = COALESCE($3, payment_type),
+         amount = COALESCE($4, amount),
+         memo = COALESCE($5, memo),
+         txid = COALESCE($6, txid),
+         status = $7,
+         pi_username = COALESCE($8, pi_username),
+         wallet_address = COALESCE($9, wallet_address),
+         metadata = COALESCE($10, metadata),
+         approved_at = CASE WHEN $7 IN ('approved','completed') THEN COALESCE(approved_at, CURRENT_TIMESTAMP(3)) ELSE approved_at END,
+         completed_at = CASE WHEN $7 = 'completed' THEN COALESCE(completed_at, CURRENT_TIMESTAMP(3)) ELSE completed_at END,
+         cancelled_at = CASE WHEN $7 = 'cancelled' THEN COALESCE(cancelled_at, CURRENT_TIMESTAMP(3)) ELSE cancelled_at END`,
+      [
+        paymentId,
+        userId,
+        paymentType,
+        amount,
+        memo,
+        resolvedTxid,
+        status,
+        piUsername,
+        walletAddress,
+        metadataJson,
+      ],
+    );
+    return info;
+  } catch (e) {
+    console.error("[payments] upsert failed:", paymentId, e.message);
+    return info || null;
+  }
+}
+
+async function handleVerificationPaymentComplete(paymentInfo) {
+  if (!paymentInfo?.user_uid) return;
+  if (!isProfileVerificationPayment(paymentInfo.metadata)) return;
+  await promoteGuestToUser(
+    paymentInfo.user_uid,
+    paymentInfo.metadata?.username,
+  );
+}
+
 // ??? ????
 
 app.post("/api/payments/approve", async (req, res) => {
@@ -741,12 +850,16 @@ app.post("/api/payments/approve", async (req, res) => {
 
     console.log("Payment approved:", paymentId);
 
+    await upsertPaymentRecord(paymentId, "approved");
+
     res.json(result);
   } catch (e) {
     // already_approved??? ????????? ???
 
     if (e.message && e.message.includes("already_approved")) {
       console.log("Payment already approved:", paymentId);
+
+      await upsertPaymentRecord(paymentId, "approved");
 
       return res.json({ message: "already approved" });
     }
@@ -774,17 +887,10 @@ app.post("/api/payments/complete", async (req, res) => {
 
     console.log("Payment completed:", paymentId, txid);
 
-    // ??? ????? ??? ????? DB??? ?????
-
+    let paymentInfo = null;
     if (pool) {
-      const paymentInfo = await piApiCall("GET", "/payments/" + paymentId);
-
-      if (paymentInfo && paymentInfo.user_uid) {
-        await promoteGuestToUser(
-          paymentInfo.user_uid,
-          paymentInfo.metadata?.username,
-        );
-      }
+      paymentInfo = await upsertPaymentRecord(paymentId, "completed", { txid });
+      if (paymentInfo) await handleVerificationPaymentComplete(paymentInfo);
     }
 
     res.json(result);
@@ -793,6 +899,13 @@ app.post("/api/payments/complete", async (req, res) => {
 
     if (e.message && e.message.includes("already_completed")) {
       console.log("Payment already completed:", paymentId);
+
+      if (pool) {
+        const paymentInfo = await upsertPaymentRecord(paymentId, "completed", {
+          txid,
+        });
+        if (paymentInfo) await handleVerificationPaymentComplete(paymentInfo);
+      }
 
       return res.json({ message: "already completed" });
     }
@@ -824,8 +937,13 @@ app.post("/api/payments/incomplete", async (req, res) => {
 
       console.log("Incomplete payment completed:", paymentId);
 
-      if (pool && payment.user_uid) {
-        await promoteGuestToUser(payment.user_uid, payment.metadata?.username);
+      let paymentInfo = null;
+      if (pool) {
+        paymentInfo = await upsertPaymentRecord(paymentId, "completed", {
+          txid,
+          paymentInfo: payment,
+        });
+        if (paymentInfo) await handleVerificationPaymentComplete(paymentInfo);
       }
 
       res.json(result);
@@ -837,6 +955,8 @@ app.post("/api/payments/incomplete", async (req, res) => {
       );
 
       console.log("Incomplete payment cancelled:", paymentId);
+
+      await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: payment });
 
       res.json(result);
     }
