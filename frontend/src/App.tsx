@@ -57,9 +57,9 @@ import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
-import { initDBSync, syncProductsFromDB, syncNotificationsFromDB } from './utils/dbSync';
+import { initDBSync, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
-import { addRemoteMessage, addRemoteRoom, updateRoomFromRemote } from './utils/chatStorage';
+import { addRemoteMessage, addRemoteRoom, updateRoomFromRemote, getChatRoom } from './utils/chatStorage';
 import { mergeRemoteOrder } from './utils/orderStorage';
 import { removeProductLocally } from './utils/productStorage';
 import {
@@ -181,11 +181,20 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       };
     }
 
+    // 방이 로컬에 없으면 DB에서 방 목록을 먼저 받아온 뒤 반영 (메시지 유실 방지)
+    const withRoomSynced = (roomId: string, apply: () => void) => {
+      if (getChatRoom(roomId)) {
+        apply();
+        return;
+      }
+      const uid = getCurrentUserId();
+      if (uid) void syncChatRoomsFromDB(uid).then(apply);
+    };
     const unsubMsg = onNewMessage((data) => {
-      addRemoteMessage(data.roomId, data.message);
+      withRoomSynced(data.roomId, () => addRemoteMessage(data.roomId, data.message));
     });
     const unsubUpdate = onRoomUpdated((data) => {
-      updateRoomFromRemote(data.roomId, data.lastMessage, data.lastMessageTime);
+      withRoomSynced(data.roomId, () => updateRoomFromRemote(data.roomId, data.lastMessage, data.lastMessageTime));
     });
     const unsubNewRoom = onNewRoom((data) => {
       addRemoteRoom(data.room);

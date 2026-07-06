@@ -526,6 +526,76 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
 
 
 
+/** DB 메시지 row → ChatMessage */
+function mapChatMessageFromDB(row: Record<string, unknown>): ChatMessage {
+  const rawType = String(row.type || 'user');
+  // 서버 기본값 'text'는 프론트 타입 'user'에 해당
+  const type = (rawType === 'text' ? 'user' : rawType) as ChatMessage['type'];
+  return {
+    id: String(row.id),
+    senderId: String(row.sender_id || ''),
+    content: String(row.content || ''),
+    timestamp: String(row.created_at || new Date().toISOString()),
+    type,
+    images: Array.isArray(row.images) ? (row.images as string[]) : undefined,
+    orderId: row.order_id ? String(row.order_id) : undefined,
+    originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
+    proposedPrice: row.proposed_price != null ? Number(row.proposed_price) : undefined,
+    offerResult: (row.offer_result as ChatMessage['offerResult']) || undefined,
+    meetupPlace: row.meetup_place ? String(row.meetup_place) : undefined,
+    meetupDate: row.meetup_date ? String(row.meetup_date) : undefined,
+    meetupTime: row.meetup_time ? String(row.meetup_time) : undefined,
+  };
+}
+
+/**
+ * 특정 채팅방의 메시지를 DB에서 받아 로컬(localStorage)에 병합.
+ * 방이 로컬에 없으면 (userId 제공 시) 방 목록을 먼저 동기화한다.
+ * DB가 원본, 로컬은 캐시 — 알림만 오고 채팅이 비어 보이는 문제 해결용.
+ */
+export async function syncRoomMessagesFromDB(roomId: string, userId?: string): Promise<void> {
+  if (!roomId) return;
+  try {
+    const readRooms = (): ChatRoom[] => {
+      try { return JSON.parse(getItem('all_chatrooms') || '[]'); } catch { return []; }
+    };
+
+    if (userId && !readRooms().some((r) => r.id === roomId)) {
+      await syncChatRoomsFromDB(userId);
+    }
+
+    const res = await api.get<Record<string, unknown>[]>(`/api/chat-rooms/${roomId}/messages`);
+    if (!res.ok || !Array.isArray(res.data)) return;
+
+    const rooms = readRooms();
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return;
+
+    if (!room.messages) room.messages = [];
+    const localIds = new Set(room.messages.map((m) => m.id));
+    let added = false;
+    res.data.forEach((row) => {
+      const msg = mapChatMessageFromDB(row);
+      if (!localIds.has(msg.id)) {
+        room.messages!.push(msg);
+        added = true;
+      }
+    });
+    if (!added) return;
+
+    room.messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const last = room.messages[room.messages.length - 1];
+    if (last && new Date(last.timestamp) >= new Date(room.lastMessageTime || 0)) {
+      room.lastMessage = last.images && last.images.length > 0 ? (last.content || 'Photo') : last.content;
+      room.lastMessageTime = last.timestamp;
+    }
+    setItem('all_chatrooms', JSON.stringify(rooms));
+    window.dispatchEvent(new Event('chatRoomsChanged'));
+  } catch {
+    // 오프라인 시 무시
+  }
+}
+
 function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
   const otherUser = row.other_user as Record<string, unknown> | undefined;

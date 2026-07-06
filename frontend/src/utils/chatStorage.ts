@@ -27,6 +27,17 @@ import { getItem, setItem } from '@/utils/heavyStorage';
 /** Shared storage: all chat rooms */
 const CHATROOMS_KEY = 'all_chatrooms';
 
+/**
+ * 새 방의 DB 저장이 끝나기 전에 메시지 POST가 나가면 FK 오류로 유실된다.
+ * 방 생성 → DB 저장 promise를 기억해 두고, 첫 메시지는 이걸 기다린 후 전송.
+ */
+const pendingRoomSyncs = new Map<string, Promise<void>>();
+
+const trackRoomSync = (room: ChatRoom): void => {
+  const p = syncChatRoomToDB(room).finally(() => pendingRoomSyncs.delete(room.id));
+  pendingRoomSyncs.set(room.id, p);
+};
+
 /** WebSocket에서 받은 메시지를 로컬에 추가 (중복 방지) */
 export const addRemoteMessage = (roomId: string, message: ChatMessage): void => {
   const rooms = getAllChatRooms();
@@ -254,7 +265,7 @@ export const createOrGetChatRoom = (product: Product): ChatRoom => {
   const rooms = getAllChatRooms();
   rooms.unshift(room);
   saveAllChatRooms(rooms, room.id);
-  syncChatRoomToDB(room);
+  trackRoomSync(room);
   notifyNewRoom(room);
 
   addNotification({
@@ -293,7 +304,13 @@ export const addMessage = (roomId: string, message: ChatMessage): boolean => {
   room.readStatus[senderId] = true;
 
   const saveResult = saveAllChatRooms(rooms, roomId);
-  syncMessageToDB(roomId, message);
+  // 방 생성 DB 저장이 진행 중이면 완료 후 메시지 전송 (FK 유실 방지)
+  const pendingRoom = pendingRoomSyncs.get(roomId);
+  if (pendingRoom) {
+    pendingRoom.then(() => syncMessageToDB(roomId, message));
+  } else {
+    syncMessageToDB(roomId, message);
+  }
   sendMessageViaSocket(roomId, message, { buyerId: room.buyerId || '', sellerId: room.sellerId || '' });
   return saveResult;
 };
@@ -389,6 +406,8 @@ export const ensureChatRoomForOrder = (order: Order, createdByUserId?: string): 
   const rooms = getAllChatRooms();
   rooms.unshift(room);
   saveAllChatRooms(rooms, room.id);
+  trackRoomSync(room);
+  notifyNewRoom(room);
 
   if (otherUserId) {
     addNotification({

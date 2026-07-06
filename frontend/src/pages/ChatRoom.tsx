@@ -25,6 +25,7 @@ import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverl
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { API_BASE } from '@/utils/apiConfig';
+import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
   CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
@@ -150,6 +151,25 @@ export const ChatRoom: React.FC = () => {
     }
   }, [roomId, navigate]);
 
+  // DB가 원본: 진입 시 방+메시지를 서버에서 받아 로컬에 병합
+  // (상대 기기에는 방이 로컬에 없어 알림만 오고 채팅이 비어 보이던 문제 해결)
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    (async () => {
+      const uid = getCurrentUserId();
+      await syncRoomMessagesFromDB(roomId, uid || undefined);
+      if (cancelled) return;
+      const r = getChatRoom(roomId);
+      if (r) {
+        setRoom(r);
+        setMessages(getMessages(roomId));
+        markAsRead(roomId);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId]);
+
   // After meetup flow: refresh room and messages
   useEffect(() => {
     if (roomId && location.pathname === `/chat/${roomId}`) {
@@ -214,31 +234,12 @@ export const ChatRoom: React.FC = () => {
     const pollInterval = setInterval(async () => {
       if (!roomId) return;
       try {
-        const res = await fetch(`${API_BASE}/api/chat-rooms/${roomId}/messages`);
-        if (res.ok) {
-          const dbMessages = await res.json();
-          if (dbMessages.length > 0) {
-            const current = getMessages(roomId);
-            const currentIds = new Set(current.map((m) => m.id));
-            const newMsgs = dbMessages.filter((m: any) => !currentIds.has(m.id));
-            if (newMsgs.length > 0) {
-              newMsgs.forEach((m: any) => {
-                addRemoteMessage(roomId, {
-                  id: m.id,
-                  senderId: m.sender_id,
-                  content: m.content || "",
-                  timestamp: m.created_at,
-                  type: m.type || "user",
-                  images: m.images || [],
-                  orderId: m.order_id,
-                  originalPrice: m.original_price,
-                  proposedPrice: m.proposed_price,
-                  offerResult: m.offer_result,
-                });
-              });
-              setMessages(getMessages(roomId));
-            }
-          }
+        const before = getMessages(roomId).length;
+        await syncRoomMessagesFromDB(roomId, getCurrentUserId() || undefined);
+        const after = getMessages(roomId);
+        if (after.length !== before) {
+          setRoom(getChatRoom(roomId));
+          setMessages(after);
         }
       } catch { /* polling error ignored */ }
       // 주문 상태 DB 폴링
