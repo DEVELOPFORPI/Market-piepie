@@ -7,6 +7,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { isDeviceProfileOnce, setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
+import { suggestPiePieNickname } from '@/utils/nickname';
 
 const TEAL = '#00A8A3';
 
@@ -52,6 +53,17 @@ export const SignupProfile: React.FC = () => {
       navigate('/login-app', { replace: true });
     }
   }, [navigate]);
+
+  // 닉네임 비어 있으면 PiePie + 랜덤 7자리 (서버에서 중복 제거)
+  useEffect(() => {
+    if (draft?.nickname?.trim()) return;
+    let cancelled = false;
+    void suggestPiePieNickname().then((n) => {
+      if (!cancelled) setNickname(n);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draft는 최초 마운트 시만
+  }, []);
 
   useEffect(() => {
     const r = getRegion();
