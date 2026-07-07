@@ -8,7 +8,7 @@ import { displayChatMessageContent, relativeTimeShort } from '@/locale/enUI';
 import { connectChatSocket, onNewMessage, onRoomUpdated, onNewRoom } from '@/utils/chatSocket';
 import { isGuest } from '@/utils/guestGate';
 import { resolveDisplayNickname } from '@/utils/profileStorage';
-import { getUnreadCount } from '@/utils/notificationStorage';
+import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { syncChatRoomsFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
 
 export const ChatList: React.FC = () => {
@@ -19,7 +19,6 @@ export const ChatList: React.FC = () => {
   }, [navigate]);
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
-  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(getUnreadCount());
   const [contextMenu, setContextMenu] = useState<{ roomId: string; x: number; y: number } | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -32,18 +31,13 @@ export const ChatList: React.FC = () => {
     setRooms(all);
   };
 
-  const loadNotifUnread = () => setUnreadNotifCount(getUnreadCount());
-
   useEffect(() => {
     loadRooms();
-    loadNotifUnread();
     connectChatSocket();
 
     window.addEventListener('chatRoomsChanged', loadRooms);
-    window.addEventListener('notificationsChanged', loadNotifUnread);
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'all_chatrooms' || e.key === 'all_products') loadRooms();
-      if (e.key === 'all_notifications') loadNotifUnread();
     };
     window.addEventListener('storage', handleStorageChange);
 
@@ -67,7 +61,7 @@ export const ChatList: React.FC = () => {
       return syncChatRoomsFromDB(uid).then(() => loadRooms());
     };
     if (uid) {
-      syncNotificationsFromDB(uid).then(() => loadNotifUnread());
+      syncNotificationsFromDB(uid);
       void pullChatsFromServer();
       // Realtime can miss rooms; polling keeps seller (and buyer) lists aligned with DB
       intervalId = window.setInterval(() => void pullChatsFromServer(), 25000);
@@ -79,7 +73,6 @@ export const ChatList: React.FC = () => {
 
     return () => {
       window.removeEventListener('chatRoomsChanged', loadRooms);
-      window.removeEventListener('notificationsChanged', loadNotifUnread);
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', onVisibility);
       if (intervalId != null) window.clearInterval(intervalId);
@@ -198,24 +191,7 @@ export const ChatList: React.FC = () => {
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => navigate('/notifications')}
-                  className="relative p-2 text-gray-700"
-                  aria-label="Notifications"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                  {unreadNotifCount > 0 && (
-                    <span
-                      className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
-                      style={{ backgroundColor: '#ef4444' }}
-                    >
-                      {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
-                    </span>
-                  )}
-                </button>
+                <NotificationBellButton />
                 {rooms.length > 0 && (
                   <button
                     type="button"

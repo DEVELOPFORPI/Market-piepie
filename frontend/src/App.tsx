@@ -132,6 +132,18 @@ function getMyOpenDisputes() {
   );
 }
 
+function ScrollToTop() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Chat room manages its own scroll (latest messages at bottom).
+    if (/^\/chat\/[^/]+$/.test(location.pathname)) return;
+    window.scrollTo(0, 0);
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyReady: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -323,6 +335,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
 
   return (
     <div className="App">
+      <ScrollToTop />
       {/* Test preset user bar (hidden on post detail) */}
       {showUserBar && (
         <div

@@ -5,7 +5,7 @@ import { ReportModal } from '@/components/common/ReportModal';
 import { KYCBadge } from '@/components/common/KYCBadge';
 import { TrustBadge } from '@/components/common/TrustBadge';
 import { ListingCard } from '@/components/common/ListingCard';
-import { User, Product, ORDER_STATUS_VALUE } from '@/types';
+import { User, Product, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { getOrders, getShareCountByUserId } from '@/utils/orderStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
@@ -94,7 +94,7 @@ export const SellerProfile: React.FC = () => {
               price: Number(p.price) || 0,
               category: p.category || '',
               region: p.region || '',
-              status: p.status || '판매중',
+              status: p.status || PRODUCT_STATUS_VALUE.FOR_SALE,
               images: p.images || [],
               seller: p.seller ? {
                 id: p.seller.id,

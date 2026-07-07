@@ -175,7 +175,7 @@ export const Welcome: React.FC = () => {
               className="w-full py-3.5 rounded-full text-sm font-bold border-2 active:opacity-90 transition-opacity disabled:opacity-50 bg-gray-50"
               style={{ borderColor: TEAL, color: TEAL }}
             >
-              로컬계정1
+              Local account 1
             </button>
             <button
               type="button"
@@ -184,7 +184,7 @@ export const Welcome: React.FC = () => {
               className="w-full py-3.5 rounded-full text-sm font-bold border-2 active:opacity-90 transition-opacity disabled:opacity-50 bg-gray-50"
               style={{ borderColor: TEAL, color: TEAL }}
             >
-              로컬계정2
+              Local account 2
             </button>
           </div>
         )}

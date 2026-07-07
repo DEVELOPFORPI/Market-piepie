@@ -283,7 +283,7 @@ export const AppLogin: React.FC = () => {
 
           >
 
-            Welcome — 로컬계정1 / 로컬계정2
+            Welcome — Local account 1 / Local account 2
 
           </button>
 

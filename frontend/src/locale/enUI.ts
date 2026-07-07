@@ -17,8 +17,8 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 
-const DEV_KO = import.meta.env.DEV;
-const pick = (en: string, ko: string) => (DEV_KO ? ko : en);
+/** UI strings are English-first; Korean literals in `types/` are persisted data keys only. */
+const pick = (en: string, _ko?: string) => en;
 
 export function labelProductStatus(s: ProductStatus): string {
   const map: Record<ProductStatus, string> = {
@@ -98,9 +98,9 @@ export function labelBuyerChatTab(tab: BuyerChatTab): string {
 export function relativeTimeShort(isoDate: string): string {
   const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
   if (diff < 1) return pick('Just now', '방금 전');
-  if (diff < 60) return DEV_KO ? `${diff}분 전` : `${diff}m ago`;
-  if (diff < 1440) return DEV_KO ? `${Math.floor(diff / 60)}시간 전` : `${Math.floor(diff / 60)}h ago`;
-  return DEV_KO ? `${Math.floor(diff / 1440)}일 전` : `${Math.floor(diff / 1440)}d ago`;
+  if (diff < 60) return `${diff}m ago`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+  return `${Math.floor(diff / 1440)}d ago`;
 }
 
 /** Timeline / storage descriptions for order status transitions (English) */
@@ -156,6 +156,7 @@ export const NOTIFY_MEETUP_UPDATED = pick('Meetup updated', '약속 정보가 �
 export const NOTIFY_MEETUP_CANCELED = pick('Meetup canceled', '약속이 취소되었습니다');
 export const NOTIFY_PURCHASE_OFFER_ARRIVED = pick('New purchase offer', '새 구매 제안이 도착했습니다');
 export const NOTIFY_FREE_SHARE_REQUEST_ARRIVED = pick('New free share request', '새 나눔 요청이 도착했습니다');
+export const NOTIFY_BADGE_UNLOCKED = pick('New activity badge unlocked!', '새로운 활동 배지가 획득되었습니다!');
 export const MEETUP_STARTED_SNIPPET = pick('started scheduling a meetup', '약속 잡기를 시작');
 
 export const MEETUP_TITLE_SET = new Set<string>([
@@ -165,13 +166,48 @@ export const MEETUP_TITLE_SET = new Set<string>([
 ]);
 
 export function isMeetupNotificationTitle(title: string): boolean {
-  return MEETUP_TITLE_SET.has(title) || title.includes(MEETUP_STARTED_SNIPPET);
+  return (
+    MEETUP_TITLE_SET.has(title)
+    || title.includes(MEETUP_STARTED_SNIPPET)
+    || title.includes('약속 잡기를 시작')
+  );
 }
 
 export const COMPLETION_TITLE_SET = new Set<string>([NOTIFY_TRADE_COMPLETE_CHECK, NOTIFY_TRADE_COMPLETED]);
 
 export function notifyTitleSellerStartedMeetup(sellerNickname: string): string {
-  return DEV_KO ? `${sellerNickname} 님이 약속 잡기를 시작했습니다` : `${sellerNickname} ${MEETUP_STARTED_SNIPPET}`;
+  return `${sellerNickname} ${MEETUP_STARTED_SNIPPET}`;
+}
+
+/** Map legacy Korean notification titles (stored in DB/localStorage) to English for display/routing. */
+const LEGACY_NOTIFY_TITLE_TO_EN: Record<string, string> = {
+  '새로운 활동 배지가 획득되었습니다!': NOTIFY_BADGE_UNLOCKED,
+  '새 채팅이 시작되었습니다': NOTIFY_NEW_CHAT,
+  '채팅방이 열렸습니다': NOTIFY_CHAT_ROOM_CREATED,
+  '제안이 수락되었습니다': NOTIFY_OFFER_ACCEPTED,
+  '제안이 거절되었습니다': NOTIFY_OFFER_DECLINED,
+  '리뷰가 등록되었습니다': NOTIFY_REVIEW_WRITTEN,
+  '수령이 확인되었습니다': NOTIFY_RECEIVE_CONFIRM,
+  '거래 완료 확인': NOTIFY_TRADE_COMPLETE_CHECK,
+  '거래가 완료되었습니다': NOTIFY_TRADE_COMPLETED,
+  '약속이 확정되었습니다': NOTIFY_MEETUP_CONFIRMED,
+  '약속 정보가 변경되었습니다': NOTIFY_MEETUP_UPDATED,
+  '약속이 취소되었습니다': NOTIFY_MEETUP_CANCELED,
+  '새 구매 제안이 도착했습니다': NOTIFY_PURCHASE_OFFER_ARRIVED,
+  '새 나눔 요청이 도착했습니다': NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
+};
+
+export function normalizeNotificationTitle(title: string): string {
+  if (!title) return title;
+  const exact = LEGACY_NOTIFY_TITLE_TO_EN[title.trim()];
+  if (exact) return exact;
+  const meetupLegacy = title.match(/^(.+)\s님이\s약속\s잡기를\s시작했습니다\.?$/);
+  if (meetupLegacy) return notifyTitleSellerStartedMeetup(meetupLegacy[1].trim());
+  return title;
+}
+
+export function displayNotificationTitle(title: string): string {
+  return normalizeNotificationTitle(title);
 }
 
 /** Order quota / storage user message */

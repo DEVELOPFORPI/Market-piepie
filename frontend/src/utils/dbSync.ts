@@ -4,7 +4,7 @@
  * - 데이터 저장 시 localStorage + API 동시에 저장
  */
 import { api } from '@/utils/api';
-import { Product, Post, User, Order, ChatRoom, ChatMessage, ORDER_STATUS_VALUE } from '@/types';
+import { Product, Post, User, Order, ChatRoom, ChatMessage, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { setItem, getItem } from '@/utils/heavyStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
@@ -413,7 +413,7 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
       images: Array.isArray(product.images) ? (product.images as string[]) : [],
       category: String(product.category || ''),
       region: String(product.region || ''),
-      status: (product.status as Product['status']) || ('판매중' as const),
+      status: (product.status as Product['status']) || PRODUCT_STATUS_VALUE.FOR_SALE,
       description: String(product.description || ''),
       createdAt: String(product.created_at || ''),
       liked: false,

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PostCard } from '@/components/common/PostCard';
+import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { getAllPosts } from '@/utils/communityStorage';
 import { guestGuard } from '@/utils/guestGate';
-import { getUnreadCount } from '@/utils/notificationStorage';
 import { labelPostCategory } from '@/locale/enUI';
 
 type CategoryFilter = PostCategory | 'all';
@@ -29,7 +29,6 @@ export const Community: React.FC = () => {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL);
   const [posts, setPosts] = useState(getAllPosts());
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const loadPosts = () => setPosts(getAllPosts());
 
@@ -37,25 +36,6 @@ export const Community: React.FC = () => {
     loadPosts();
     window.addEventListener('postsChanged', loadPosts);
     return () => window.removeEventListener('postsChanged', loadPosts);
-  }, []);
-
-  useEffect(() => {
-    const refreshUnread = () => {
-      const count = getUnreadCount();
-      setUnreadNotificationCount(count);
-    };
-    refreshUnread();
-    window.addEventListener('notificationsChanged', refreshUnread);
-    window.addEventListener('focus', refreshUnread);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refreshUnread();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      window.removeEventListener('notificationsChanged', refreshUnread);
-      window.removeEventListener('focus', refreshUnread);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
   }, []);
 
   const filteredPosts = useMemo(() => {
@@ -71,22 +51,7 @@ export const Community: React.FC = () => {
           <div className="flex items-center gap-1">
             <span className="text-base font-bold text-gray-900">Community</span>
           </div>
-          <button
-            onClick={() => navigate('/notifications')}
-            className={`relative p-2 ${unreadNotificationCount > 0 ? 'text-[#00A8A3]' : 'text-gray-900'}`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            {unreadNotificationCount > 0 ? (
-              <span
-                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full flex items-center justify-center text-[10px] font-bold px-0.5"
-                style={{ backgroundColor: '#00A8A3', color: '#fff' }}
-              >
-                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-              </span>
-            ) : null}
-          </button>
+          <NotificationBellButton />
         </div>
       </div>
 

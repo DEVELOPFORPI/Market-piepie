@@ -2,10 +2,10 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
+import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { TabType, Product, TAB_TYPE_VALUE, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { getUnreadCount } from '@/utils/notificationStorage';
 import { getOrders } from '@/utils/orderStorage';
 import { labelTabType, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { getHomePopupConfig, shouldShowHomePopup, dismissHomePopupForSession } from '@/utils/homePopupStorage';
@@ -28,7 +28,6 @@ export const Home: React.FC = () => {
   const [allProducts, setAllProducts] = useState<Product[]>(defaultMockProducts);
   const [selectedRegion, setSelectedRegion] = useState<string>(UI_REGION_PLACEHOLDER);
   const [piExpanded, setPiExpanded] = useState(false);
-  const [notificationUnread, setNotificationUnread] = useState(0);
   const piPrice = usePiPrice();
   const [homePromo, setHomePromo] = useState(() => ({
     show: shouldShowHomePopup(),
@@ -77,7 +76,6 @@ export const Home: React.FC = () => {
     const savedRegion = getRegion();
     if (savedRegion) setSelectedRegion(savedRegion);
     setAllProducts(getAllProducts());
-    setNotificationUnread(getUnreadCount());
   };
 
   useEffect(() => {
@@ -99,21 +97,16 @@ export const Home: React.FC = () => {
       }
     };
 
-    const refreshNotificationCount = () => setNotificationUnread(getUnreadCount());
-
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('productRegistered', handleStorageChange);
     window.addEventListener('productsChanged', handleStorageChange);
     window.addEventListener('regionChanged', handleRegionChange);
-    window.addEventListener('notificationsChanged', refreshNotificationCount);
-    refreshNotificationCount();
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('productRegistered', handleStorageChange);
       window.removeEventListener('productsChanged', handleStorageChange);
       window.removeEventListener('regionChanged', handleRegionChange);
-      window.removeEventListener('notificationsChanged', refreshNotificationCount);
     };
   }, []);
 
@@ -130,7 +123,7 @@ export const Home: React.FC = () => {
   };
 
   const filteredProducts = useMemo(() => {
-    let filtered = [...allProducts];
+    let filtered = allProducts.filter((p) => p.status === PRODUCT_STATUS_VALUE.FOR_SALE);
 
     // Search query
     if (searchQuery.trim()) {
@@ -161,12 +154,9 @@ export const Home: React.FC = () => {
     if (activeTab === TAB_TYPE_VALUE.FREE) {
       filtered = filtered.filter((p) => p.isFreeShare || p.price === 0);
     }
-    filtered = [...filtered].sort((a, b) => {
-      const aSold = a.status === PRODUCT_STATUS_VALUE.SOLD ? 1 : 0;
-      const bSold = b.status === PRODUCT_STATUS_VALUE.SOLD ? 1 : 0;
-      if (aSold !== bSold) return aSold - bSold;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    filtered = [...filtered].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
 
     return filtered;
   }, [allProducts, searchQuery, minPrice, maxPrice, kycOnly, activeTab]);
@@ -192,23 +182,7 @@ export const Home: React.FC = () => {
           >
             {selectedRegion} <span className="text-gray-400">▾</span>
           </button>
-          <button
-            onClick={() => navigate('/notifications')}
-            className={`relative p-2 ${notificationUnread > 0 ? 'text-[#00A8A3]' : 'text-gray-900 hover:text-gray-600'}`}
-            aria-label="Notifications"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            {notificationUnread > 0 && (
-              <span
-                className="absolute top-1 right-1 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-white"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                {notificationUnread > 99 ? '99+' : notificationUnread}
-              </span>
-            )}
-          </button>
+          <NotificationBellButton />
         </div>
       </div>
 

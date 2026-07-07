@@ -5,7 +5,7 @@ import { ACTIVITY_BADGE_DEFINITIONS } from '@/constants/activityBadges';
 
 const STORAGE_KEY = 'unlocked_activity_badges';
 const NOTIFIED_KEY = 'notified_badge_ids';
-const BADGE_NOTIFY_TITLE = '\uC0C8\uB85C\uC6B4 \uD65C\uB3D9 \uBC30\uC9C0\uAC00 \uD68D\uB4DD\uB418\uC5C8\uC2B5\uB2C8\uB2E4!';
+import { NOTIFY_BADGE_UNLOCKED } from '@/locale/enUI';
 const badgeLabelMap: Map<string, string> = new Map(
   ACTIVITY_BADGE_DEFINITIONS.map((b) => [b.id, b.label] as const)
 );
@@ -92,7 +92,7 @@ export function syncActivityBadgesFromStats(): void {
     addNotification({
       targetUserId: userId,
       type: 'badge',
-      title: BADGE_NOTIFY_TITLE,
+      title: NOTIFY_BADGE_UNLOCKED,
       content: badgeLabel,
       link: '/my?tab=badges',
     });

@@ -16,32 +16,35 @@ import { getChatRoomByOrder } from '@/utils/chatStorage';
 import { syncNotificationsFromDB } from '@/utils/dbSync';
 import {
   COMPLETION_TITLE_SET,
+  displayNotificationTitle,
   isMeetupNotificationTitle,
+  normalizeNotificationTitle,
   NOTIFY_MEETUP_CONFIRMED,
   NOTIFY_MEETUP_UPDATED,
   NOTIFY_OFFER_ACCEPTED,
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
+  NOTIFY_BADGE_UNLOCKED,
   relativeTimeShort,
 } from '@/locale/enUI';
 import { ACTIVITY_BADGE_DEFINITIONS } from '@/constants/activityBadges';
 
 const COMPLETION_TITLES = COMPLETION_TITLE_SET;
-
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
-
 const REVIEW_TITLES = new Set([NOTIFY_REVIEW_WRITTEN]);
-
 const ACCEPT_TITLES = new Set([NOTIFY_OFFER_ACCEPTED]);
-const BADGE_NOTIFY_TITLE = '새로운 활동 배지가 획득되었습니다!';
+
 const badgeLabelMap: Map<string, string> = new Map(
   ACTIVITY_BADGE_DEFINITIONS.map((b) => [b.id, b.label] as const)
 );
 
 function getBadgeDisplay(notification: StoredNotification): { title: string; content: string } {
   if (notification.type !== 'badge') {
-    return { title: notification.title, content: notification.content };
+    return {
+      title: displayNotificationTitle(notification.title),
+      content: notification.content,
+    };
   }
   // Legacy entries looked like "Badge 04 has been added ..."
   const legacyText = `${notification.title} ${notification.content}`;
@@ -49,7 +52,7 @@ function getBadgeDisplay(notification: StoredNotification): { title: string; con
   const badgeId = m?.[1];
   const badgeTitle = badgeId ? badgeLabelMap.get(badgeId) ?? badgeId : notification.content;
   return {
-    title: BADGE_NOTIFY_TITLE,
+    title: NOTIFY_BADGE_UNLOCKED,
     content: badgeTitle || '',
   };
 }
@@ -123,20 +126,22 @@ export const Notifications: React.FC = () => {
 
     if (!notification.link) return;
 
+    const title = normalizeNotificationTitle(notification.title);
+
     const orderIdMatch = notification.link.match(/^\/order\/(.+)$/);
     const orderId = orderIdMatch?.[1];
     const order = orderId ? getOrderById(orderId) : null;
     let destinationLink = notification.link;
 
     // Order notifications from chat flow ??open the trade chat room when possible
-    if (order && isMeetupNotificationTitle(notification.title)) {
+    if (order && isMeetupNotificationTitle(title)) {
       const room = getChatRoomByOrder(order);
       if (room?.id) {
         destinationLink = `/chat/${room.id}`;
       }
     }
 
-    if (notification.title === NOTIFY_TRADE_COMPLETE_CHECK && order?.status === ORDER_STATUS_VALUE.COMPLETE) {
+    if (title === NOTIFY_TRADE_COMPLETE_CHECK && order?.status === ORDER_STATUS_VALUE.COMPLETE) {
       const existingReview = orderId ? getReviewByOrderId(orderId) : undefined;
       if (existingReview) {
         alert('This trade is already complete and you have left a review.');
@@ -145,7 +150,7 @@ export const Notifications: React.FC = () => {
       }
     }
     if (
-      notification.title === NOTIFY_RECEIVE_CONFIRM &&
+      title === NOTIFY_RECEIVE_CONFIRM &&
       order &&
       (order.status === ORDER_STATUS_VALUE.RECEIVED || order.status === ORDER_STATUS_VALUE.COMPLETE)
     ) {
@@ -158,7 +163,7 @@ export const Notifications: React.FC = () => {
       return;
     }
     if (
-      (notification.title === NOTIFY_MEETUP_CONFIRMED || notification.title === NOTIFY_MEETUP_UPDATED) &&
+      (title === NOTIFY_MEETUP_CONFIRMED || title === NOTIFY_MEETUP_UPDATED) &&
       order?.meetupPlace
     ) {
       // Meetup confirmed/updated: keep default link to order detail
@@ -235,6 +240,7 @@ export const Notifications: React.FC = () => {
         ) : (
           notifications.map((notification, index) => {
             const badgeDisplay = getBadgeDisplay(notification);
+            const title = normalizeNotificationTitle(notification.title);
             return (
             <div
               key={`${notification.id}-${index}`}
@@ -268,15 +274,15 @@ export const Notifications: React.FC = () => {
                   <img src="/Batch/icon.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : notification.type === 'chat' ? (
                   <img src="/post/chat.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : isMeetupNotificationTitle(notification.title) ? (
+                ) : isMeetupNotificationTitle(title) ? (
                   <img src="/post/time.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : COMPLETION_TITLES.has(notification.title) ? (
+                ) : COMPLETION_TITLES.has(title) ? (
                   <img src="/post/check.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : RECEIVE_TITLES.has(notification.title) ? (
+                ) : RECEIVE_TITLES.has(title) ? (
                   <img src="/post/parcel.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : REVIEW_TITLES.has(notification.title) ? (
+                ) : REVIEW_TITLES.has(title) ? (
                   <img src="/post/smile.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : ACCEPT_TITLES.has(notification.title) ? (
+                ) : ACCEPT_TITLES.has(title) ? (
                   <img src="/3 ICON/4.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : (
                   getIcon(notification.type)

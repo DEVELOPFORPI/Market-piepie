@@ -270,9 +270,22 @@ export const ChatRoom: React.FC = () => {
                 console.log('[ORDERSYNC] compare', { orderId: row.id, dbStatus, localStatus: local.status, dbMeetupPlace, localMeetupPlace: local.meetupPlace, dbBuyerCompleted: row.buyer_completed, dbSellerCompleted: row.seller_completed, changed });
                 if (changed) {
                   const updated = { ...local };
-                  const statusOrder = ['제안중','수락됨','배송정보대기','약속확정','발송완료','배송완료','수령완료','완료'];
-                  if (statusOrder.indexOf(dbStatus) > statusOrder.indexOf(local.status)) {
-                    updated.status = dbStatus as Order['status'];
+                  const statusOrder: OrderStatus[] = [
+                    ORDER_STATUS_VALUE.PENDING_OFFER,
+                    ORDER_STATUS_VALUE.ACCEPTED,
+                    ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
+                    ORDER_STATUS_VALUE.MEETUP_SET,
+                    ORDER_STATUS_VALUE.SHIPPED,
+                    ORDER_STATUS_VALUE.DELIVERED,
+                    ORDER_STATUS_VALUE.RECEIVED,
+                    ORDER_STATUS_VALUE.COMPLETE,
+                  ];
+                  const dbOrderStatus = dbStatus as OrderStatus;
+                  if (
+                    statusOrder.includes(dbOrderStatus)
+                    && statusOrder.indexOf(dbOrderStatus) > statusOrder.indexOf(local.status)
+                  ) {
+                    updated.status = dbOrderStatus;
                   }
                   if (row.buyer_completed) updated.buyerCompleted = true;
                   if (row.seller_completed) updated.sellerCompleted = true;
