@@ -503,11 +503,17 @@ pool = createDbPool();
 // 이미 적용된 파일은 schema_migrations 테이블로 건너뛰고,
 // "already exists" 류 오류는 무시하므로 기존 DB에도 안전하다.
 async function runMigrations() {
-  if (!pool) return;
+  if (!pool) {
+    console.warn("[migrate] skipped: database not configured");
+    return;
+  }
   const fs = require("fs");
   const path = require("path");
   const dir = path.join(__dirname, "..", "migrations");
-  if (!fs.existsSync(dir)) return;
+  if (!fs.existsSync(dir)) {
+    console.warn("[migrate] skipped: migrations dir not found at", dir);
+    return;
+  }
 
   try {
     await pool.query(

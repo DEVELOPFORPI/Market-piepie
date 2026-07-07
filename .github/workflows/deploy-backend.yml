@@ -55,9 +55,14 @@ jobs:
             echo "=== Deploy branch: ${BRANCH} ==="
 
             cd "${REPO_DIR}"
+            # Older manual deploys may have left an untracked Dockerfile on the server.
+            # Remove only that known conflicting file before checking out the tracked one.
+            if [ -f backend/Dockerfile ] && ! sudo git ls-files --error-unmatch backend/Dockerfile >/dev/null 2>&1; then
+              sudo rm -f backend/Dockerfile
+            fi
             sudo git fetch origin "${BRANCH}"
             sudo git checkout "${BRANCH}"
-            sudo git pull origin "${BRANCH}"
+            sudo git reset --hard "origin/${BRANCH}"
 
             cd "${COMPOSE_DIR}"
             sudo DOCKER_BUILDKIT=0 docker-compose up -d --build "${SERVICE}"
