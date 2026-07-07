@@ -1,0 +1,69 @@
+# Lightsail 백엔드 자동 배포
+#
+# GitHub repo → Settings → Secrets and variables → Actions 에 등록:
+#   LIGHTSAIL_HOST      예: 13.124.170.97
+#   LIGHTSAIL_USER      예: ec2-user
+#   LIGHTSAIL_SSH_KEY   Lightsail SSH 개인키 전체 (PEM)
+#
+# test / main 브랜치 push 시 backend/ 변경이 있으면 배포합니다.
+# 수동 실행: GitHub → Actions → Deploy Backend → Run workflow
+
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - test
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Deploy branch'
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - main
+
+concurrency:
+  group: deploy-backend-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            BRANCH="${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref_name }}"
+            REPO_DIR="/srv/blind-docker/Market-piepie"
+            COMPOSE_DIR="/srv/blind-docker"
+            SERVICE="market_piepie_backend"
+            CONTAINER="market-piepie-backend"
+
+            echo "=== Deploy branch: ${BRANCH} ==="
+
+            cd "${REPO_DIR}"
+            sudo git fetch origin "${BRANCH}"
+            sudo git checkout "${BRANCH}"
+            sudo git pull origin "${BRANCH}"
+
+            cd "${COMPOSE_DIR}"
+            sudo DOCKER_BUILDKIT=0 docker-compose up -d --build "${SERVICE}"
+
+            echo "=== Health check ==="
+            sleep 8
+            sudo docker exec "${CONTAINER}" curl -sf http://127.0.0.1:3001/api/health
+            echo ""
+            echo "=== Deploy OK: ${BRANCH} ==="

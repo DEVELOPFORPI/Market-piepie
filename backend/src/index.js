@@ -498,6 +498,77 @@ async function requireUploadActor(req, res, next) {
 let pool = null;
 pool = createDbPool();
 
+// ── 자동 마이그레이션 ──────────────────────────────────────────
+// 서버 시작 시 backend/migrations/*.sql 을 순서대로 실행한다.
+// 이미 적용된 파일은 schema_migrations 테이블로 건너뛰고,
+// "already exists" 류 오류는 무시하므로 기존 DB에도 안전하다.
+async function runMigrations() {
+  if (!pool) return;
+  const fs = require("fs");
+  const path = require("path");
+  const dir = path.join(__dirname, "..", "migrations");
+  if (!fs.existsSync(dir)) return;
+
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         filename VARCHAR(255) PRIMARY KEY,
+         applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    );
+
+    const files = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+
+    for (const file of files) {
+      const { rows } = await pool.query(
+        "SELECT 1 FROM schema_migrations WHERE filename = $1",
+        [file],
+      );
+      if (rows.length) continue;
+
+      const sql = fs
+        .readFileSync(path.join(dir, file), "utf8")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("--"))
+        .join("\n");
+      const statements = sql
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt);
+        } catch (e) {
+          // 기존 DB에 이미 반영된 항목은 통과
+          if (
+            /already exists|Duplicate (column|key|entry)|check that (column\/key|it) exists|Can't DROP/i.test(
+              e.message,
+            )
+          ) {
+            console.log(`[migrate] skip (${file}): ${e.message.slice(0, 80)}`);
+          } else {
+            throw e;
+          }
+        }
+      }
+
+      await pool.query(
+        "INSERT INTO schema_migrations (filename) VALUES ($1) ON DUPLICATE KEY UPDATE filename = filename",
+        [file],
+      );
+      console.log(`[migrate] applied: ${file}`);
+    }
+  } catch (e) {
+    console.error("[migrate] failed:", e.message);
+  }
+}
+
+runMigrations();
+
 async function queryReturning(
   sql,
   params,
