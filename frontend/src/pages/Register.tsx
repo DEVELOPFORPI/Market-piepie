@@ -170,8 +170,8 @@ export const Register: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!title || (!isFreeShare && !price) || !region) {
-      alert('Fill in all required fields.');
+    if (!title || (!isFreeShare && !price) || !region || images.length === 0) {
+      alert('Fill in all required fields, including at least one photo.');
       return;
     }
 
@@ -180,6 +180,10 @@ export const Register: React.FC = () => {
       imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
     } catch {
       alert('Could not upload image.');
+      return;
+    }
+    if (imagesToSave.length === 0) {
+      alert('Add at least one photo.');
       return;
     }
 
@@ -239,7 +243,9 @@ export const Register: React.FC = () => {
 
       <div className="px-4 py-6 pb-24 space-y-6">
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">Trade area</label>
+          <label className="block text-base font-semibold text-gray-900 mb-2">
+            Trade area <span className="text-red-500">*</span>
+          </label>
           <button
             type="button"
             onClick={handleRegionSelect}
@@ -256,7 +262,9 @@ export const Register: React.FC = () => {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Photos</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-3">
+            Photos <span className="text-red-500">*</span>
+          </h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {images.map((img, idx) => (
               <div key={idx} className="relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-200">
@@ -294,7 +302,9 @@ export const Register: React.FC = () => {
         </section>
 
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">Title</label>
+          <label className="block text-base font-semibold text-gray-900 mb-2">
+            Title <span className="text-red-500">*</span>
+          </label>
           <input
             type="text"
             value={title}
@@ -329,7 +339,9 @@ export const Register: React.FC = () => {
 
         {!isFreeShare && (
           <section>
-            <label className="block text-base font-semibold text-gray-900 mb-2">Price (Pi)</label>
+            <label className="block text-base font-semibold text-gray-900 mb-2">
+              Price (Pi) <span className="text-red-500">*</span>
+            </label>
             <input
               type="number"
               min={0}
