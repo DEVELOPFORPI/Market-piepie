@@ -921,7 +921,58 @@ export async function syncNotificationsFromDB(userId: string): Promise<void> {
 
 // ─── 앱 시작 시 전체 동기화 ──────────────────────────────────
 
-/** 앱 초기화 시 호출 - API에서 최신 데이터 로드 */
+/** DB 닉네임이 "실제 사용자가 정한 닉네임"인지 (uid/게스트/UUID 값 제외) */
+function isRealDbNickname(nickname: string, userId: string): boolean {
+  return Boolean(
+    nickname &&
+    nickname !== userId &&
+    !nickname.startsWith('guest_') &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nickname)
+  );
+}
+
+/**
+ * DB 프로필 상태 확인 (로그인 라우팅용).
+ * - complete: users에 실제 닉네임 있음 → 홈으로
+ * - incomplete: 없거나 미완성 → /signup 으로
+ * - unknown: 네트워크 오류 → 로컬 기준으로 폴백
+ */
+export async function checkMyProfileInDB(
+  userId: string,
+): Promise<'complete' | 'incomplete' | 'unknown'> {
+  try {
+    const res = await api.get<Record<string, unknown>>(`/api/users/${userId}`);
+    if (res.status === 404) return 'incomplete';
+    if (!res.ok || !res.data) return 'unknown';
+    return isRealDbNickname(String(res.data.nickname || ''), userId)
+      ? 'complete'
+      : 'incomplete';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** 프로필을 DB에 저장하고 성공 여부 반환 (가입 완료 시 필수 경로) */
+export async function saveMyProfileToDB(
+  userId: string,
+  profile: { nickname: string; bio?: string; profileImage?: string; activityRegion?: string },
+): Promise<boolean> {
+  try {
+    const res = await api.post('/api/users', {
+      id: userId,
+      nickname: profile.nickname,
+      profile_image: profile.profileImage,
+      bio: profile.bio,
+      activity_region: profile.activityRegion,
+      kyc_status: 'unverified',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 앱 초기화 시 호출 - DB 프로필을 원본으로 로컬 캐시 갱신 */
 export async function syncMyProfileFromDB(userId: string): Promise<void> {
   try {
     const res = await api.get<Record<string, unknown>>(`/api/users/${userId}`);
@@ -929,30 +980,24 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
       const u = res.data;
       const profileKey = `user_profile_${userId}`;
       const dbNickname = String(u.nickname || '');
-      const isRealNickname = dbNickname && dbNickname !== userId && !dbNickname.startsWith('guest_');
 
       let existing: Record<string, unknown> | null = null;
       try { existing = JSON.parse(localStorage.getItem(profileKey) || 'null'); } catch { /* ignore */ }
 
-      const needsUpdate = !existing
-        || !existing.nickname
-        || existing.nickname === 'My nickname'
-        || String(existing.nickname).startsWith('guest_')
-        || String(existing.nickname).includes('-');
-
-      if (needsUpdate && isRealNickname) {
+      // DB가 원본: 실제 닉네임이 있으면 DB 값으로 로컬 캐시를 덮어쓴다
+      if (isRealDbNickname(dbNickname, userId)) {
         const profile = {
           ...(existing || {}),
           nickname: dbNickname,
-          profileImage: (existing?.profileImage as string) || String(u.profile_image || '/default-avatar.jpg'),
-          bio: (existing?.bio as string) || String(u.bio || ''),
-          activityRegion: (existing?.activityRegion as string) || String(u.activity_region || ''),
+          profileImage: String(u.profile_image || '') || (existing?.profileImage as string) || '/default-avatar.jpg',
+          bio: String(u.bio || '') || (existing?.bio as string) || '',
+          activityRegion: String(u.activity_region || '') || (existing?.activityRegion as string) || '',
         };
         localStorage.setItem(profileKey, JSON.stringify(profile));
         window.dispatchEvent(new Event('profileSaved'));
       } else if (!existing) {
         const profile = {
-          nickname: isRealNickname ? dbNickname : 'My nickname',
+          nickname: 'My nickname',
           profileImage: String(u.profile_image || '/default-avatar.jpg'),
           bio: String(u.bio || ''),
           activityRegion: String(u.activity_region || ''),

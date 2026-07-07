@@ -16,6 +16,7 @@ import {
 } from '@/components/common/profileAvatarPlaceholder';
 import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
+import { saveMyProfileToDB } from '@/utils/dbSync';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { getShareCountByUserId } from '@/utils/orderStorage';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
@@ -89,12 +90,22 @@ export const ProfileEdit: React.FC = () => {
         alert('Could not upload image.');
         return;
       }
-      saveProfile({
+      const profileData = {
         profileImage: img,
         nickname,
         bio,
         activityRegion,
-      });
+      };
+      // DB가 원본: 서버 저장 성공 후에만 완료 처리
+      const uid = getCurrentUserId();
+      if (uid && !uid.startsWith('guest_')) {
+        const ok = await saveMyProfileToDB(uid, profileData);
+        if (!ok) {
+          alert('Could not save profile to server. Check your connection and try again.');
+          return;
+        }
+      }
+      saveProfile(profileData);
       navigate('/my');
     })();
   };

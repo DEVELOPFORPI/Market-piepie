@@ -252,6 +252,8 @@ async function promoteGuestToUser(piUid, piUsername) {
     typeof piUsername === "string" && piUsername.trim()
       ? piUsername.trim()
       : null;
+  // guests 조회가 실패해도 users 생성은 반드시 시도해야 한다
+  let guest = null;
   try {
     const { rows } = await pool.query(
       `SELECT id, pi_username FROM guests
@@ -259,8 +261,13 @@ async function promoteGuestToUser(piUid, piUsername) {
        ORDER BY last_seen_at DESC LIMIT 1`,
       [piUid],
     );
-    const guest = rows[0];
-    const resolvedUsername = username || guest?.pi_username || null;
+    guest = rows[0] || null;
+  } catch (e) {
+    console.warn("[guests] lookup failed (continuing):", e.message);
+  }
+
+  const resolvedUsername = username || guest?.pi_username || null;
+  try {
     await pool.query(
       `INSERT INTO users (id, nickname, pi_username, pi_verified, kyc_status)
        VALUES ($1, $1, $2, true, 'unverified')
@@ -269,14 +276,21 @@ async function promoteGuestToUser(piUid, piUsername) {
          pi_username = COALESCE($2, users.pi_username)`,
       [piUid, resolvedUsername],
     );
-    if (guest?.id) {
+    console.log("[users] promoted to verified user:", piUid);
+  } catch (e) {
+    console.error("[users] promote INSERT failed:", piUid, e.message);
+    return;
+  }
+
+  if (guest?.id) {
+    try {
       await pool.query(
         "UPDATE guests SET converted_user_id = $1 WHERE id = $2",
         [piUid, guest.id],
       );
+    } catch (e) {
+      console.warn("[guests] convert mark failed:", e.message);
     }
-  } catch (e) {
-    console.warn("[guests] promote to user failed:", e.message);
   }
 }
 
@@ -1083,6 +1097,26 @@ app.post("/api/auth/pi/verify", async (req, res) => {
         [piRes.uid],
       );
       if (rows.length > 0) piVerified = !!rows[0].pi_verified;
+
+      // 결제는 완료됐는데 users 반영이 누락된 경우 로그인 시점에 복구
+      // (재결제 요구 방지)
+      if (!piVerified) {
+        try {
+          const { rows: paid } = await pool.query(
+            `SELECT id FROM payments
+             WHERE user_id = $1 AND payment_type = 'profile_verification' AND status = 'completed'
+             LIMIT 1`,
+            [piRes.uid],
+          );
+          if (paid.length) {
+            await promoteGuestToUser(piRes.uid, piRes.username);
+            piVerified = true;
+            console.log("[auth] healed missing user from completed payment:", piRes.uid);
+          }
+        } catch (e) {
+          console.warn("[auth] payment heal check failed:", e.message);
+        }
+      }
     }
     if (!piVerified && isGuestId(guestId)) {
       await linkGuestToPi(guestId, piRes.uid, piRes.username);

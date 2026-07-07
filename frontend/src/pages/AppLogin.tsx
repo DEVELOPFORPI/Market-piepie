@@ -11,6 +11,8 @@ import { isDeviceProfileOnce, isOnboardingComplete } from '@/utils/onboardingSto
 
 import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser, PI_VERIFICATION_AMOUNT } from '@/utils/piAuth';
 
+import { checkMyProfileInDB } from '@/utils/dbSync';
+
 
 
 const TEAL = '#00A8A3';
@@ -63,6 +65,16 @@ export const AppLogin: React.FC = () => {
       if (verified.sessionToken) setSessionToken(verified.sessionToken);
       try { sessionStorage.setItem('pi_suggested_nickname', verified.username || ''); } catch {}
 
+      // DB가 원본: 서버에 프로필이 있어야 온보딩 완료로 인정
+      setPiStep('Loading profile...');
+      const profileStatus = await checkMyProfileInDB(verified.uid);
+      if (profileStatus === 'incomplete') {
+        localStorage.removeItem('marketpiepie_onboarding_v1_' + verified.uid);
+        localStorage.removeItem('marketpiepie_device_profile_once_v1');
+        localStorage.removeItem(`user_profile_${verified.uid}`);
+        navigate('/signup', { replace: true });
+        return;
+      }
       localStorage.setItem('marketpiepie_onboarding_v1_' + verified.uid, '1');
       localStorage.setItem('marketpiepie_device_profile_once_v1', '1');
       navigate('/', { replace: true });

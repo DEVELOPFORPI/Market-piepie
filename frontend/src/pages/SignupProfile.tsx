@@ -8,6 +8,7 @@ import { isDeviceProfileOnce, setOnboardingComplete, isOnboardingComplete } from
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { suggestPiePieNickname } from '@/utils/nickname';
+import { saveMyProfileToDB } from '@/utils/dbSync';
 
 const TEAL = '#00A8A3';
 
@@ -38,6 +39,7 @@ export const SignupProfile: React.FC = () => {
   const [profileImage, setProfileImage] = useState<string | null>(draft?.profileImage ?? null);
   const [activityRegion, setActivityRegion] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     const uid = getCurrentUserId();
@@ -110,12 +112,27 @@ export const SignupProfile: React.FC = () => {
         return;
       }
     }
-    saveProfile({
+
+    const profileData = {
       nickname: n,
       bio: bio.trim() || 'I value safe, quick trades.',
       activityRegion: region,
       profileImage: uploadedProfileImage ?? '/default-avatar.jpg',
-    });
+    };
+
+    // DB가 원본: 서버 저장이 성공해야 가입 완료 (실패 시 users 누락 방지)
+    const uid = getCurrentUserId();
+    if (uid && !uid.startsWith('guest_')) {
+      setSavingProfile(true);
+      const ok = await saveMyProfileToDB(uid, profileData);
+      setSavingProfile(false);
+      if (!ok) {
+        alert('Could not save profile to server. Check your connection and try again.');
+        return;
+      }
+    }
+
+    saveProfile(profileData);
     clearDraft();
     setOnboardingComplete();
     navigate('/', { replace: true });
@@ -220,11 +237,11 @@ export const SignupProfile: React.FC = () => {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={uploadingImage}
+          disabled={uploadingImage || savingProfile}
           className="w-full py-4 rounded-full text-white text-base font-bold"
           style={{ backgroundColor: TEAL }}
         >
-          {uploadingImage ? 'Uploading...' : 'Get started'}
+          {uploadingImage ? 'Uploading...' : savingProfile ? 'Saving...' : 'Get started'}
         </button>
       </div>
     </div>
