@@ -64,6 +64,6 @@ jobs:
 
             echo "=== Health check ==="
             sleep 8
-            sudo docker exec "${CONTAINER}" curl -sf http://127.0.0.1:3001/api/health
+            curl -sf https://pie.blindlounge.xyz/api/health
             echo ""
             echo "=== Deploy OK: ${BRANCH} ==="
