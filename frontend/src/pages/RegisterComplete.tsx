@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Product, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
@@ -9,6 +9,10 @@ export const RegisterComplete: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const productId = location.state?.productId || 'new-product-123'; // Real flow: ID from API after publish
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const mockProduct: Product = {
     id: productId,
@@ -39,7 +43,7 @@ export const RegisterComplete: React.FC = () => {
         title="Published"
       />
 
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-12">
+      <div className="flex flex-col items-center px-4 pt-6 pb-12">
         {/* Success Icon */}
         <div className="mb-6">
           <img src="/check.svg" alt="Done" className="w-12 h-12 object-contain" />

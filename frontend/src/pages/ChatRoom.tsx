@@ -29,6 +29,8 @@ import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
   CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
+  CHAT_LEAVE_ROOM,
+  CHAT_LEAVE_ROOM_CONFIRM,
   displayChatMessageContent,
   isMeetupCanceledMessage,
   labelBuyerChatTab,
@@ -523,14 +525,14 @@ export const ChatRoom: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    if (roomId && confirm('\uCC44\uD305\uBC29\uC744 \uB098\uAC00\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?\n\uC0C1\uB300\uBC29\uC5D0\uAC8C \uB098\uAC04 \uAC83\uC774 \uD45C\uC2DC\uB429\uB2C8\uB2E4.')) {
+                    if (roomId && confirm(CHAT_LEAVE_ROOM_CONFIRM)) {
                       leaveChatRoom(roomId);
                       navigate('/chat', { replace: true });
                     }
                   }}
                   className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
                 >
-                  \uCC44\uD305\uBC29 \uB098\uAC00\uAE30
+                  {CHAT_LEAVE_ROOM}
                 </button>
               </div>
             )}

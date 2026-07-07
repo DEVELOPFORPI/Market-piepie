@@ -134,6 +134,11 @@ export const CHAT_MSG_REJECT_SHARE = pick('The free share request was declined.'
 export const chatMsgAcceptOffer = (amount: string) => pick(`The offer of ${amount} Pi was accepted.`, `${amount} Pi 제안을 수락했습니다.`);
 export const chatMsgRejectOffer = (amount: string) => pick(`The offer of ${amount} Pi was declined.`, `${amount} Pi 제안을 거절했습니다.`);
 export const chatMsgUserLeft = (nickname: string) => pick(`${nickname} left the chat.`, `${nickname} 님이 채팅방을 나갔습니다.`);
+export const CHAT_LEAVE_ROOM = pick('Leave chat', '채팅방 나가기');
+export const CHAT_LEAVE_ROOM_CONFIRM = pick(
+  'Leave this chat?\nThe other person will see that you left.',
+  '채팅방을 나가시겠습니까?\n상대방에게 나간 것이 표시됩니다.',
+);
 export const CHAT_LASTMSG_PHOTO = pick('Sent a photo', '사진을 보냈습니다');
 export const CHAT_FALLBACK_NICKNAME = pick('Someone', '알 수 없음');
 
