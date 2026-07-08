@@ -12,7 +12,7 @@ import {
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { getMyUser } from '@/utils/profileStorage';
-import { syncOrderToDB, syncOrderStatusToDB, syncOrderFromDB } from '@/utils/dbSync';
+import { syncOrderToDB, syncOrderStatusToDB, syncOrderFromDB, syncOrderDeleteToDB } from '@/utils/dbSync';
 import { addNotification } from '@/utils/notificationStorage';
 import { updateProductStatus } from '@/utils/productStorage';
 import { addPriceOfferToChat, addPriceOfferResultToChat, clearOrderFromRoom } from '@/utils/chatStorage';
@@ -187,11 +187,14 @@ export const saveOrder = async (order: Order): Promise<boolean> => {
   return true;
 };
 
-export const deleteOrder = (orderId: string) => {
+export const deleteOrder = async (orderId: string): Promise<boolean> => {
+  const ok = await syncOrderDeleteToDB(orderId);
+  if (!ok) return false;
   clearOrderFromRoom(orderId);
   const orders = getAllOrders().filter((o) => o.id !== orderId);
   setOrdersWithQuotaRetry(orders);
   window.dispatchEvent(new Event('ordersChanged'));
+  return true;
 };
 
 /** Dev: clear all orders */

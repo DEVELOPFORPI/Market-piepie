@@ -70,8 +70,14 @@ export const MyOrders: React.FC = () => {
     e.stopPropagation();
     if (!order?.product) return;
     if (confirm(`Cancel this trade for "${order.product.title}"?`)) {
-      deleteOrder(order.id);
-      loadOrders();
+      void (async () => {
+        const ok = await deleteOrder(order.id);
+        if (!ok) {
+          alert('Could not cancel this trade. Check your connection and try again.');
+          return;
+        }
+        loadOrders();
+      })();
     }
   };
 
@@ -86,9 +92,15 @@ export const MyOrders: React.FC = () => {
         content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
         link: `/product/${order.product.id}`,
       });
-      void addPriceOfferResultToChat(order, 'rejected');
-      deleteOrder(order.id);
-      loadOrders();
+      void (async () => {
+        await addPriceOfferResultToChat(order, 'rejected');
+        const ok = await deleteOrder(order.id);
+        if (!ok) {
+          alert('Could not decline this offer. Check your connection and try again.');
+          return;
+        }
+        loadOrders();
+      })();
     }
   };
 

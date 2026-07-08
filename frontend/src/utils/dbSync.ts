@@ -18,6 +18,22 @@ function cacheEmbeddedUser(user: Record<string, unknown> | undefined | null): vo
   cacheUserProfileFromRow(String(user.id), user);
 }
 
+/** DB에 아직 없는 로컬 데이터를 유지해 주는 유예 시간 (저장 직후 동기화 경합 대비) */
+const LOCAL_ONLY_GRACE_MS = 10 * 60 * 1000;
+
+function isWithinGraceWindow(isoOrMs: string | number | undefined): boolean {
+  if (isoOrMs === undefined || isoOrMs === null || isoOrMs === '') return false;
+  const t = typeof isoOrMs === 'number' ? isoOrMs : new Date(isoOrMs).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t < LOCAL_ONLY_GRACE_MS;
+}
+
+/** `chat_1783473530324` 같은 id에서 생성 시각 추출 */
+function timestampFromGeneratedId(id: string): number | undefined {
+  const m = id.match(/_(\d{12,})$/);
+  return m ? Number(m[1]) : undefined;
+}
+
 function getFavoriteProductIds(): Set<string> {
   const uid = getCurrentUserId() || '';
   if (!uid) return new Set();
@@ -127,8 +143,14 @@ export async function syncProductsFromDB(): Promise<void> {
       const mergedMap = new Map<string, Product>();
       dbProducts.forEach((p) => mergedMap.set(p.id, p));
       const myUserId = sessionStorage.getItem('currentUserId') || '';
+      // 내 상품이라도 방금 등록한 것만 로컬 유지 — DB에서 지운 상품이 계속 남지 않게
       local.forEach((p) => {
-        if (!dbIds.has(p.id) && !deletedSet.has(p.id) && p.seller?.id === myUserId) {
+        if (
+          !dbIds.has(p.id) &&
+          !deletedSet.has(p.id) &&
+          p.seller?.id === myUserId &&
+          (isWithinGraceWindow(p.createdAt) || isWithinGraceWindow(timestampFromGeneratedId(p.id)))
+        ) {
           mergedMap.set(p.id, p);
         }
       });
@@ -234,11 +256,48 @@ export async function syncPostsFromDB(): Promise<void> {
         mapPostFromDB(row, favoriteIds),
       );
       setItem('community_user_posts', JSON.stringify(dbPosts));
+      cleanupLocalPostLeftovers(dbPosts);
       window.dispatchEvent(new Event('postsChanged'));
     }
   } catch {
     // 오프라인 시 무시
   }
+}
+
+/** DB 게시물 목록 기준으로 레거시 분쟁글·삭제된 글의 댓글 정리 */
+function cleanupLocalPostLeftovers(dbPosts: Post[]): void {
+  const validIds = new Set(dbPosts.map((p) => p.id));
+  // 레거시 분쟁 게시글(로컬 전용 저장소): 방금 쓴 글이 아니면 DB 기준으로 제거
+  try {
+    const raw = getItem('community_dispute_posts');
+    if (raw) {
+      const legacy: Post[] = JSON.parse(raw);
+      if (Array.isArray(legacy) && legacy.length > 0) {
+        const kept = legacy.filter(
+          (p) => validIds.has(p.id) || isWithinGraceWindow(p.createdAt),
+        );
+        kept.forEach((p) => validIds.add(p.id));
+        if (kept.length !== legacy.length) {
+          setItem('community_dispute_posts', JSON.stringify(kept));
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  // 존재하지 않는 게시글의 댓글 제거
+  try {
+    const raw = getItem('community_comments');
+    if (raw) {
+      const all: Record<string, unknown> = JSON.parse(raw);
+      let changed = false;
+      Object.keys(all).forEach((postId) => {
+        if (!validIds.has(postId)) {
+          delete all[postId];
+          changed = true;
+        }
+      });
+      if (changed) setItem('community_comments', JSON.stringify(all));
+    }
+  } catch { /* ignore */ }
 }
 
 /** 단일 게시물을 DB에서 로드해 로컬 캐시에 병합 */
@@ -468,6 +527,17 @@ export async function syncOrderFromDB(orderId: string): Promise<Order | undefine
   }
 }
 
+/** 주문을 DB에서 삭제 — 거절/취소 시 localStorage 재동기화로 되살아나지 않게 함 */
+export async function syncOrderDeleteToDB(orderId: string): Promise<boolean> {
+  if (!orderId) return false;
+  try {
+    const res = await api.delete<{ ok: boolean }>(`/api/orders/${orderId}`);
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 /** DB에서 내 주문 목록을 로드해 localStorage 갱신 (DB-first) */
 export async function syncOrdersFromDB(userId: string): Promise<void> {
   if (!userId) return;
@@ -490,7 +560,8 @@ export async function syncOrdersFromDB(userId: string): Promise<void> {
         mergedMap.set(id, mergeOrderDbPreferred(mapOrderFromDB(row), existingMap.get(id)));
       });
       existing.forEach((o) => {
-        if (!mergedMap.has(o.id)) mergedMap.set(o.id, o);
+        const isMine = o.buyer?.id === userId || o.seller?.id === userId;
+        if (!isMine && !mergedMap.has(o.id)) mergedMap.set(o.id, o);
       });
       setItem('all_orders', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('ordersChanged'));
@@ -763,9 +834,13 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
           messageResyncIds.push(id);
         }
       });
-      // 아직 DB에 없는 로컬 전용 방(생성 직후 등)은 캐시로 유지
+      // 생성 직후라 DB에 아직 없는 방만 잠시 유지 — DB에서 삭제된 방은 로컬에서도 제거
       existing.forEach((room) => {
-        if (!mergedMap.has(room.id)) mergedMap.set(room.id, room);
+        if (mergedMap.has(room.id)) return;
+        const createdTs = timestampFromGeneratedId(room.id);
+        if (isWithinGraceWindow(createdTs) || isWithinGraceWindow(room.lastMessageTime)) {
+          mergedMap.set(room.id, room);
+        }
       });
       setItem('all_chatrooms', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('chatRoomsChanged'));

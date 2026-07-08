@@ -1245,8 +1245,12 @@ export const ChatRoom: React.FC = () => {
                             content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
                             link: `/product/${order.product.id}`,
                           });
-                          void addPriceOfferResultToChat(order, 'rejected').then(() => {
-                            deleteOrder(order.id);
+                          void addPriceOfferResultToChat(order, 'rejected').then(async () => {
+                            const ok = await deleteOrder(order.id);
+                            if (!ok) {
+                              alert('Could not decline this offer. Check your connection and try again.');
+                              return;
+                            }
                             setMessages(getMessages(roomId!));
                           });
                         }}

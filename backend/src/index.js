@@ -1750,6 +1750,24 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
   }
 });
 
+app.delete("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT buyer_id, seller_id FROM orders WHERE id=$1",
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Order not found" });
+    if (req.authUserId !== rows[0].buyer_id && req.authUserId !== rows[0].seller_id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    await pool.query("DELETE FROM orders WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ?? ???????? ????? ????
 app.post(
   "/api/orders/:id/timeline",

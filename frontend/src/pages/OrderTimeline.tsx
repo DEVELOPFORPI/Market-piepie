@@ -84,8 +84,14 @@ export const OrderTimeline: React.FC = () => {
   const handleDelete = () => {
     if (!order) return;
     if (confirm(`Cancel this trade for "${order.product?.title ?? 'this listing'}"?`)) {
-      deleteOrder(order.id);
-      navigate('/my/orders', { replace: true });
+      void (async () => {
+        const ok = await deleteOrder(order.id);
+        if (!ok) {
+          alert('Could not cancel this trade. Check your connection and try again.');
+          return;
+        }
+        navigate('/my/orders', { replace: true });
+      })();
     }
   };
 
@@ -107,9 +113,15 @@ export const OrderTimeline: React.FC = () => {
       content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
       link: `/product/${order.product.id}`,
     });
-    void addPriceOfferResultToChat(order, 'rejected');
-    deleteOrder(order.id);
-    navigate('/my/orders', { replace: true });
+    void (async () => {
+      await addPriceOfferResultToChat(order, 'rejected');
+      const ok = await deleteOrder(order.id);
+      if (!ok) {
+        alert('Could not decline this offer. Check your connection and try again.');
+        return;
+      }
+      navigate('/my/orders', { replace: true });
+    })();
   };
 
   const getActionButton = () => {
