@@ -1181,7 +1181,7 @@ export async function syncReviewsFromDB(userId: string): Promise<void> {
 export async function syncDisputeToDB(dispute: {
   id: string; orderId: string; productTitle: string; productImage: string;
   proposedPrice: number; tradeMethod: string; buyerId: string;
-  sellerId: string; reason: string; action: string; description: string;
+  sellerId: string; openedByUserId?: string; reason: string; action: string; description: string;
   evidence: string[];
 }): Promise<boolean> {
   try {
@@ -1194,6 +1194,7 @@ export async function syncDisputeToDB(dispute: {
       trade_method: dispute.tradeMethod,
       buyer_id: dispute.buyerId,
       seller_id: dispute.sellerId,
+      opened_by_user_id: dispute.openedByUserId,
       reason: dispute.reason,
       action: dispute.action,
       description: dispute.description,
@@ -1234,6 +1235,7 @@ function mapDisputeFromDB(row: Record<string, unknown>) {
     buyerNickname: String(row.buyer_nickname || ''),
     sellerId: String(row.seller_id || ''),
     sellerNickname: String(row.seller_nickname || ''),
+    openedByUserId: row.opened_by_user_id ? String(row.opened_by_user_id) : undefined,
     reason: String(row.reason || ''),
     action: String(row.action || ''),
     description: String(row.description || ''),

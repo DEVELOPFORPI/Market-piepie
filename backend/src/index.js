@@ -2479,8 +2479,8 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
   try {
     const { rows } = await queryReturning(
-      `INSERT INTO disputes (id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, reason, action, description, evidence)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO disputes (id, order_id, product_title, product_image, proposed_price, trade_method, buyer_id, seller_id, opened_by_user_id, reason, action, description, evidence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON DUPLICATE KEY UPDATE description=VALUES(description)`,
       [
         id,
@@ -2491,6 +2491,7 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
         trade_method,
         buyer_id,
         seller_id,
+        req.authUserId,
         reason,
         action,
         description,
@@ -2513,13 +2514,16 @@ app.put("/api/disputes/:id", requireDb, requireAuth, async (req, res) => {
   }
   try {
     const check = await pool.query(
-      "SELECT buyer_id, seller_id FROM disputes WHERE id=$1",
+      "SELECT buyer_id, seller_id, opened_by_user_id FROM disputes WHERE id=$1",
       [req.params.id],
     );
     if (!check.rows.length) return res.status(404).json({ error: "Not found" });
     const row = check.rows[0];
     if (req.authUserId !== row.buyer_id && req.authUserId !== row.seller_id) {
       return res.status(403).json({ error: "Forbidden" });
+    }
+    if (!row.opened_by_user_id || req.authUserId !== row.opened_by_user_id) {
+      return res.status(403).json({ error: "Only the party who filed the dispute can update it" });
     }
     const { rows } = await queryReturning(
       `UPDATE disputes SET status=$1, admin_response=COALESCE($2, admin_response),

@@ -1,6 +1,5 @@
 import { DisputeStatus, ORDER_STATUS_VALUE } from '@/types';
-import { getOrderById, getOrdersByProductId } from '@/utils/orderStorage';
-import { deleteProduct } from '@/utils/productStorage';
+import { getOrderById, getOrdersByProductId, updateOrderStatus } from '@/utils/orderStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 import { syncDisputeToDB, syncDisputeStatusToDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -18,6 +17,7 @@ export interface Dispute {
   buyerNickname: string;
   sellerId: string;
   sellerNickname: string;
+  openedByUserId?: string;
   reason: string;
   action: string;
   description: string;
@@ -111,10 +111,10 @@ export const updateDisputeStatus = async (
     dispute.status = status;
     if (status === 'RESOLVED') {
       dispute.resolvedAt = new Date().toISOString();
-      // Resolved: remove product listing (community dispute posts stay)
+      // Resolved: keep the listing; move the order out of DISPUTE state
       const order = getOrderById(dispute.orderId);
-      if (order?.product?.id) {
-        void deleteProduct(order.product.id);
+      if (order && order.status === ORDER_STATUS_VALUE.DISPUTE) {
+        void updateOrderStatus(dispute.orderId, ORDER_STATUS_VALUE.COMPLETE, 'Dispute resolved.');
       }
     }
     if (adminResponse) {
@@ -150,9 +150,13 @@ interface CreateDisputeParams {
 }
 
 export const createDispute = async (params: CreateDisputeParams): Promise<Dispute | null> => {
+  const openedByUserId = getCurrentUserId();
+  if (!openedByUserId) return null;
+
   const dispute: Dispute = {
     id: `dispute_${Date.now()}`,
     ...params,
+    openedByUserId,
     status: 'OPEN',
     createdAt: new Date().toISOString(),
   };

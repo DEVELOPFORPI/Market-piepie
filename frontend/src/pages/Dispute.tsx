@@ -170,10 +170,16 @@ export const Dispute: React.FC = () => {
     }
 
     setDispute(newDispute);
+    window.scrollTo(0, 0);
   };
 
   const handleResolve = async () => {
     if (!dispute) return;
+    const uid = getCurrentUserId();
+    if (!dispute.openedByUserId || dispute.openedByUserId !== uid) {
+      alert('Only the party who filed this dispute can mark it resolved.');
+      return;
+    }
     if (!confirm('Mark this dispute as resolved?')) return;
     const ok = await updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
     if (!ok) {
@@ -199,6 +205,11 @@ export const Dispute: React.FC = () => {
     IN_REVIEW: 'In review',
     RESOLVED: 'Resolved',
   };
+
+  const currentUserId = getCurrentUserId();
+  const isDisputeOpener = Boolean(
+    dispute && currentUserId && dispute.openedByUserId === currentUserId,
+  );
 
   if (loading) {
     return (
@@ -409,7 +420,9 @@ export const Dispute: React.FC = () => {
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <h3 className="text-sm font-medium text-yellow-900 mb-2">Dispute received</h3>
                 <p className="text-sm text-yellow-800">
-                  Try to resolve with the other party. When resolved, tap the button below.
+                  {isDisputeOpener
+                    ? 'Try to resolve with the other party. When resolved, tap the button below.'
+                    : 'The other party filed this dispute. Resolve together in chat; only they can mark it closed.'}
                 </p>
               </div>
             )}
@@ -448,41 +461,7 @@ export const Dispute: React.FC = () => {
           >
             {uploadingEvidence ? 'Uploading...' : 'Submit dispute'}
           </button>
-        ) : dispute && dispute.status === 'OPEN' ? (
-          <div className="space-y-2">
-            <button
-              onClick={() => void handleResolve()}
-              className="w-full px-4 py-3 text-white rounded-lg font-medium"
-              style={{ backgroundColor: '#00A8A3' }}
-            >
-              Mark resolved
-            </button>
-            <button
-              onClick={() => {
-                if (!dispute) return;
-                void (async () => {
-                  const ok = await updateDisputeStatus(
-                    dispute.id,
-                    'IN_REVIEW',
-                    'Moderator review requested by a party.',
-                  );
-                  if (!ok) {
-                    alert('Could not request review. Check your connection and try again.');
-                    return;
-                  }
-                  setDispute({
-                    ...dispute,
-                    status: 'IN_REVIEW',
-                    adminResponse: 'Moderator review requested by a party.',
-                  });
-                })();
-              }}
-              className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium"
-            >
-              Request moderator review
-            </button>
-          </div>
-        ) : dispute && dispute.status === 'IN_REVIEW' ? (
+        ) : dispute && (dispute.status === 'OPEN' || dispute.status === 'IN_REVIEW') && isDisputeOpener ? (
           <button
             onClick={() => void handleResolve()}
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
@@ -490,7 +469,7 @@ export const Dispute: React.FC = () => {
           >
             Mark resolved
           </button>
-        ) : (
+        ) : dispute ? (
           <button
             onClick={() => navigate('/my/orders')}
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
@@ -498,7 +477,7 @@ export const Dispute: React.FC = () => {
           >
             Back to orders
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -134,6 +134,7 @@ const TABLE_COLUMNS = {
     'trade_method',
     'buyer_id',
     'seller_id',
+    'opened_by_user_id',
     'reason',
     'action',
     'description',

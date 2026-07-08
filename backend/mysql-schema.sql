@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS disputes (
   trade_method VARCHAR(100),
   buyer_id VARCHAR(191),
   seller_id VARCHAR(191),
+  opened_by_user_id VARCHAR(191),
   reason VARCHAR(255),
   action VARCHAR(255),
   description TEXT,
