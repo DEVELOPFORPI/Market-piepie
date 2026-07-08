@@ -59,6 +59,7 @@ const TABLE_COLUMNS = {
     'shipping_phone',
     'tracking_number',
     'shipping_company',
+    'shipping_proof_images',
     'memo',
     'seller_completed',
     'buyer_completed',

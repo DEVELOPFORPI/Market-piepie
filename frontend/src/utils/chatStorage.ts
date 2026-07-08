@@ -180,6 +180,10 @@ export const getChatRoomByProduct = (productId: string): ChatRoom | null => {
 /** Other participant for current user */
 export const getOtherUser = (room: ChatRoom) => {
   const userId = getCurrentUserId();
+  const otherId = userId === room.buyerId ? room.sellerId : room.buyerId;
+  if (otherId && room.otherUser?.id === otherId && room.otherUser.nickname) {
+    return room.otherUser;
+  }
   if (room.buyerId === userId) {
     return room.sellerInfo || room.otherUser;
   }
@@ -233,6 +237,7 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
         if (idx >= 0) {
           rooms[idx] = room;
           saveAllChatRooms(rooms, room.id);
+          if (order) persistRoomOrderLink(room.id, order);
         }
       }
     }
@@ -449,6 +454,12 @@ export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: str
   return room;
 };
 
+const persistRoomOrderLink = (roomId: string, order?: Order) => {
+  if (order?.id) {
+    void syncChatRoomMetaToDB(roomId, { order_id: order.id });
+  }
+};
+
 /** Meetup confirmed: add gradient card; persist room.order so receive flow works */
 export const addMeetupConfirmedToChat = async (order: Order) => {
   if (!order.meetupPlace || !order.meetupDate || !order.meetupTime) return;
@@ -458,6 +469,7 @@ export const addMeetupConfirmedToChat = async (order: Order) => {
   if (r) {
     r.order = order;
     saveAllChatRooms(rooms, room.id);
+    persistRoomOrderLink(room.id, order);
   }
   const msg: ChatMessage = {
     id: `meetup_${Date.now()}`,
@@ -485,6 +497,7 @@ export const addMeetupUpdatedToChat = async (order: Order) => {
   if (!room) return;
   room.order = order;
   saveAllChatRooms(rooms, room.id);
+  persistRoomOrderLink(room.id, order);
   const msg: ChatMessage = {
     id: `meetup_updated_${Date.now()}`,
     senderId: order.seller.id,
@@ -531,6 +544,7 @@ export const addSellerMeetupStartedToChat = async (order: Order, roomIdHint?: st
   if (r) {
     r.order = order;
     saveAllChatRooms(roomsAfter, room!.id);
+    persistRoomOrderLink(room!.id, order);
   }
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
 import { labelProductStatus, labelProductStatusListing, relativeTimeShort } from '@/locale/enUI';
 import { Badge } from './Badge';
@@ -46,6 +46,21 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   const [liked, setLiked] = useState(() => isFavorite(product.id));
   const [likeCount, setLikeCount] = useState(() => getLikeCount(product.id));
+
+  useEffect(() => {
+    setLiked(isFavorite(product.id));
+  }, [product.id, product.liked]);
+
+  useEffect(() => {
+    const refresh = () => setLiked(isFavorite(product.id));
+    window.addEventListener('favoritesChanged', refresh);
+    window.addEventListener('productsChanged', refresh);
+    return () => {
+      window.removeEventListener('favoritesChanged', refresh);
+      window.removeEventListener('productsChanged', refresh);
+    };
+  }, [product.id]);
+
   const handleLike = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     void (async () => {

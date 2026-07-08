@@ -66,7 +66,55 @@ export function resolveProfileAvatarUrl(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
-/** Resolve a human-friendly nickname: skip UUID-like or empty values */
+/** DB에서 받은 사용자 row → 로컬 프로필 캐시 (닉네임·아바타 최신화) */
+export function cacheUserProfileFromRow(
+  userId: string,
+  row: Record<string, unknown> | undefined | null,
+): void {
+  if (!userId || !row) return;
+  const nickname = String(row.nickname || '');
+  const isUsable =
+    nickname.trim() !== '' &&
+    nickname !== userId &&
+    !nickname.startsWith('guest_') &&
+    !UUID_RE.test(nickname);
+  if (!isUsable) return;
+
+  const existing = getProfileByUserId(userId) || {};
+  try {
+    localStorage.setItem(
+      `${BASE_KEY}_${userId}`,
+      JSON.stringify({
+        ...existing,
+        nickname,
+        profileImage:
+          row.profile_image != null && String(row.profile_image).trim() !== ''
+            ? String(row.profile_image)
+            : existing.profileImage,
+        bio: row.bio != null ? String(row.bio) : existing.bio,
+        activityRegion:
+          row.activity_region != null ? String(row.activity_region) : existing.activityRegion,
+      }),
+    );
+  } catch {
+    // quota 등 무시
+  }
+}
+
+/** DB 프로필 캐시로 사용자 스냅샷 보강 (닉네임·아바타) */
+export function applyProfileCacheToUser<T extends { id: string; nickname?: string; profileImage?: string }>(
+  user: T,
+): T {
+  if (!user.id) return user;
+  const cached = getProfileByUserId(user.id);
+  return {
+    ...user,
+    nickname: cached?.nickname || user.nickname,
+    profileImage: resolveProfileAvatarUrl(user.id, user.profileImage),
+  };
+}
+
+/** Resolve a human-friendly nickname: DB 캐시 우선, embedded 스냅샷은 폴백 */
 export function resolveDisplayNickname(
   userId: string | undefined | null,
   embeddedNickname: string | undefined | null
@@ -74,12 +122,12 @@ export function resolveDisplayNickname(
   const isUsable = (s: string | undefined | null): s is string =>
     typeof s === 'string' && s.trim() !== '' && !UUID_RE.test(s) && !s.startsWith('guest_');
 
-  if (isUsable(embeddedNickname)) return embeddedNickname;
-
   if (userId) {
     const stored = getProfileByUserId(userId)?.nickname;
     if (isUsable(stored)) return stored;
   }
+
+  if (isUsable(embeddedNickname)) return embeddedNickname;
 
   const raw = String(embeddedNickname ?? '');
   if (raw.trim() !== '') {
@@ -101,6 +149,7 @@ export const saveProfile = async (profile: StoredProfile): Promise<boolean> => {
   const key = userKey(BASE_KEY);
   localStorage.setItem(key, JSON.stringify(profile));
   window.dispatchEvent(new Event('profileSaved'));
+  window.dispatchEvent(new Event('userProfilesChanged'));
   return true;
 };
 

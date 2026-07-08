@@ -18,7 +18,8 @@ export const ShippingInfo: React.FC = () => {
   useEffect(() => {
     if (order?.trackingNumber) setTrackingNumber(order.trackingNumber);
     if (order?.shippingCompany) setShippingCompany(order.shippingCompany);
-  }, [order?.trackingNumber, order?.shippingCompany]);
+    if (order?.shippingProofImages?.length) setShippingProof(order.shippingProofImages);
+  }, [order?.trackingNumber, order?.shippingCompany, order?.shippingProofImages]);
 
   const shippingCompanies = ['CJ Logistics', 'Hanjin', 'Logen', 'Lotte', 'Other'];
 
@@ -40,14 +41,15 @@ export const ShippingInfo: React.FC = () => {
   const handleSubmit = async () => {
     if (!orderId || !trackingNumber || !shippingCompany) return;
     setSubmitting(true);
-    const updated = await saveOrderTracking(orderId, { trackingNumber, shippingCompany });
+    const updated = await saveOrderTracking(orderId, {
+      trackingNumber,
+      shippingCompany,
+      shippingProofImages: shippingProof,
+    });
     setSubmitting(false);
     if (!updated) {
       alert('Could not save tracking info. Check your connection and try again.');
       return;
-    }
-    if (shippingProof.length) {
-      console.log('Shipping proof uploaded locally:', shippingProof);
     }
     alert('Tracking info saved.');
     navigate(-1);

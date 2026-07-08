@@ -579,7 +579,7 @@ export const saveOrderShippingInfo = async (
 /** Seller submits tracking number */
 export const saveOrderTracking = async (
   orderId: string,
-  params: { trackingNumber: string; shippingCompany: string },
+  params: { trackingNumber: string; shippingCompany: string; shippingProofImages?: string[] },
 ): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
@@ -594,11 +594,15 @@ export const saveOrderTracking = async (
   const ok = await syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.SHIPPED, timelineEvent, {
     tracking_number: params.trackingNumber,
     shipping_company: params.shippingCompany,
+    shipping_proof_images: params.shippingProofImages || [],
   });
   if (!ok) return undefined;
 
   order.trackingNumber = params.trackingNumber;
   order.shippingCompany = params.shippingCompany;
+  if (params.shippingProofImages?.length) {
+    order.shippingProofImages = params.shippingProofImages;
+  }
   order.status = ORDER_STATUS_VALUE.SHIPPED;
   order.timeline.push(timelineEvent);
   setOrdersWithQuotaRetry(orders, orderId);

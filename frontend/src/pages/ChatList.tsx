@@ -36,8 +36,9 @@ export const ChatList: React.FC = () => {
     connectChatSocket();
 
     window.addEventListener('chatRoomsChanged', loadRooms);
+    window.addEventListener('userProfilesChanged', loadRooms);
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'all_chatrooms' || e.key === 'all_products') loadRooms();
+      if (e.key === 'all_chatrooms' || e.key === 'all_products' || e.key?.startsWith('user_profile_')) loadRooms();
     };
     window.addEventListener('storage', handleStorageChange);
 
@@ -73,6 +74,7 @@ export const ChatList: React.FC = () => {
 
     return () => {
       window.removeEventListener('chatRoomsChanged', loadRooms);
+      window.removeEventListener('userProfilesChanged', loadRooms);
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', onVisibility);
       if (intervalId != null) window.clearInterval(intervalId);
@@ -281,9 +283,6 @@ export const ChatList: React.FC = () => {
                     <span className={`text-sm font-bold truncate ${productDeleted ? 'text-gray-400' : 'text-gray-900'}`}>
                       {resolveDisplayNickname(other.id, other.nickname)}
                     </span>
-                    {other.kycStatus === 'verified' && (
-                      <img src="/check_1.svg" alt="Verified" className={`w-3.5 h-3.5 flex-shrink-0 ${productDeleted ? 'opacity-40' : ''}`} />
-                    )}
                     <span className="text-xs text-gray-400 flex-shrink-0">
                       {room.product?.region} · {relativeTimeShort(room.lastMessageTime)}
                     </span>

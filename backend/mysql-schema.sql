@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_phone VARCHAR(100),
   tracking_number VARCHAR(255),
   shipping_company VARCHAR(255),
+  shipping_proof_images JSON NOT NULL DEFAULT (JSON_ARRAY()),
   memo TEXT,
   seller_completed BOOLEAN NOT NULL DEFAULT FALSE,
   buyer_completed BOOLEAN NOT NULL DEFAULT FALSE,

@@ -1598,6 +1598,7 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
     shipping_phone,
     tracking_number,
     shipping_company,
+    shipping_proof_images,
   } = req.body;
   console.log("[POST /api/orders] REQUEST", {
     id,
@@ -1621,8 +1622,8 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
       : meetup_time || null;
   try {
     const { rows } = await queryReturning(
-      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company, shipping_proof_images)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        ON DUPLICATE KEY UPDATE
          status=VALUES(status), proposed_price=VALUES(proposed_price),
          meetup_location=VALUES(meetup_location), meetup_time=VALUES(meetup_time),
@@ -1630,7 +1631,8 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
          meetup_accepted=VALUES(meetup_accepted),
          shipping_address=VALUES(shipping_address), shipping_name=VALUES(shipping_name),
          shipping_phone=VALUES(shipping_phone), tracking_number=VALUES(tracking_number),
-         shipping_company=VALUES(shipping_company)`,
+         shipping_company=VALUES(shipping_company),
+         shipping_proof_images=VALUES(shipping_proof_images)`,
       [
         id,
         product_id,
@@ -1650,6 +1652,7 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
         shipping_phone || null,
         tracking_number || null,
         shipping_company || null,
+        shipping_proof_images || [],
       ],
       "orders",
     );
@@ -1718,6 +1721,7 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       proposed_price: req.body.proposed_price,
       trade_method: req.body.trade_method,
       meetup_accepted: req.body.meetup_accepted,
+      shipping_proof_images: req.body.shipping_proof_images,
     };
     for (const [col, val] of Object.entries(fields)) {
       if (val !== undefined) {
@@ -1999,8 +2003,12 @@ app.get("/api/posts", requireDb, async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   try {
-    let query = `SELECT p.*, ${jsonObjectSql("u", "users")} AS author FROM community_posts p
-                 LEFT JOIN users u ON p.author_id = u.id WHERE 1=1`;
+    let query = `SELECT p.*, ${jsonObjectSql("u", "users")} AS author,
+      ${jsonObjectSql("ap", "products")} AS attached_product
+      FROM community_posts p
+                 LEFT JOIN users u ON p.author_id = u.id
+                 LEFT JOIN products ap ON p.attached_product_id = ap.id
+                 WHERE 1=1`;
     const params = [];
     if (category) {
       params.push(category);

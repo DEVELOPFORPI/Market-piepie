@@ -6,13 +6,60 @@
 import { api } from '@/utils/api';
 import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE } from '@/types';
 import { setItem, getItem } from '@/utils/heavyStorage';
-import { getMyUser } from '@/utils/profileStorage';
+import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
+import { userKey, getCurrentUserId } from '@/utils/authStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
 
 const _userSyncedCache = new Map<string, string>();
 
-/** 유저를 DB에 upsert */
+function cacheEmbeddedUser(user: Record<string, unknown> | undefined | null): void {
+  if (!user?.id) return;
+  cacheUserProfileFromRow(String(user.id), user);
+}
+
+function getFavoriteProductIds(): Set<string> {
+  const uid = getCurrentUserId() || '';
+  if (!uid) return new Set();
+  try {
+    const raw = localStorage.getItem(userKey('myFavorites'));
+    const arr = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.map((p: { id?: string }) => p?.id).filter(Boolean) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function lookupOrderById(orderId: string | undefined | null): Order | undefined {
+  if (!orderId) return undefined;
+  try {
+    const orders: Order[] = JSON.parse(getItem('all_orders') || '[]');
+    return orders.find((o) => o.id === orderId);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 단일 사용자 프로필을 DB에서 받아 로컬 캐시 갱신 */
+export async function syncUserProfileFromDB(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const res = await api.get<Record<string, unknown>>(`/api/users/${userId}`);
+    if (res.ok && res.data) {
+      cacheUserProfileFromRow(userId, res.data);
+      window.dispatchEvent(new Event('userProfilesChanged'));
+    }
+  } catch {
+    // 오프라인 시 무시
+  }
+}
+
+/** 여러 사용자 프로필 일괄 갱신 */
+export async function syncUserProfilesFromDB(userIds: string[]): Promise<void> {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  await Promise.all(unique.map((id) => syncUserProfileFromDB(id)));
+}
 export async function syncUserToDB(user: User): Promise<void> {
   if (!user.id || user.id.startsWith('guest_')) return;
   const payload = {
@@ -69,8 +116,9 @@ export async function syncProductsFromDB(): Promise<void> {
         try { return JSON.parse(localStorage.getItem(DELETED_PRODUCTS_KEY) || '[]'); } catch { return []; }
       })();
       const deletedSet = new Set(deletedIds);
+      const favoriteIds = getFavoriteProductIds();
       const dbProducts = (res.data as unknown as Record<string, unknown>[])
-        .map(mapProductFromDB)
+        .map((row) => mapProductFromDB(row, favoriteIds))
         .filter((p) => !deletedSet.has(p.id));
       const local: Product[] = (() => {
         try { return JSON.parse(getItem('all_products') || '[]'); } catch { return []; }
@@ -140,9 +188,10 @@ export async function syncProductDeleteToDB(productId: string): Promise<boolean>
 
 // ─── DB → 앱 타입 변환 ────────────────────────────────────────
 
-function mapProductFromDB(row: Record<string, unknown>): Product {
+function mapProductFromDB(row: Record<string, unknown>, favoriteIds?: Set<string>): Product {
   const seller = (row.seller as Record<string, unknown>) || {};
-  return {
+  cacheEmbeddedUser(seller.id ? seller : null);
+  const product: Product = {
     id: String(row.id),
     title: String(row.title || ''),
     price: Number(row.price || 0),
@@ -152,8 +201,8 @@ function mapProductFromDB(row: Record<string, unknown>): Product {
     status: (row.status as Product['status']),
     description: String(row.description || ''),
     createdAt: String(row.created_at || new Date().toISOString()),
-    seller: {
-      id: String(seller.id || ''),
+    seller: applyProfileCacheToUser({
+      id: String(seller.id || row.seller_id || ''),
       nickname: String(seller.nickname || ''),
       profileImage: seller.profile_image as string | undefined,
       kycStatus: (seller.kyc_status as 'verified' | 'unverified') || 'unverified',
@@ -162,13 +211,14 @@ function mapProductFromDB(row: Record<string, unknown>): Product {
       tradeCount: Number(seller.trade_count || 0),
       activityRegion: seller.activity_region as string | undefined,
       bio: seller.bio as string | undefined,
-    },
+    }),
     tradeMethods: (row.trade_methods as Product['tradeMethods']) || [],
     todayTradeAvailable: Boolean(row.today_trade_available),
-    liked: false,
+    liked: favoriteIds?.has(String(row.id)) ?? false,
     isFreeShare: Boolean(row.is_free_share),
     allowOffer: Boolean(row.allow_offer),
   };
+  return product;
 }
 
 // ─── 커뮤니티 게시물 동기화 ──────────────────────────────────
@@ -179,7 +229,10 @@ export async function syncPostsFromDB(): Promise<void> {
     const res = await api.get<Post[]>('/api/posts');
     if (!res.ok) return;
     if (res.data) {
-      const dbPosts = (res.data as unknown as Record<string, unknown>[]).map(mapPostFromDB);
+      const favoriteIds = getFavoriteProductIds();
+      const dbPosts = (res.data as unknown as Record<string, unknown>[]).map((row) =>
+        mapPostFromDB(row, favoriteIds),
+      );
       setItem('community_user_posts', JSON.stringify(dbPosts));
       const localDispute: unknown[] = (() => { try { return JSON.parse(getItem('community_dispute_posts') || '[]'); } catch { return []; } })();
       if (localDispute.length > 0 && dbPosts.length === 0) {
@@ -238,8 +291,14 @@ export async function syncPostDeleteToDB(postId: string): Promise<boolean> {
 
 // ─── DB → Post 타입 변환 ──────────────────────────────────
 
-function mapPostFromDB(row: Record<string, unknown>): Post {
+function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<string>): Post {
   const author = (row.author as Record<string, unknown>) || {};
+  cacheEmbeddedUser(author.id ? author : null);
+  const attachedRaw = row.attached_product as Record<string, unknown> | undefined;
+  const attachedProduct =
+    attachedRaw?.id
+      ? mapProductFromDB({ ...attachedRaw, seller: author }, favoriteIds)
+      : undefined;
   return {
     id: String(row.id),
     title: String(row.title || ''),
@@ -253,7 +312,8 @@ function mapPostFromDB(row: Record<string, unknown>): Post {
     latitude: row.latitude as number | undefined,
     longitude: row.longitude as number | undefined,
     orderId: row.order_id as string | undefined,
-    author: {
+    attachedProduct,
+    author: applyProfileCacheToUser({
       id: String(author.id || ''),
       nickname: String(author.nickname || ''),
       profileImage: author.profile_image as string | undefined,
@@ -263,7 +323,7 @@ function mapPostFromDB(row: Record<string, unknown>): Post {
       tradeCount: Number(author.trade_count || 0),
       activityRegion: author.activity_region as string | undefined,
       bio: author.bio as string | undefined,
-    },
+    }),
   };
 }
 
@@ -293,6 +353,7 @@ export async function syncOrderToDB(order: Order): Promise<boolean> {
       shipping_phone: order.shippingInfo?.recipientPhone,
       tracking_number: order.trackingNumber,
       shipping_company: order.shippingCompany,
+      shipping_proof_images: order.shippingProofImages || [],
     });
     if (!res.ok) return false;
     if (order.timeline?.length) {
@@ -321,6 +382,7 @@ export type OrderStatusSyncExtra = {
   shipping_phone?: string;
   tracking_number?: string;
   shipping_company?: string;
+  shipping_proof_images?: string[];
 };
 
 /** 주문 상태 업데이트 — 성공 여부 반환 */
@@ -352,10 +414,6 @@ function mergeOrderDbPreferred(dbOrder: Order, local?: Order): Order {
   return {
     ...dbOrder,
     timeline: dbOrder.timeline?.length ? dbOrder.timeline : local.timeline,
-    product: dbOrder.product?.title ? dbOrder.product : local.product,
-    buyer: dbOrder.buyer?.nickname ? dbOrder.buyer : local.buyer,
-    seller: dbOrder.seller?.nickname ? dbOrder.seller : local.seller,
-    shippingInfo: dbOrder.shippingInfo?.address ? dbOrder.shippingInfo : local.shippingInfo,
   };
 }
 
@@ -375,6 +433,8 @@ export async function syncOrdersFromDB(userId: string): Promise<void> {
       const existingMap = new Map(existing.map((o) => [o.id, o]));
       const mergedMap = new Map<string, Order>();
       rows.forEach((row) => {
+        cacheEmbeddedUser(row.buyer as Record<string, unknown> | undefined);
+        cacheEmbeddedUser(row.seller as Record<string, unknown> | undefined);
         const id = String(row.id);
         mergedMap.set(id, mergeOrderDbPreferred(mapOrderFromDB(row), existingMap.get(id)));
       });
@@ -429,6 +489,8 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
   const buyer = (row.buyer as Record<string, unknown>) || {};
   const seller = (row.seller as Record<string, unknown>) || {};
   const product = (row.product as Record<string, unknown>) || {};
+  cacheEmbeddedUser(buyer.id ? buyer : null);
+  cacheEmbeddedUser(seller.id ? seller : null);
   const meetup = parseMeetupFromOrderRow(row);
   const timeline = parseTimelineFromDB(row.timeline);
   const meetupAcceptedFromDb = Boolean(row.meetup_accepted);
@@ -450,6 +512,9 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
     meetupAccepted: meetupAcceptedFromDb || meetupAcceptedFromTimeline,
     trackingNumber: row.tracking_number ? String(row.tracking_number) : undefined,
     shippingCompany: row.shipping_company ? String(row.shipping_company) : undefined,
+    shippingProofImages: Array.isArray(row.shipping_proof_images)
+      ? (row.shipping_proof_images as string[])
+      : undefined,
     shippingInfo:
       shippingName || shippingPhone || shippingAddress
         ? {
@@ -461,16 +526,18 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
         : undefined,
     createdAt: String(row.created_at || new Date().toISOString()),
     timeline,
-    buyer: {
-      id: String(buyer.id || ''), nickname: String(buyer.nickname || ''),
+    buyer: applyProfileCacheToUser({
+      id: String(buyer.id || row.buyer_id || ''),
+      nickname: String(buyer.nickname || ''),
       profileImage: buyer.profile_image as string | undefined,
       kycStatus: 'verified' as const, trustScore: 0, rating: 0, tradeCount: 0,
-    },
-    seller: {
-      id: String(seller.id || ''), nickname: String(seller.nickname || ''),
+    }),
+    seller: applyProfileCacheToUser({
+      id: String(seller.id || row.seller_id || ''),
+      nickname: String(seller.nickname || ''),
       profileImage: seller.profile_image as string | undefined,
       kycStatus: 'verified' as const, trustScore: 0, rating: 0, tradeCount: 0,
-    },
+    }),
     product: {
       id: String(product.id || row.product_id || ''),
       title: String(product.title || ''),
@@ -486,10 +553,11 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
       allowOffer: Boolean(product.allow_offer),
       tradeMethods: Array.isArray(product.trade_methods) ? (product.trade_methods as Product['tradeMethods']) : [],
       todayTradeAvailable: Boolean(product.today_trade_available),
-      seller: {
-        id: String(seller.id || ''), nickname: String(seller.nickname || ''),
+      seller: applyProfileCacheToUser({
+        id: String(seller.id || row.seller_id || ''),
+        nickname: String(seller.nickname || ''),
         kycStatus: 'verified' as const, trustScore: 0, rating: 0, tradeCount: 0,
-      },
+      }),
     },
   };
 }
@@ -584,15 +652,39 @@ export async function syncMessageToDB(roomId: string, message: ChatMessage): Pro
 /** DB row + 로컬 캐시 병합 — 메타데이터는 DB 우선 */
 function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
   if (!local) return dbRoom;
+
+  let buyerInfo = local.buyerInfo;
+  let sellerInfo = local.sellerInfo;
+  const freshOther = dbRoom.otherUser;
+  if (freshOther?.id && freshOther.nickname) {
+    if (freshOther.id === local.sellerId) {
+      sellerInfo = applyProfileCacheToUser({ ...(local.sellerInfo || freshOther), ...freshOther });
+    }
+    if (freshOther.id === local.buyerId) {
+      buyerInfo = applyProfileCacheToUser({ ...(local.buyerInfo || freshOther), ...freshOther });
+    }
+  }
+
+  const lastMessageChanged =
+    !!local.lastMessage &&
+    !!dbRoom.lastMessage &&
+    local.lastMessage !== dbRoom.lastMessage;
+  const messages = lastMessageChanged
+    ? []
+    : (dbRoom.messages?.length ? dbRoom.messages : local.messages);
+
   return {
     ...dbRoom,
-    messages: local.messages?.length ? local.messages : dbRoom.messages,
+    messages: messages || [],
     readStatus: Object.keys(dbRoom.readStatus || {}).length ? dbRoom.readStatus : local.readStatus,
     lastReadAt: Object.keys(dbRoom.lastReadAt || {}).length ? dbRoom.lastReadAt : local.lastReadAt,
     leftUserIds: dbRoom.leftUserIds?.length ? dbRoom.leftUserIds : local.leftUserIds,
-    order: local.order ?? dbRoom.order,
-    buyerInfo: local.buyerInfo ?? dbRoom.buyerInfo,
-    sellerInfo: local.sellerInfo ?? dbRoom.sellerInfo,
+    order: dbRoom.order ?? local.order,
+    otherUser: freshOther?.nickname
+      ? applyProfileCacheToUser(freshOther)
+      : applyProfileCacheToUser(local.otherUser ?? dbRoom.otherUser),
+    buyerInfo,
+    sellerInfo,
   };
 }
 
@@ -608,10 +700,17 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
       })();
       const existingMap = new Map(existing.map((r) => [r.id, r]));
       const mergedMap = new Map<string, ChatRoom>();
+      const messageResyncIds: string[] = [];
       rows.forEach((row) => {
+        cacheEmbeddedUser(row.other_user as Record<string, unknown> | undefined);
         const id = String(row.id);
+        const local = existingMap.get(id);
         const dbRoom = mapChatRoomFromDB(row);
-        mergedMap.set(id, mergeRoomDbPreferred(dbRoom, existingMap.get(id)));
+        mergedMap.set(id, mergeRoomDbPreferred(dbRoom, local));
+        const dbLast = String(row.last_message || '');
+        if (local && dbLast && local.lastMessage !== dbLast) {
+          messageResyncIds.push(id);
+        }
       });
       // 아직 DB에 없는 로컬 전용 방(생성 직후 등)은 캐시로 유지
       existing.forEach((room) => {
@@ -619,6 +718,10 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
       });
       setItem('all_chatrooms', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('chatRoomsChanged'));
+      window.dispatchEvent(new Event('userProfilesChanged'));
+      messageResyncIds.forEach((roomId) => {
+        void syncRoomMessagesFromDB(roomId, userId);
+      });
     }
   } catch {
     // 오프라인 시 무시
@@ -691,11 +794,13 @@ export async function syncRoomMessagesFromDB(roomId: string, userId?: string): P
       const dbMsg = mapChatMessageFromDB(row);
       const local = localById.get(dbMsg.id);
       if (!local) return dbMsg;
+      const dbHasMeetup = !!(dbMsg.meetupPlace || dbMsg.meetupDate || dbMsg.meetupTime);
+      if (dbHasMeetup) return dbMsg;
       return {
         ...dbMsg,
-        meetupPlace: dbMsg.meetupPlace ?? local.meetupPlace,
-        meetupDate: dbMsg.meetupDate ?? local.meetupDate,
-        meetupTime: dbMsg.meetupTime ?? local.meetupTime,
+        meetupPlace: local.meetupPlace,
+        meetupDate: local.meetupDate,
+        meetupTime: local.meetupTime,
       };
     });
     dbMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -724,6 +829,8 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
   const leftUserIds = Array.isArray(leftRaw)
     ? leftRaw.map((id) => String(id))
     : [];
+  const orderId = row.order_id ? String(row.order_id) : undefined;
+  const linkedOrder = lookupOrderById(orderId);
 
   const product = pd && pd.id ? {
     id: String(pd.id),
@@ -774,9 +881,9 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
     product,
 
-    order: undefined,
+    order: linkedOrder,
 
-    otherUser: otherUser ? {
+    otherUser: otherUser ? applyProfileCacheToUser({
 
       id: String(otherUser.id || ''),
 
@@ -786,7 +893,7 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
       kycStatus: 'verified' as const, trustScore: 0, rating: 0, tradeCount: 0,
 
-    } : { id: '', nickname: '', kycStatus: 'unverified' as const, trustScore: 0, rating: 0, tradeCount: 0 },
+    }) : { id: '', nickname: '', kycStatus: 'unverified' as const, trustScore: 0, rating: 0, tradeCount: 0 },
 
   };
 
@@ -832,12 +939,16 @@ export async function syncCommentsFromDB(postId: string): Promise<void> {
       const authorRow = (row: Record<string, unknown>) => {
         const a = (row.author as Record<string, unknown> | undefined) || undefined;
         if (a && typeof a === 'object' && a.id) {
-          return {
+          cacheEmbeddedUser(a);
+          return applyProfileCacheToUser({
             id: String(a.id || ''),
             nickname: String(a.nickname || ''),
             profileImage: (a.profile_image as string | undefined) || '',
-            kycStatus: (a.kyc_status as string | undefined) || 'unverified',
-          };
+            kycStatus: ((a.kyc_status as string | undefined) || 'unverified') as 'verified' | 'unverified',
+            trustScore: 0,
+            rating: 0,
+            tradeCount: 0,
+          });
         }
         const authorId = String(row.author_id || '');
         return { id: authorId, nickname: authorId, profileImage: '', kycStatus: 'unverified' };
@@ -1055,6 +1166,7 @@ export async function syncFavoritesFromDB(userId: string): Promise<void> {
       const key = `myFavorites_${userId}`;
       localStorage.setItem(key, JSON.stringify(products));
       window.dispatchEvent(new Event('favoritesChanged'));
+      window.dispatchEvent(new Event('productsChanged'));
     }
   } catch {
     // 오프라인 시 무시
@@ -1219,15 +1331,24 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
 }
 
 export async function initDBSync(userId?: string): Promise<void> {
-  const tasks: Promise<void>[] = [syncProductsFromDB(), syncPostsFromDB()];
   if (userId) {
-    tasks.push(syncMyProfileFromDB(userId));
-    tasks.push(syncOrdersFromDB(userId));
-    tasks.push(syncChatRoomsFromDB(userId));
-    tasks.push(syncFavoritesFromDB(userId));
-    tasks.push(syncNotificationsFromDB(userId));
-    tasks.push(syncReviewsFromDB(userId));
-    tasks.push(syncDisputesFromDB(userId));
+    await Promise.all([
+      syncMyProfileFromDB(userId),
+      syncFavoritesFromDB(userId),
+    ]);
+    await syncOrdersFromDB(userId);
+  }
+  const tasks: Promise<void>[] = [
+    syncProductsFromDB(),
+    syncPostsFromDB(),
+  ];
+  if (userId) {
+    tasks.push(
+      syncChatRoomsFromDB(userId),
+      syncNotificationsFromDB(userId),
+      syncReviewsFromDB(userId),
+      syncDisputesFromDB(userId),
+    );
   }
   await Promise.all(tasks);
 }

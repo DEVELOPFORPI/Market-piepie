@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN shipping_proof_images JSON NOT NULL DEFAULT (JSON_ARRAY());

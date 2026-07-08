@@ -136,6 +136,7 @@ export interface Order {
   };
   trackingNumber?: string;
   shippingCompany?: string;
+  shippingProofImages?: string[];
   memo?: string;
   createdAt: string;
   timeline: OrderTimelineEvent[];
