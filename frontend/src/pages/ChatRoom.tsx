@@ -653,8 +653,29 @@ export const ChatRoom: React.FC = () => {
             </div>
           ) : (
             <>
-              <h2 className="text-base font-medium text-gray-900 mb-1">{room.product.title}</h2>
-              <p className="text-2xl font-bold text-gray-900 mb-4">{room.product.price.toLocaleString()} PI</p>
+              <div className="flex gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/product/${room.product!.id}`)}
+                  className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0"
+                  aria-label="View listing"
+                >
+                  <img
+                    src={room.product.images?.[0] || '/placeholder.jpg'}
+                    alt={room.product.title}
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-medium text-gray-900 truncate mb-1">{room.product.title}</h2>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {room.product.isFreeShare || room.product.price === 0
+                      ? 'Free share'
+                      : `${room.product.price.toLocaleString()} PI`}
+                  </p>
+                </div>
+              </div>
               {!currentOrder ? (
                 <div className="space-y-2">
                   {isBuyer && (
