@@ -26,6 +26,7 @@ const KYC_LABEL: Record<string, string> = {
 export const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ nickname: '', kyc_status: '', trust_score: 0, bio: '' });
@@ -33,9 +34,20 @@ export const AdminUsers: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     const res = await api.get<User[]>('/api/admin/users', { headers: adminPasswordHeaders() });
-    if (res.ok && res.data) setUsers(res.data);
-    else setUsers([]);
+    if (!res.ok || !res.data) {
+      setUsers([]);
+      if (res.status === 401) {
+        setLoadError('관리자 인증이 만료되었습니다. /admin/login 에서 다시 로그인하세요.');
+      } else if (res.status === 503) {
+        setLoadError('서버에 ADMIN_PASSWORD 또는 DB가 설정되어 있지 않습니다.');
+      } else {
+        setLoadError(res.error || '사용자 목록을 불러오지 못했습니다.');
+      }
+    } else {
+      setUsers(res.data);
+    }
     setLoading(false);
   };
 
@@ -90,6 +102,12 @@ export const AdminUsers: React.FC = () => {
         onChange={(e) => setSearch(e.target.value)}
         className="w-full max-w-md mb-6 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
       />
+
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500 text-sm">

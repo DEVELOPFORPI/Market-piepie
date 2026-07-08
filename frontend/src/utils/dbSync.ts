@@ -234,10 +234,6 @@ export async function syncPostsFromDB(): Promise<void> {
         mapPostFromDB(row, favoriteIds),
       );
       setItem('community_user_posts', JSON.stringify(dbPosts));
-      const localDispute: unknown[] = (() => { try { return JSON.parse(getItem('community_dispute_posts') || '[]'); } catch { return []; } })();
-      if (localDispute.length > 0 && dbPosts.length === 0) {
-        setItem('community_dispute_posts', '[]');
-      }
       window.dispatchEvent(new Event('postsChanged'));
     }
   } catch {

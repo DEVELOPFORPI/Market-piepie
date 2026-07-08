@@ -10,7 +10,7 @@ import {
   updateDisputeStatus,
   Dispute as DisputeType,
 } from '@/utils/disputeStorage';
-import { addDisputePost } from '@/utils/communityStorage';
+import { addUserPost } from '@/utils/communityStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
@@ -124,7 +124,7 @@ export const Dispute: React.FC = () => {
 
     const author = getMyUser();
     const disputePostId = `dispute_post_${newDispute.id}`;
-    addDisputePost({
+    const postSaved = await addUserPost({
       id: disputePostId,
       title: `[Dispute] ${order.product.title} - ${reason}`,
       content: [
@@ -141,14 +141,17 @@ export const Dispute: React.FC = () => {
       createdAt: new Date().toISOString(),
       orderId,
     });
-
-    addNotification({
-      targetUserId: otherUser.id,
-      type: 'order',
-      title: 'Dispute post published',
-      content: `A community post was created for the dispute on "${order.product.title}". You can leave comments there.`,
-      link: `/community/post/${disputePostId}`,
-    });
+    if (!postSaved) {
+      alert('Dispute was filed, but the community post could not be published. Check your connection.');
+    } else {
+      addNotification({
+        targetUserId: otherUser.id,
+        type: 'order',
+        title: 'Dispute post published',
+        content: `A community post was created for the dispute on "${order.product.title}". You can leave comments there.`,
+        link: `/community/post/${disputePostId}`,
+      });
+    }
 
     setDispute(newDispute);
   };

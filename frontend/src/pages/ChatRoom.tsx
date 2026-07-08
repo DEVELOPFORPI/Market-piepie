@@ -374,28 +374,7 @@ export const ChatRoom: React.FC = () => {
   const needsMeetupAccept = !!(currentOrder && currentOrder.status === ORDER_STATUS_VALUE.MEETUP_SET && !currentOrder.meetupAccepted);
 
 
-  // If banner only (no meetup card in thread), synthesize card from order
-  const hasMeetupInMessages = messages.some((m) => m.type === 'meetup_confirmed');
-  const displayMessages =
-    !hasMeetupInMessages &&
-    currentOrder?.meetupPlace &&
-    currentOrder?.meetupDate &&
-    currentOrder?.meetupTime
-      ? [
-          ...messages,
-          {
-            id: 'display_meetup_from_order',
-            senderId: currentOrder.seller.id,
-            content: CHAT_MSG_PRODUCT_RESERVED,
-            timestamp: currentOrder.createdAt,
-            type: 'meetup_confirmed' as const,
-            meetupPlace: currentOrder.meetupPlace,
-            meetupDate: currentOrder.meetupDate,
-            meetupTime: currentOrder.meetupTime,
-          } as ChatMessage,
-        ]
-      : messages;
-  console.log('[ChatRoom] render', messages.length, displayMessages.length);
+  const displayMessages = messages;
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;
@@ -737,6 +716,36 @@ export const ChatRoom: React.FC = () => {
             </div>
           );
         })()}
+
+        {currentOrder && currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime && (
+          <div className="bg-teal-50 border-t border-teal-200 px-4 py-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
+              <p className="text-sm font-medium text-teal-800 flex-1 truncate">
+                {CHAT_MSG_PRODUCT_RESERVED}
+                {' · '}
+                {currentOrder.meetupPlace}
+                {' · '}
+                {[currentOrder.meetupDate, currentOrder.meetupTime].filter(Boolean).join(' ')}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMeetupDetailMessage({
+                    id: 'banner',
+                    content: CHAT_MSG_PRODUCT_RESERVED,
+                    senderId: currentOrder.seller.id,
+                    timestamp: new Date().toISOString(),
+                    type: 'meetup_confirmed',
+                  });
+                }}
+                className="text-xs font-medium text-teal-600 underline hover:text-teal-700 whitespace-nowrap"
+              >
+                Details
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Partner started meetup (realtime popup) */}
@@ -1027,35 +1036,6 @@ export const ChatRoom: React.FC = () => {
 
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {currentOrder && currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime && (
-          <div className="flex-shrink-0 px-4 pt-4 pb-2">
-            <div
-              role="button"
-              onClick={() => {
-                setMeetupDetailMessage({
-                  id: 'banner',
-                  content: CHAT_MSG_PRODUCT_RESERVED,
-                  senderId: currentOrder.seller.id,
-                  timestamp: new Date().toISOString(),
-                  type: 'meetup_confirmed',
-                });
-              }}
-              className="rounded-lg px-4 py-3 text-white text-sm shadow-sm cursor-pointer active:opacity-90"
-              style={{
-                background: 'linear-gradient(90deg, #00A8A3 0%, #27AE60 100%)',
-              }}
-            >
-              <p className="font-semibold mb-1 flex items-center gap-1"><img src="/h.svg" alt="" className="w-4 h-4 inline-block" /> {CHAT_MSG_PRODUCT_RESERVED}</p>
-              <p className="text-white/95 text-xs mb-0.5">
-                Meetup place <span className="font-medium text-white">{currentOrder.meetupPlace}</span>
-              </p>
-              <p className="text-white/95 text-xs">
-                Date {[currentOrder.meetupDate, currentOrder.meetupTime].filter(Boolean).join(' ')}
-              </p>
-              <p className="text-white/80 text-xs mt-1">Tap for details</p>
-            </div>
-          </div>
-        )}
         {currentOrder && !(currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime) && messages.some((m) => m.type === 'system' && isMeetupCanceledMessage(m.content)) && (
           <div className="flex-shrink-0 px-4 pt-4 pb-2">
             <div className="rounded-lg px-4 py-3 border border-gray-200 bg-gray-50 text-gray-700 text-sm">

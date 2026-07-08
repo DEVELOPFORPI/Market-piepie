@@ -118,11 +118,8 @@ export const getDisputePosts = (): Post[] => {
   }
 };
 
-export const addDisputePost = (post: Post): void => {
-  const posts = getDisputePosts();
-  posts.unshift(post);
-  setItem(DISPUTE_STORAGE_KEY, JSON.stringify(posts));
-  window.dispatchEvent(new Event('postsChanged'));
+export const addDisputePost = async (post: Post): Promise<boolean> => {
+  return addUserPost(post);
 };
 
 export const clearDisputePosts = (): void => {
@@ -149,9 +146,9 @@ export const deleteDisputePost = (postId: string): void => {
 // --- Combined feed ---
 
 export const getAllPosts = (): Post[] => {
-  const dispute = getDisputePosts();
   const user = getUserPosts();
-  return [...dispute, ...user].sort(
+  const legacyDispute = getDisputePosts().filter((d) => !user.some((u) => u.id === d.id));
+  return [...legacyDispute, ...user].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 };

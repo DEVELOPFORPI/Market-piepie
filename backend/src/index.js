@@ -2635,14 +2635,28 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
 
 // ??? ????? ??
 app.get("/api/admin/users", requireDb, requireAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
+  const fullSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
               trade_count, activity_region, seller_type, pi_verified, pi_username, created_at
-       FROM users ORDER BY created_at DESC LIMIT 500`,
-    );
+       FROM users ORDER BY created_at DESC LIMIT 500`;
+  const fallbackSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
+              trade_count, activity_region, seller_type, pi_verified, created_at
+       FROM users ORDER BY created_at DESC LIMIT 500`;
+  try {
+    let rows;
+    try {
+      ({ rows } = await pool.query(fullSelect));
+    } catch (e) {
+      if (/pi_username|Unknown column/i.test(String(e.message))) {
+        console.warn("[admin/users] pi_username column missing — fallback query");
+        ({ rows } = await pool.query(fallbackSelect));
+        rows = rows.map((row) => ({ ...row, pi_username: null }));
+      } else {
+        throw e;
+      }
+    }
     res.json(rows);
   } catch (e) {
+    console.error("[admin/users] error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
