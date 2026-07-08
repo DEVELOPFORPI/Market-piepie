@@ -3,17 +3,37 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
-import { getOrderById, saveOrderTracking } from '@/utils/orderStorage';
+import { Order } from '@/types';
+import { ensureOrderById, saveOrderTracking } from '@/utils/orderStorage';
 
 export const ShippingInfo: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const order = orderId ? getOrderById(orderId) : null;
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [shippingCompany, setShippingCompany] = useState('');
   const [shippingProof, setShippingProof] = useState<string[]>([]);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!orderId) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const found = await ensureOrderById(orderId);
+      if (!cancelled) {
+        setOrder(found ?? null);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [orderId]);
 
   useEffect(() => {
     if (order?.trackingNumber) setTrackingNumber(order.trackingNumber);
@@ -54,6 +74,14 @@ export const ShippingInfo: React.FC = () => {
     alert('Tracking info saved.');
     navigate(-1);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

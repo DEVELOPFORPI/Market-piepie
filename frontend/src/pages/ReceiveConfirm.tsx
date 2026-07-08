@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById, updateOrderStatus, completeShareOrderOnReceive, confirmOrderCompletion } from '@/utils/orderStorage';
+import { getOrderById, ensureOrderById, updateOrderStatus, completeShareOrderOnReceive, confirmOrderCompletion } from '@/utils/orderStorage';
 import { addReceiptConfirmedToChat, addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/types';
@@ -20,26 +20,40 @@ export const ReceiveConfirm: React.FC = () => {
   const [meetupDate, setMeetupDate] = useState<string | undefined>(undefined);
   const [meetupTime, setMeetupTime] = useState<string | undefined>(undefined);
   const [isBuyer, setIsBuyer] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderId) return;
-    const o = getOrderById(orderId);
-    if (!o) return;
-    if (o.status === ORDER_STATUS_VALUE.DISPUTE) {
-      alert('You cannot confirm receipt while a dispute is open.');
-      navigate(`/dispute/${orderId}`, { replace: true });
+    if (!orderId) {
+      setLoading(false);
       return;
     }
-    const userId = getCurrentUserId();
-    const buyerMatch = !!(userId && o.buyer.id === userId);
-    setIsBuyer(buyerMatch);
-    setOrderTitle(o.product.title);
-    setOrderImage(o.product.images?.[0]);
-    setPrice(o.proposedPrice);
-    setTradeMethod(o.tradeMethod);
-    setMeetupPlace(o.meetupPlace);
-    setMeetupDate(o.meetupDate);
-    setMeetupTime(o.meetupTime);
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const o = await ensureOrderById(orderId);
+      if (cancelled) return;
+      if (!o) {
+        setLoading(false);
+        return;
+      }
+      if (o.status === ORDER_STATUS_VALUE.DISPUTE) {
+        alert('You cannot confirm receipt while a dispute is open.');
+        navigate(`/dispute/${orderId}`, { replace: true });
+        return;
+      }
+      const userId = getCurrentUserId();
+      const buyerMatch = !!(userId && o.buyer.id === userId);
+      setIsBuyer(buyerMatch);
+      setOrderTitle(o.product.title);
+      setOrderImage(o.product.images?.[0]);
+      setPrice(o.proposedPrice);
+      setTradeMethod(o.tradeMethod);
+      setMeetupPlace(o.meetupPlace);
+      setMeetupDate(o.meetupDate);
+      setMeetupTime(o.meetupTime);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [orderId, navigate]);
 
   const handleSubmit = async () => {
@@ -80,6 +94,14 @@ export const ReceiveConfirm: React.FC = () => {
       }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24">

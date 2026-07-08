@@ -241,6 +241,33 @@ export async function syncPostsFromDB(): Promise<void> {
   }
 }
 
+/** 단일 게시물을 DB에서 로드해 로컬 캐시에 병합 */
+export async function syncPostFromDB(postId: string): Promise<Post | undefined> {
+  if (!postId) return undefined;
+  try {
+    const res = await api.get<Record<string, unknown>>(`/api/posts/${postId}`);
+    if (!res.ok || !res.data) return undefined;
+    const favoriteIds = getFavoriteProductIds();
+    const mapped = mapPostFromDB(res.data, favoriteIds);
+    const posts: Post[] = (() => {
+      try {
+        const raw = getItem('community_user_posts');
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const idx = posts.findIndex((p) => p.id === postId);
+    if (idx >= 0) posts[idx] = mapped;
+    else posts.unshift(mapped);
+    setItem('community_user_posts', JSON.stringify(posts));
+    window.dispatchEvent(new Event('postsChanged'));
+    return mapped;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 게시물을 DB에 저장 — 성공 여부 반환 */
 export async function syncPostToDB(post: Post): Promise<boolean> {
   try {
@@ -411,6 +438,34 @@ function mergeOrderDbPreferred(dbOrder: Order, local?: Order): Order {
     ...dbOrder,
     timeline: dbOrder.timeline?.length ? dbOrder.timeline : local.timeline,
   };
+}
+
+/** 단일 주문을 DB에서 로드해 로컬 캐시에 병합 */
+export async function syncOrderFromDB(orderId: string): Promise<Order | undefined> {
+  if (!orderId) return undefined;
+  try {
+    const res = await api.get<Record<string, unknown>>(`/api/orders/${orderId}`);
+    if (!res.ok || !res.data) return undefined;
+    const row = res.data as Record<string, unknown>;
+    const existing = lookupOrderById(orderId);
+    const mapped = mergeOrderDbPreferred(mapOrderFromDB(row), existing);
+    const orders: Order[] = (() => {
+      try {
+        const raw = getItem('all_orders');
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const idx = orders.findIndex((o) => o.id === orderId);
+    if (idx >= 0) orders[idx] = mapped;
+    else orders.push(mapped);
+    setItem('all_orders', JSON.stringify(orders));
+    window.dispatchEvent(new Event('ordersChanged'));
+    return mapped;
+  } catch {
+    return undefined;
+  }
 }
 
 /** DB에서 내 주문 목록을 로드해 localStorage 갱신 (DB-first) */
@@ -1075,6 +1130,23 @@ export async function syncDisputeToDB(dispute: {
   }
 }
 
+/** 분쟁 상태 변경 — 당사자 합의 해결 / 중재 요청 */
+export async function syncDisputeStatusToDB(
+  disputeId: string,
+  status: 'IN_REVIEW' | 'RESOLVED',
+  adminResponse?: string,
+): Promise<boolean> {
+  try {
+    const res = await api.put(`/api/disputes/${disputeId}`, {
+      status,
+      admin_response: adminResponse,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function mapDisputeFromDB(row: Record<string, unknown>) {
   return {
     id: String(row.id),
@@ -1311,7 +1383,12 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
           activityRegion: String(u.activity_region || '') || (existing?.activityRegion as string) || '',
         };
         localStorage.setItem(profileKey, JSON.stringify(profile));
+        const dbRegion = String(u.activity_region || '').trim();
+        if (dbRegion) {
+          try { localStorage.setItem(`userRegion_${userId}`, dbRegion); } catch { /* ignore */ }
+        }
         window.dispatchEvent(new Event('profileSaved'));
+        if (dbRegion) window.dispatchEvent(new Event('regionChanged'));
       } else if (!existing) {
         const profile = {
           nickname: 'My nickname',
@@ -1320,7 +1397,21 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
           activityRegion: String(u.activity_region || ''),
         };
         localStorage.setItem(profileKey, JSON.stringify(profile));
+        const dbRegion = String(u.activity_region || '').trim();
+        if (dbRegion) {
+          try { localStorage.setItem(`userRegion_${userId}`, dbRegion); } catch { /* ignore */ }
+        }
         window.dispatchEvent(new Event('profileSaved'));
+        if (dbRegion) window.dispatchEvent(new Event('regionChanged'));
+      } else if (existing) {
+        const dbRegion = String(u.activity_region || '').trim();
+        if (dbRegion && dbRegion !== String(existing.activityRegion || '').trim()) {
+          const profile = { ...existing, activityRegion: dbRegion };
+          localStorage.setItem(profileKey, JSON.stringify(profile));
+          try { localStorage.setItem(`userRegion_${userId}`, dbRegion); } catch { /* ignore */ }
+          window.dispatchEvent(new Event('profileSaved'));
+          window.dispatchEvent(new Event('regionChanged'));
+        }
       }
     }
   } catch { /* ignore */ }

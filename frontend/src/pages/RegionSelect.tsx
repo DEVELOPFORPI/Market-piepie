@@ -8,15 +8,20 @@ export const RegionSelect: React.FC = () => {
   const navigate = useNavigate();
   const [customRegionInput, setCustomRegionInput] = useState('');
   const [autoDetectLoading, setAutoDetectLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [autoDetectError, setAutoDetectError] = useState<string | null>(null);
 
-  const handleApplyCustom = () => {
+  const handleApplyCustom = async () => {
     const value = customRegionInput.trim();
-    if (value) {
-      saveRegion(value);
-      window.dispatchEvent(new Event('regionChanged'));
-      setTimeout(() => navigate(-1), 100);
+    if (!value || saving) return;
+    setSaving(true);
+    const ok = await saveRegion(value);
+    setSaving(false);
+    if (!ok) {
+      alert('Could not save region. Check your connection and try again.');
+      return;
     }
+    setTimeout(() => navigate(-1), 100);
   };
 
   const handleAutoDetect = async () => {
@@ -25,8 +30,11 @@ export const RegionSelect: React.FC = () => {
     try {
       const location = await detectLocation();
       if (location?.region) {
-        saveRegion(location.region);
-        window.dispatchEvent(new Event('regionChanged'));
+        const ok = await saveRegion(location.region);
+        if (!ok) {
+          setAutoDetectError('Could not save region. Check your connection and try again.');
+          return;
+        }
         navigate(-1);
       } else {
         setAutoDetectError('Could not detect location. Enter your area manually.');
@@ -103,8 +111,8 @@ export const RegionSelect: React.FC = () => {
               }}
             />
             <button
-              onClick={handleApplyCustom}
-              disabled={!customRegionInput.trim()}
+              onClick={() => void handleApplyCustom()}
+              disabled={!customRegionInput.trim() || saving}
               className="px-6 py-3 text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#00A8A3' }}
             >

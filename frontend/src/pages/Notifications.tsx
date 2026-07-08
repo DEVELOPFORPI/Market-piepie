@@ -9,11 +9,11 @@ import {
   NotificationType,
 } from '@/utils/notificationStorage';
 import { ORDER_STATUS_VALUE } from '@/types';
-import { getOrderById } from '@/utils/orderStorage';
+import { ensureOrderById } from '@/utils/orderStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getChatRoomByOrder } from '@/utils/chatStorage';
-import { syncNotificationsFromDB } from '@/utils/dbSync';
+import { syncNotificationsFromDB, syncChatRoomsFromDB } from '@/utils/dbSync';
 import {
   COMPLETION_TITLE_SET,
   displayNotificationTitle,
@@ -22,6 +22,8 @@ import {
   NOTIFY_MEETUP_CONFIRMED,
   NOTIFY_MEETUP_UPDATED,
   NOTIFY_OFFER_ACCEPTED,
+  NOTIFY_PURCHASE_OFFER_ARRIVED,
+  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
@@ -120,7 +122,7 @@ export const Notifications: React.FC = () => {
     }
   };
 
-  const handleNotificationClick = (notification: StoredNotification) => {
+  const handleNotificationClick = async (notification: StoredNotification) => {
     markAsRead(notification.id);
     load();
 
@@ -130,8 +132,21 @@ export const Notifications: React.FC = () => {
 
     const orderIdMatch = notification.link.match(/^\/order\/(.+)$/);
     const orderId = orderIdMatch?.[1];
-    const order = orderId ? getOrderById(orderId) : null;
+    const order = orderId ? await ensureOrderById(orderId) : null;
     let destinationLink = notification.link;
+
+    // Offer/share request: open chat when room exists (accept/decline there)
+    if (
+      order &&
+      (title === NOTIFY_PURCHASE_OFFER_ARRIVED || title === NOTIFY_FREE_SHARE_REQUEST_ARRIVED)
+    ) {
+      const uid = getCurrentUserId();
+      if (uid) await syncChatRoomsFromDB(uid);
+      const room = getChatRoomByOrder(order);
+      if (room?.id) {
+        destinationLink = `/chat/${room.id}`;
+      }
+    }
 
     // Order notifications from chat flow ??open the trade chat room when possible
     if (order && isMeetupNotificationTitle(title)) {

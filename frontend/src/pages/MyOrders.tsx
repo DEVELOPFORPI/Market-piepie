@@ -4,6 +4,7 @@ import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
 import { Order, OrderStatus, ORDER_STATUS_VALUE } from '@/types';
 import { getOrders, getOrderById, deleteOrder, updateOrderStatus, confirmOrderCompletion, clearAllOrders } from '@/utils/orderStorage';
+import { syncOrdersFromDB } from '@/utils/dbSync';
 import { ensureChatRoomForOrder, addTradeCompletedToChat, addPriceOfferResultToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { addNotification } from '@/utils/notificationStorage';
@@ -25,7 +26,11 @@ export const MyOrders: React.FC = () => {
   };
 
   useEffect(() => {
-    loadOrders();
+    const uid = getCurrentUserId();
+    void (async () => {
+      if (uid) await syncOrdersFromDB(uid);
+      loadOrders();
+    })();
     window.addEventListener('ordersChanged', loadOrders);
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'all_orders' || e.key === 'all_products') loadOrders();

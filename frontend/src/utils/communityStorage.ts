@@ -1,7 +1,7 @@
 import { Post, Comment } from '@/types';
 import { tryFreeSpaceForSave } from '@/utils/storageClear';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
-import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentDeleteToDB } from '@/utils/dbSync';
+import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentDeleteToDB, syncPostFromDB } from '@/utils/dbSync';
 
 const DISPUTE_STORAGE_KEY = 'community_dispute_posts';
 const USER_POSTS_STORAGE_KEY = 'community_user_posts';
@@ -160,6 +160,14 @@ export const getPostById = (id: string | undefined): Post | null => {
   const fromDispute = getDisputePosts().find((p) => p.id === id);
   if (fromDispute) return fromDispute;
   return null;
+};
+
+/** 로컬에 없으면 DB에서 게시물 1건을 받아온 뒤 반환 */
+export const ensurePostById = async (id: string): Promise<Post | null> => {
+  const local = getPostById(id);
+  if (local) return local;
+  const fromDb = await syncPostFromDB(id);
+  return fromDb ?? getPostById(id);
 };
 
 // --- Comments ---

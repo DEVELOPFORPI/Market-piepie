@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById, updateOrderStatus, confirmOrderCompletion } from '@/utils/orderStorage';
+import { ensureOrderById, updateOrderStatus, confirmOrderCompletion } from '@/utils/orderStorage';
 import { addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { Order, ORDER_STATUS_VALUE } from '@/types';
@@ -13,18 +13,25 @@ export const CompleteCheck: React.FC = () => {
   const [hasProblem, setHasProblem] = useState(false);
   const [problemNote, setProblemNote] = useState('');
   const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderId) return;
-    const o = getOrderById(orderId);
-    if (o) setOrder(o);
+    if (!orderId) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const o = await ensureOrderById(orderId);
+      if (!cancelled) {
+        setOrder(o ?? null);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [orderId]);
-
-  const userId = getCurrentUserId();
-  const isSeller = !!(order && userId && order.seller.id === userId);
-  const otherNickname = order
-    ? (isSeller ? order.buyer.nickname : order.seller.nickname)
-    : '';
 
   const handleSubmit = async () => {
     if (!completed && !hasProblem) {
@@ -60,6 +67,20 @@ export const CompleteCheck: React.FC = () => {
       navigate('/my/orders', { replace: true });
     }
   };
+
+  const userId = getCurrentUserId();
+  const isSeller = !!(order && userId && order.seller.id === userId);
+  const otherNickname = order
+    ? (isSeller ? order.buyer.nickname : order.seller.nickname)
+    : '';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24">

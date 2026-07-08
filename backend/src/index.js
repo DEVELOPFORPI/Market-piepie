@@ -2027,6 +2027,24 @@ app.get("/api/posts", requireDb, async (req, res) => {
   }
 });
 
+app.get("/api/posts/:id", requireDb, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.*, ${jsonObjectSql("u", "users")} AS author,
+      ${jsonObjectSql("ap", "products")} AS attached_product
+      FROM community_posts p
+      LEFT JOIN users u ON p.author_id = u.id
+      LEFT JOIN products ap ON p.attached_product_id = ap.id
+      WHERE p.id=$1 LIMIT 1`,
+      [req.params.id],
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/posts", requireDb, requireAuth, async (req, res) => {
   const {
     id,
@@ -2463,6 +2481,39 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
       "disputes",
     );
     res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Buyer/seller: update dispute status (mutual resolve or request review) */
+app.put("/api/disputes/:id", requireDb, requireAuth, async (req, res) => {
+  const { status, admin_response } = req.body;
+  const allowed = ["IN_REVIEW", "RESOLVED"];
+  if (!status || !allowed.includes(status)) {
+    return res.status(400).json({ error: "Invalid status" });
+  }
+  try {
+    const check = await pool.query(
+      "SELECT buyer_id, seller_id FROM disputes WHERE id=$1",
+      [req.params.id],
+    );
+    if (!check.rows.length) return res.status(404).json({ error: "Not found" });
+    const row = check.rows[0];
+    if (req.authUserId !== row.buyer_id && req.authUserId !== row.seller_id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { rows } = await queryReturning(
+      `UPDATE disputes SET status=$1, admin_response=COALESCE($2, admin_response),
+       resolved_at=${status === "RESOLVED" ? "NOW()" : "resolved_at"}
+       WHERE id=$3`,
+      [status, admin_response ?? null, req.params.id],
+      "disputes",
+      "id=$1",
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

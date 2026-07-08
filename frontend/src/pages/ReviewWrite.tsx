@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Review, Order } from '@/types';
 import { saveReview, getReviewByOrderId, addReceivedReviewForUser } from '@/utils/reviewStorage';
-import { getOrderById } from '@/utils/orderStorage';
+import { ensureOrderById } from '@/utils/orderStorage';
 import { addReviewToChat } from '@/utils/chatStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { addNotification } from '@/utils/notificationStorage';
@@ -18,21 +18,29 @@ export const ReviewWrite: React.FC = () => {
   const [rating, setRating] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [comment, setComment] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderId) return;
-
-    const found = getOrderById(orderId);
-    console.log('[REVIEW] mount getOrderById', { orderId, found: !!found, buyerId: found?.buyer?.id, sellerId: found?.seller?.id });
-    if (found) setOrder(found);
-
-    const existing = getReviewByOrderId(orderId);
-    if (existing) {
-      console.log('[REVIEW] mount existing review found - redirecting');
-      alert('Reviews cannot be edited after they are submitted.');
-      navigate('/my/reviews', { replace: true });
+    if (!orderId) {
+      setLoading(false);
       return;
     }
+
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const found = await ensureOrderById(orderId);
+      if (cancelled) return;
+      if (found) setOrder(found);
+
+      const existing = getReviewByOrderId(orderId);
+      if (existing) {
+        alert('Reviews cannot be edited after they are submitted.');
+        navigate('/my/reviews', { replace: true });
+        return;
+      }
+      setLoading(false);
+    })();
 
     const onError = (ev: ErrorEvent) => {
       console.log('[REVIEW] GLOBAL ERROR', ev.message, ev.error);
@@ -43,6 +51,7 @@ export const ReviewWrite: React.FC = () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
     return () => {
+      cancelled = true;
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     };
@@ -114,6 +123,14 @@ export const ReviewWrite: React.FC = () => {
     alert('Review submitted!');
     navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24">

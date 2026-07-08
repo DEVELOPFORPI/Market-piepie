@@ -1,17 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById, saveOrderShippingInfo } from '@/utils/orderStorage';
+import { Order } from '@/types';
+import { ensureOrderById, saveOrderShippingInfo } from '@/utils/orderStorage';
 
 export const ShippingInfoInput: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const order = orderId ? getOrderById(orderId) : null;
-  const [recipientName, setRecipientName] = useState(order?.shippingInfo?.recipientName || '');
-  const [recipientPhone, setRecipientPhone] = useState(order?.shippingInfo?.recipientPhone || '');
-  const [address, setAddress] = useState(order?.shippingInfo?.address || '');
-  const [requestNote, setRequestNote] = useState(order?.shippingInfo?.requestNote || '');
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [requestNote, setRequestNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!orderId) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const found = await ensureOrderById(orderId);
+      if (cancelled) return;
+      setOrder(found ?? null);
+      if (found?.shippingInfo) {
+        setRecipientName(found.shippingInfo.recipientName || '');
+        setRecipientPhone(found.shippingInfo.recipientPhone || '');
+        setAddress(found.shippingInfo.address || '');
+        setRequestNote(found.shippingInfo.requestNote || '');
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [orderId]);
 
   const handleSubmit = async () => {
     if (!orderId || !recipientName || !recipientPhone || !address) {
@@ -36,6 +61,14 @@ export const ShippingInfoInput: React.FC = () => {
     alert('Shipping details sent.');
     navigate(-1);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

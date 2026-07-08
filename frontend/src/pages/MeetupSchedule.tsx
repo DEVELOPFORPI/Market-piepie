@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById, updateOrderMeetup, cancelOrderMeetup } from '@/utils/orderStorage';
+import { getOrderById, ensureOrderById, updateOrderMeetup, cancelOrderMeetup } from '@/utils/orderStorage';
 import { addMeetupConfirmedToChat, addMeetupUpdatedToChat, addMeetupCancelledToChat } from '@/utils/chatStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -59,6 +59,7 @@ export const MeetupSchedule: React.FC = () => {
   const [ampm, setAmpm] = useState<'AM' | 'PM' | ''>('');
   const [productTitle, setProductTitle] = useState('');
   const [hasExistingMeetup, setHasExistingMeetup] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const time = useMemo(() => {
     if (hour12 === '' || minute === '' || ampm === '') return '';
@@ -66,31 +67,41 @@ export const MeetupSchedule: React.FC = () => {
   }, [hour12, minute, ampm]);
 
   useEffect(() => {
-    if (orderId) {
-      const order = getOrderById(orderId);
-      if (order) {
-        setProductTitle(order.product.title);
-        if (order.meetupPlace) setPlace(order.meetupPlace);
-        if (order.meetupDate) setDate(order.meetupDate);
-        if (order.meetupTime) {
-          const p = time24ToParts(order.meetupTime);
-          if (p) {
-            setHour12(p.h12);
-            setMinute(p.min);
-            setAmpm(p.ap);
-          } else {
-            setHour12('');
-            setMinute('');
-            setAmpm('');
-          }
+    if (!orderId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const order = await ensureOrderById(orderId);
+      if (cancelled || !order) {
+        setLoading(false);
+        return;
+      }
+      setProductTitle(order.product.title);
+      if (order.meetupPlace) setPlace(order.meetupPlace);
+      if (order.meetupDate) setDate(order.meetupDate);
+      if (order.meetupTime) {
+        const p = time24ToParts(order.meetupTime);
+        if (p) {
+          setHour12(p.h12);
+          setMinute(p.min);
+          setAmpm(p.ap);
         } else {
           setHour12('');
           setMinute('');
           setAmpm('');
         }
-        setHasExistingMeetup(!!(order.meetupPlace || order.meetupDate || order.meetupTime));
+      } else {
+        setHour12('');
+        setMinute('');
+        setAmpm('');
       }
-    }
+      setHasExistingMeetup(!!(order.meetupPlace || order.meetupDate || order.meetupTime));
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [orderId]);
 
   const minDateStr = new Date().toISOString().split('T')[0];
@@ -176,6 +187,14 @@ export const MeetupSchedule: React.FC = () => {
       navigate(-1);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24" lang="en-US">

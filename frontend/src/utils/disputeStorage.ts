@@ -2,7 +2,8 @@ import { DisputeStatus, ORDER_STATUS_VALUE } from '@/types';
 import { getOrderById, getOrdersByProductId } from '@/utils/orderStorage';
 import { deleteProduct } from '@/utils/productStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
-import { syncDisputeToDB } from '@/utils/dbSync';
+import { syncDisputeToDB, syncDisputeStatusToDB, syncDisputesFromDB } from '@/utils/dbSync';
+import { getCurrentUserId } from '@/utils/authStorage';
 
 const DISPUTES_KEY = 'myDisputes';
 
@@ -38,6 +39,15 @@ export const getDisputeById = (disputeId: string): Dispute | undefined => {
 
 export const getDisputeByOrderId = (orderId: string): Dispute | undefined => {
   return getDisputes().find((d) => d.orderId === orderId);
+};
+
+/** 로컬에 없으면 DB에서 분쟁 목록을 동기화한 뒤 반환 */
+export const ensureDisputeByOrderId = async (orderId: string): Promise<Dispute | undefined> => {
+  const local = getDisputeByOrderId(orderId);
+  if (local) return local;
+  const uid = getCurrentUserId();
+  if (uid) await syncDisputesFromDB(uid);
+  return getDisputeByOrderId(orderId);
 };
 
 /** True if product has an open dispute order (RESOLVED disputes excluded) */
@@ -85,7 +95,16 @@ export const setDisputeAdminResponse = (disputeId: string, adminResponse: string
   window.dispatchEvent(new Event('disputesChanged'));
 };
 
-export const updateDisputeStatus = (disputeId: string, status: DisputeStatus, adminResponse?: string) => {
+export const updateDisputeStatus = async (
+  disputeId: string,
+  status: DisputeStatus,
+  adminResponse?: string,
+): Promise<boolean> => {
+  if (status === 'IN_REVIEW' || status === 'RESOLVED') {
+    const ok = await syncDisputeStatusToDB(disputeId, status, adminResponse);
+    if (!ok) return false;
+  }
+
   const disputes = getDisputes();
   const dispute = disputes.find((d) => d.id === disputeId);
   if (dispute) {
@@ -103,7 +122,9 @@ export const updateDisputeStatus = (disputeId: string, status: DisputeStatus, ad
     }
     setItem(DISPUTES_KEY, JSON.stringify(disputes));
     window.dispatchEvent(new Event('disputesChanged'));
+    return true;
   }
+  return false;
 };
 
 export const deleteDispute = (disputeId: string) => {

@@ -6,14 +6,14 @@ import { KYCBadge } from '@/components/common/KYCBadge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Post, Comment } from '@/types';
 import { maskSensitiveContent } from '@/utils/contentFilter';
-import { getPostById, deleteUserPost, getCommentsByPostId, addComment, deleteComment, buildCommentTree } from '@/utils/communityStorage';
+import { ensurePostById, deleteUserPost, getCommentsByPostId, addComment, deleteComment, buildCommentTree } from '@/utils/communityStorage';
 import { getMyUser, resolveDisplayNickname } from '@/utils/profileStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
 import { syncCommentsFromDB } from '@/utils/dbSync';
 import { getDisputeVoteCounts, getMyDisputeVote, setDisputeVote } from '@/utils/disputePostVoteStorage';
 import { getPostViewCount, incrementPostViewCount } from '@/utils/postViewStorage';
-import { getDisputeByOrderId } from '@/utils/disputeStorage';
+import { getDisputeByOrderId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
@@ -87,6 +87,8 @@ export const PostDetail: React.FC = () => {
   const [disputeVoteCounts, setDisputeVoteCounts] = useState({ likeCount: 0, dislikeCount: 0 });
   const [myDisputeVote, setMyDisputeVote] = useState<'like' | 'dislike' | null>(null);
   const [viewCount, setViewCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
 
   const isMine = post?.author.id === getCurrentUserId();
   const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
@@ -95,11 +97,10 @@ export const PostDetail: React.FC = () => {
   /** Seller cannot edit/delete dispute post while dispute is open */
   const isSellerBlockedFromEdit =
     isDisputePost &&
-    post?.orderId &&
-    (() => {
-      const dispute = getDisputeByOrderId(post.orderId!);
-      return dispute && dispute.status !== 'RESOLVED' && dispute.sellerId === getCurrentUserId();
-    })();
+    !!post?.orderId &&
+    linkedDisputeStatus !== undefined &&
+    linkedDisputeStatus !== 'RESOLVED' &&
+    getDisputeByOrderId(post.orderId)?.sellerId === getCurrentUserId();
   /** Auto-created dispute posts (dispute + orderId) cannot be edited or deleted */
   const isAutoCreatedDisputePost = isDisputePost && !!post?.orderId;
   const canEditOrDeletePost = isMine && !isSellerBlockedFromEdit && !isAutoCreatedDisputePost;
@@ -142,9 +143,21 @@ export const PostDetail: React.FC = () => {
     return () => window.removeEventListener('disputePostVotesChanged', onDisputeVotesChanged);
   }, [id]);
 
-  const loadPost = () => {
-    const found = getPostById(id);
-    if (found) setPost(found);
+  const loadPost = async () => {
+    if (!id) return;
+    const found = await ensurePostById(id);
+    if (found) {
+      setPost(found);
+      if (found.orderId) {
+        const dispute = await ensureDisputeByOrderId(found.orderId);
+        setLinkedDisputeStatus(dispute?.status);
+      } else {
+        setLinkedDisputeStatus(undefined);
+      }
+    } else {
+      setPost(null);
+    }
+    setLoading(false);
   };
 
   const loadComments = () => {
@@ -152,15 +165,23 @@ export const PostDetail: React.FC = () => {
   };
 
   useEffect(() => {
-    loadPost();
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void loadPost();
     loadComments();
     // DB에서 최신 댓글 동기화 (다른 유저가 단 댓글 반영)
-    if (id) {
-      syncCommentsFromDB(id).then(() => loadComments());
-    }
+    syncCommentsFromDB(id).then(() => loadComments());
 
+    const onPostsChanged = () => { void loadPost(); };
     window.addEventListener('commentsChanged', loadComments);
-    return () => window.removeEventListener('commentsChanged', loadComments);
+    window.addEventListener('postsChanged', onPostsChanged);
+    return () => {
+      window.removeEventListener('commentsChanged', loadComments);
+      window.removeEventListener('postsChanged', onPostsChanged);
+    };
   }, [id]);
 
   useEffect(() => {
@@ -217,6 +238,14 @@ export const PostDetail: React.FC = () => {
       navigate('/community', { replace: true });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   if (!post) {
     return (

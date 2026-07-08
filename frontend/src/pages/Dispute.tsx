@@ -3,10 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Badge } from '@/components/common/Badge';
 import { ORDER_STATUS_VALUE, POST_CATEGORY_VALUE } from '@/types';
-import { getOrderById, updateOrderStatus } from '@/utils/orderStorage';
+import { ensureOrderById, updateOrderStatus } from '@/utils/orderStorage';
 import {
   createDispute,
-  getDisputeByOrderId,
+  ensureDisputeByOrderId,
   updateDisputeStatus,
   Dispute as DisputeType,
 } from '@/utils/disputeStorage';
@@ -17,6 +17,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { labelTradeMethod } from '@/locale/enUI';
+import { Order } from '@/types';
 
 const disputeReasons = [
   'Listing mismatch',
@@ -37,8 +38,35 @@ export const Dispute: React.FC = () => {
   const [evidence, setEvidence] = useState<string[]>([]);
   const [dispute, setDispute] = useState<DisputeType | null>(null);
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const [order, setOrder] = useState<Order | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
 
-  const order = orderId ? getOrderById(orderId) : undefined;
+  useEffect(() => {
+    if (!orderId) {
+      setOrder(undefined);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const [foundOrder, existingDispute] = await Promise.all([
+        ensureOrderById(orderId),
+        ensureDisputeByOrderId(orderId),
+      ]);
+      if (cancelled) return;
+      setOrder(foundOrder);
+      if (existingDispute) {
+        setDispute(existingDispute);
+        setReason(existingDispute.reason);
+        setAction(existingDispute.action);
+        setDescription(existingDispute.description);
+        setEvidence(existingDispute.evidence || []);
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [orderId]);
 
   useEffect(() => {
     if (order) {
@@ -49,18 +77,6 @@ export const Dispute: React.FC = () => {
       }
     }
   }, [order, orderId, navigate]);
-
-  useEffect(() => {
-    if (orderId) {
-      const existing = getDisputeByOrderId(orderId);
-      if (existing) {
-        setDispute(existing);
-        setReason(existing.reason);
-        setAction(existing.action);
-        setDescription(existing.description);
-      }
-    }
-  }, [orderId]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -156,12 +172,20 @@ export const Dispute: React.FC = () => {
     setDispute(newDispute);
   };
 
-  const handleResolve = () => {
+  const handleResolve = async () => {
     if (!dispute) return;
-    if (confirm('Mark this dispute as resolved?')) {
-      updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
-      setDispute({ ...dispute, status: 'RESOLVED', resolvedAt: new Date().toISOString() });
+    if (!confirm('Mark this dispute as resolved?')) return;
+    const ok = await updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
+    if (!ok) {
+      alert('Could not update dispute status. Check your connection and try again.');
+      return;
     }
+    setDispute({
+      ...dispute,
+      status: 'RESOLVED',
+      resolvedAt: new Date().toISOString(),
+      adminResponse: 'Resolved by mutual agreement.',
+    });
   };
 
   const statusVariant = {
@@ -175,6 +199,22 @@ export const Dispute: React.FC = () => {
     IN_REVIEW: 'In review',
     RESOLVED: 'Resolved',
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Order not found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24">
@@ -411,7 +451,7 @@ export const Dispute: React.FC = () => {
         ) : dispute && dispute.status === 'OPEN' ? (
           <div className="space-y-2">
             <button
-              onClick={handleResolve}
+              onClick={() => void handleResolve()}
               className="w-full px-4 py-3 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
@@ -420,8 +460,22 @@ export const Dispute: React.FC = () => {
             <button
               onClick={() => {
                 if (!dispute) return;
-                updateDisputeStatus(dispute.id, 'IN_REVIEW');
-                setDispute({ ...dispute, status: 'IN_REVIEW' });
+                void (async () => {
+                  const ok = await updateDisputeStatus(
+                    dispute.id,
+                    'IN_REVIEW',
+                    'Moderator review requested by a party.',
+                  );
+                  if (!ok) {
+                    alert('Could not request review. Check your connection and try again.');
+                    return;
+                  }
+                  setDispute({
+                    ...dispute,
+                    status: 'IN_REVIEW',
+                    adminResponse: 'Moderator review requested by a party.',
+                  });
+                })();
               }}
               className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium"
             >
@@ -430,7 +484,7 @@ export const Dispute: React.FC = () => {
           </div>
         ) : dispute && dispute.status === 'IN_REVIEW' ? (
           <button
-            onClick={handleResolve}
+            onClick={() => void handleResolve()}
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
             style={{ backgroundColor: '#00A8A3' }}
           >

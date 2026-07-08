@@ -12,7 +12,7 @@ import {
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addSellerMeetupStartedToChat, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
-import { getOrderById, getOrders, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, acceptOrderMeetup, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, acceptOrderMeetup, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -71,6 +71,34 @@ function findFirstUnreadIndex(
     return msgs.findIndex((m) => m.senderId !== myId);
   }
   return msgs.length > 0 ? 0 : -1;
+}
+
+function resolveMeetupBannerInfo(
+  order: Order | null,
+  msgs: ChatMessage[],
+): { place: string; date: string; time: string; sellerId: string } | null {
+  if (order?.meetupPlace && order?.meetupDate && order?.meetupTime) {
+    return {
+      place: order.meetupPlace,
+      date: order.meetupDate,
+      time: order.meetupTime,
+      sellerId: order.seller.id,
+    };
+  }
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const msg = msgs[i];
+    if (msg.type !== 'meetup_confirmed') continue;
+    if (displayChatMessageContent(msg.content) === CHAT_MSG_SELLER_MEETUP_STARTED) continue;
+    if (msg.meetupPlace && msg.meetupDate && msg.meetupTime) {
+      return {
+        place: msg.meetupPlace,
+        date: msg.meetupDate,
+        time: msg.meetupTime,
+        sellerId: msg.senderId,
+      };
+    }
+  }
+  return null;
 }
 
 export const ChatRoom: React.FC = () => {
@@ -174,6 +202,17 @@ export const ChatRoom: React.FC = () => {
       checkProductDeleted();
     }
   }, [roomId, navigate]);
+
+  // Linked order: DB에서 최신 약속/상태 동기화 (구매자 기기에 meetup 필드 없던 문제)
+  useEffect(() => {
+    if (!roomId) return;
+    const r = getChatRoom(roomId);
+    const oid = orderIdFromQuery || r?.order?.id;
+    if (!oid) return;
+    void ensureOrderById(oid).then(() => {
+      setRoom(getChatRoom(roomId));
+    });
+  }, [roomId, orderIdFromQuery]);
 
   // After meetup flow: refresh room and messages
   useEffect(() => {
@@ -375,6 +414,7 @@ export const ChatRoom: React.FC = () => {
 
 
   const displayMessages = messages;
+  const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;
@@ -717,16 +757,16 @@ export const ChatRoom: React.FC = () => {
           );
         })()}
 
-        {currentOrder && currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime && (
+        {meetupBannerInfo && (
           <div className="bg-teal-50 border-t border-teal-200 px-4 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
               <p className="text-sm font-medium text-teal-800 flex-1 truncate">
                 {CHAT_MSG_PRODUCT_RESERVED}
                 {' · '}
-                {currentOrder.meetupPlace}
+                {meetupBannerInfo.place}
                 {' · '}
-                {[currentOrder.meetupDate, currentOrder.meetupTime].filter(Boolean).join(' ')}
+                {[meetupBannerInfo.date, meetupBannerInfo.time].filter(Boolean).join(' ')}
               </p>
               <button
                 type="button"
@@ -734,9 +774,12 @@ export const ChatRoom: React.FC = () => {
                   setMeetupDetailMessage({
                     id: 'banner',
                     content: CHAT_MSG_PRODUCT_RESERVED,
-                    senderId: currentOrder.seller.id,
+                    senderId: meetupBannerInfo.sellerId,
                     timestamp: new Date().toISOString(),
                     type: 'meetup_confirmed',
+                    meetupPlace: meetupBannerInfo.place,
+                    meetupDate: meetupBannerInfo.date,
+                    meetupTime: meetupBannerInfo.time,
                   });
                 }}
                 className="text-xs font-medium text-teal-600 underline hover:text-teal-700 whitespace-nowrap"

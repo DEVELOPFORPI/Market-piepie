@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById } from '@/utils/orderStorage';
+import { Order } from '@/types';
+import { ensureOrderById } from '@/utils/orderStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 
 export const ShippingInfoRequest: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const order = orderId ? getOrderById(orderId) : null;
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showFullAddress, setShowFullAddress] = useState(false);
+
+  useEffect(() => {
+    if (!orderId) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const found = await ensureOrderById(orderId);
+      if (!cancelled) {
+        setOrder(found ?? null);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [orderId]);
 
   const hasShippingInfo = !!(
     order?.shippingInfo?.recipientName &&
@@ -32,6 +52,14 @@ export const ShippingInfoRequest: React.FC = () => {
   const handleShipping = () => {
     navigate(`/shipping/${orderId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Loading…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

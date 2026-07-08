@@ -12,7 +12,7 @@ import {
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { getMyUser } from '@/utils/profileStorage';
-import { syncOrderToDB, syncOrderStatusToDB } from '@/utils/dbSync';
+import { syncOrderToDB, syncOrderStatusToDB, syncOrderFromDB } from '@/utils/dbSync';
 import { addNotification } from '@/utils/notificationStorage';
 import { updateProductStatus } from '@/utils/productStorage';
 import { addPriceOfferToChat, addPriceOfferResultToChat, clearOrderFromRoom } from '@/utils/chatStorage';
@@ -122,6 +122,14 @@ export const getOrdersByProductId = (productId: string): Order[] => {
 
 export const getOrderById = (orderId: string): Order | undefined => {
   return getAllOrders().find((o) => o.id === orderId);
+};
+
+/** 로컬에 없으면 DB에서 주문 1건을 받아온 뒤 반환 */
+export const ensureOrderById = async (orderId: string): Promise<Order | undefined> => {
+  const local = getOrderById(orderId);
+  if (local) return local;
+  const fromDb = await syncOrderFromDB(orderId);
+  return fromDb ?? getOrderById(orderId);
 };
 
 export const mergeRemoteOrder = (remoteOrder: Order): void => {

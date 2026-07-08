@@ -4,7 +4,7 @@ import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory } from '@/locale/enUI';
-import { addUserPost, getPostById, updateUserPost, updateDisputePost, COMMUNITY_QUOTA_EXCEEDED_MESSAGE } from '@/utils/communityStorage';
+import { addUserPost, getPostById, ensurePostById, updateUserPost, updateDisputePost, COMMUNITY_QUOTA_EXCEEDED_MESSAGE } from '@/utils/communityStorage';
 import { getMyProducts } from '@/utils/productStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
@@ -48,8 +48,11 @@ export const PostWrite: React.FC = () => {
 
   // Edit: load post; auto dispute posts cannot be edited
   useEffect(() => {
-    if (postId) {
-      const existing = getPostById(postId);
+    if (!postId) return;
+    let cancelled = false;
+    void (async () => {
+      const existing = await ensurePostById(postId);
+      if (cancelled) return;
       if (existing) {
         if (existing.category === POST_CATEGORY_VALUE.DISPUTE && existing.orderId) {
           alert('Posts created from a trade dispute cannot be edited.');
@@ -65,7 +68,8 @@ export const PostWrite: React.FC = () => {
         alert('Post not found.');
         navigate('/community', { replace: true });
       }
-    }
+    })();
+    return () => { cancelled = true; };
   }, [postId, navigate]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
 import { Order, OrderStatus, ORDER_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
-import { getOrderById, updateOrderStatus, deleteOrder, confirmOrderCompletion } from '@/utils/orderStorage';
+import { getOrderById, ensureOrderById, updateOrderStatus, deleteOrder, confirmOrderCompletion } from '@/utils/orderStorage';
 import { ensureChatRoomForOrder, addTradeCompletedToChat, addPriceOfferResultToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { addNotification } from '@/utils/notificationStorage';
@@ -16,6 +16,7 @@ export const OrderTimeline: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
   const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
 
 
 
@@ -39,10 +40,16 @@ export const OrderTimeline: React.FC = () => {
 
 
 
-  const loadOrder = () => {
-    if (!orderId) return;
-    const found = getOrderById(orderId);
+  const loadOrder = async () => {
+    if (!orderId) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const found = await ensureOrderById(orderId);
     setOrder(found ? { ...found } : null);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -353,6 +360,14 @@ export const OrderTimeline: React.FC = () => {
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!order) {
     return (
