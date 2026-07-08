@@ -59,6 +59,20 @@ const DISPUTE_ELIGIBLE = new Set<OrderStatus>([
 
 const NEAR_BOTTOM_PX = 80;
 
+/** Price-offer accept/decline needs order rows in local cache (often missing until DB sync). */
+async function syncChatOfferOrders(roomId: string, extraOrderId?: string | null): Promise<void> {
+  const msgs = getMessages(roomId);
+  const r = getChatRoom(roomId);
+  const orderIds = new Set<string>();
+  for (const msg of msgs) {
+    if (msg.type === 'price_offer' && msg.orderId) orderIds.add(msg.orderId);
+  }
+  if (r?.order?.id) orderIds.add(r.order.id);
+  if (extraOrderId) orderIds.add(extraOrderId);
+  if (orderIds.size === 0) return;
+  await Promise.all([...orderIds].map((id) => ensureOrderById(id)));
+}
+
 function findFirstUnreadIndex(
   msgs: ChatMessage[],
   lastReadAt: string | undefined,
@@ -121,6 +135,7 @@ export const ChatRoom: React.FC = () => {
   const [buyerTab, setBuyerTab] = useState<BuyerChatTab>(BUYER_CHAT_TAB_VALUE.RECEIVE);
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const [ordersRevision, setOrdersRevision] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
@@ -203,6 +218,16 @@ export const ChatRoom: React.FC = () => {
     }
   }, [roomId, navigate]);
 
+  // Sync orders linked to price-offer messages so seller accept/decline buttons render
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    void syncChatOfferOrders(roomId, orderIdFromQuery).then(() => {
+      if (!cancelled) setOrdersRevision((n) => n + 1);
+    });
+    return () => { cancelled = true; };
+  }, [roomId, messages, orderIdFromQuery]);
+
   // Linked order: DB에서 최신 약속/상태 동기화 (구매자 기기에 meetup 필드 없던 문제)
   useEffect(() => {
     if (!roomId) return;
@@ -284,6 +309,9 @@ export const ChatRoom: React.FC = () => {
         if (after.length !== before) {
           setRoom(getChatRoom(roomId));
           setMessages(after);
+          void syncChatOfferOrders(roomId, orderIdFromQuery).then(() => {
+            setOrdersRevision((n) => n + 1);
+          });
         }
       } catch { /* polling error ignored */ }
       // 주문 상태 DB 폴링
@@ -295,9 +323,16 @@ export const ChatRoom: React.FC = () => {
           if (orderRes.ok) {
             const rows = await orderRes.json();
             if (Array.isArray(rows)) {
-              rows.forEach((row: any) => {
-                const local = getOrderById(String(row.id));
-                if (!local) return;
+              let ordersUpdated = false;
+              for (const row of rows) {
+                const orderId = String(row.id);
+                let local = getOrderById(orderId);
+                if (!local) {
+                  await ensureOrderById(orderId);
+                  local = getOrderById(orderId);
+                  ordersUpdated = true;
+                  if (!local) continue;
+                }
                 const dbStatus = String(row.status || '');
                 const dbMeetupPlace = row.meetup_place || row.meetup_location || '';
                 const dbMeetupDate = row.meetup_date || '';
@@ -337,8 +372,10 @@ export const ChatRoom: React.FC = () => {
                   if (dbMeetupTime) updated.meetupTime = dbMeetupTime;
                   console.log('[ORDERSYNC] merging', { orderId: row.id, newStatus: updated.status, meetupPlace: updated.meetupPlace });
                   mergeRemoteOrder(updated);
+                  ordersUpdated = true;
                 }
-              });
+              }
+              if (ordersUpdated) setOrdersRevision((n) => n + 1);
             }
           }
         }
@@ -414,6 +451,7 @@ export const ChatRoom: React.FC = () => {
 
 
   const displayMessages = messages;
+  void ordersRevision;
   const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
 
   const canOpenDispute = (order: Order | null): boolean => {
