@@ -71,32 +71,38 @@ export const getUserPosts = (): Post[] => {
   }
 };
 
-export const addUserPost = (post: Post): void => {
+export const addUserPost = async (post: Post): Promise<boolean> => {
+  const ok = await syncPostToDB(post);
+  if (!ok) return false;
   const posts = getUserPosts();
   const clone = JSON.parse(JSON.stringify(post)) as Post;
   posts.unshift(clone);
   setUserPostsWithQuotaRetry(posts, post.id);
   window.dispatchEvent(new Event('postsChanged'));
-  syncPostToDB(post);
+  return true;
 };
 
-export const updateUserPost = (post: Post): void => {
+export const updateUserPost = async (post: Post): Promise<boolean> => {
+  const ok = await syncPostToDB(post);
+  if (!ok) return false;
   const posts = getUserPosts();
   const idx = posts.findIndex((p) => p.id === post.id);
   if (idx >= 0) {
     posts[idx] = JSON.parse(JSON.stringify(post));
     setUserPostsWithQuotaRetry(posts, post.id);
     window.dispatchEvent(new Event('postsChanged'));
-    syncPostToDB(post);
   }
+  return true;
 };
 
-export const deleteUserPost = (postId: string): void => {
+export const deleteUserPost = async (postId: string): Promise<boolean> => {
+  const ok = await syncPostDeleteToDB(postId);
+  if (!ok) return false;
   const posts = getUserPosts().filter((p) => p.id !== postId);
   setUserPostsWithQuotaRetry(posts);
   deleteCommentsByPostId(postId);
   window.dispatchEvent(new Event('postsChanged'));
-  syncPostDeleteToDB(postId);
+  return true;
 };
 
 // --- Dispute posts ---
@@ -185,17 +191,19 @@ export const buildCommentTree = (flat: Comment[]): Comment[] => {
   return withReplies(undefined);
 };
 
-export const addComment = (postId: string, comment: Comment): void => {
-  const all = getAllComments();
-  if (!all[postId]) all[postId] = [];
-  all[postId].push(comment);
-  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
-  syncCommentToDB(postId, {
+export const addComment = async (postId: string, comment: Comment): Promise<boolean> => {
+  const ok = await syncCommentToDB(postId, {
     id: comment.id,
     authorId: comment.author?.id || '',
     content: comment.content,
     parentId: comment.parentId,
   });
+  if (!ok) return false;
+
+  const all = getAllComments();
+  if (!all[postId]) all[postId] = [];
+  all[postId].push(comment);
+  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
 
   const count = all[postId].length;
   const userPosts = getUserPosts();
@@ -212,6 +220,7 @@ export const addComment = (postId: string, comment: Comment): void => {
   }
 
   window.dispatchEvent(new Event('commentsChanged'));
+  return true;
 };
 
 /** Collect comment id and all nested reply ids to delete */
@@ -230,30 +239,32 @@ const collectCommentIdsToDelete = (comments: Comment[], targetId: string): Set<s
   return set;
 };
 
-export const deleteComment = (postId: string, commentId: string): void => {
+export const deleteComment = async (postId: string, commentId: string): Promise<boolean> => {
   const all = getAllComments();
-  if (all[postId]) {
-    const toDelete = collectCommentIdsToDelete(all[postId], commentId);
-    all[postId] = all[postId].filter((c) => !toDelete.has(c.id));
-    setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
-    toDelete.forEach((id) => syncCommentDeleteToDB(id));
+  if (!all[postId]) return false;
+  const toDelete = collectCommentIdsToDelete(all[postId], commentId);
+  const results = await Promise.all([...toDelete].map((id) => syncCommentDeleteToDB(id)));
+  if (results.some((ok) => !ok)) return false;
 
-    const count = all[postId].length;
-    const userPosts = getUserPosts();
-    const userPost = userPosts.find((p) => p.id === postId);
-    if (userPost) {
-      userPost.commentCount = count;
-      setItem(USER_POSTS_STORAGE_KEY, JSON.stringify(userPosts));
-    }
-    const disputePosts = getDisputePosts();
-    const disputePost = disputePosts.find((p) => p.id === postId);
-    if (disputePost) {
-      disputePost.commentCount = count;
-      setItem(DISPUTE_STORAGE_KEY, JSON.stringify(disputePosts));
-    }
+  all[postId] = all[postId].filter((c) => !toDelete.has(c.id));
+  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
 
-    window.dispatchEvent(new Event('commentsChanged'));
+  const count = all[postId].length;
+  const userPosts = getUserPosts();
+  const userPost = userPosts.find((p) => p.id === postId);
+  if (userPost) {
+    userPost.commentCount = count;
+    setItem(USER_POSTS_STORAGE_KEY, JSON.stringify(userPosts));
   }
+  const disputePosts = getDisputePosts();
+  const disputePost = disputePosts.find((p) => p.id === postId);
+  if (disputePost) {
+    disputePost.commentCount = count;
+    setItem(DISPUTE_STORAGE_KEY, JSON.stringify(disputePosts));
+  }
+
+  window.dispatchEvent(new Event('commentsChanged'));
+  return true;
 };
 
 const deleteCommentsByPostId = (postId: string): void => {

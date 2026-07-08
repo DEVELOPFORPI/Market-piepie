@@ -89,7 +89,7 @@ export const Dispute: React.FC = () => {
       alert('Could not upload images.');
       return;
     }
-    const newDispute = createDispute({
+    const newDispute = await createDispute({
       orderId,
       productTitle: order.product.title,
       productImage: order.product.images[0] || '/placeholder.jpg',
@@ -104,8 +104,12 @@ export const Dispute: React.FC = () => {
       description,
       evidence: evidenceToSave,
     });
+    if (!newDispute) {
+      alert('Could not file dispute. Check your connection and try again.');
+      return;
+    }
 
-    updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, `Dispute filed: ${reason}`);
+    await updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, `Dispute filed: ${reason}`);
 
     const currentUserId = getCurrentUserId();
     const otherUser = order.buyer.id === currentUserId ? order.seller : order.buyer;

@@ -42,7 +42,7 @@ export const ReceiveConfirm: React.FC = () => {
     setMeetupTime(o.meetupTime);
   }, [orderId, navigate]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isBuyer) {
       alert('Only the buyer can confirm receipt.');
       return;
@@ -60,18 +60,18 @@ export const ReceiveConfirm: React.FC = () => {
 
     // eslint-disable-next-line no-console
     console.log('[ReceiveConfirm] confirm receive', { orderId, condition, notes });
-    updateOrderStatus(orderId, ORDER_STATUS_VALUE.RECEIVED, 'Receipt confirmed');
-    if (o) addReceiptConfirmedToChat(o);
-    const completedOrder = confirmOrderCompletion(orderId, 'buyer');
+    await updateOrderStatus(orderId, ORDER_STATUS_VALUE.RECEIVED, 'Receipt confirmed');
+    if (o) void addReceiptConfirmedToChat(o);
+    const completedOrder = await confirmOrderCompletion(orderId, 'buyer');
     const isShare = o && (o.proposedPrice === 0 || o.product?.isFreeShare || o.product?.price === 0);
     if (isShare) {
-      const completed = completeShareOrderOnReceive(orderId);
-      if (completed) addTradeCompletedToChat(completed);
+      const completed = await completeShareOrderOnReceive(orderId);
+      if (completed) void addTradeCompletedToChat(completed);
       alert('Receipt confirmed. You can leave a review.');
       navigate(`/review/${orderId}`, { replace: true });
     } else {
       if (completedOrder?.status === ORDER_STATUS_VALUE.COMPLETE) {
-        addTradeCompletedToChat(completedOrder);
+        void addTradeCompletedToChat(completedOrder);
         alert('Receipt confirmed. You can leave a review.');
         navigate(`/review/${orderId}`, { replace: true });
       } else {

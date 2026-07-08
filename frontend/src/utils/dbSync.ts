@@ -4,8 +4,9 @@
  * - 데이터 저장 시 localStorage + API 동시에 저장
  */
 import { api } from '@/utils/api';
-import { Product, Post, User, Order, ChatRoom, ChatMessage, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
+import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE } from '@/types';
 import { setItem, getItem } from '@/utils/heavyStorage';
+import { getMyUser } from '@/utils/profileStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
 
@@ -75,17 +76,15 @@ export async function syncProductsFromDB(): Promise<void> {
         try { return JSON.parse(getItem('all_products') || '[]'); } catch { return []; }
       })();
       const dbIds = new Set(dbProducts.map((p) => p.id));
-      const merged: Product[] = [];
-      for (const dbP of dbProducts) {
-        const localP = local.find((p) => p.id === dbP.id);
-        merged.push(localP ? { ...localP, status: dbP.status, seller: dbP.seller } : dbP);
-      }
+      const mergedMap = new Map<string, Product>();
+      dbProducts.forEach((p) => mergedMap.set(p.id, p));
       const myUserId = sessionStorage.getItem('currentUserId') || '';
-      const localOnly = local.filter((p) =>
-        !dbIds.has(p.id) && !deletedSet.has(p.id) && p.seller?.id === myUserId
-      );
-      merged.push(...localOnly);
-      setItem('all_products', JSON.stringify(merged));
+      local.forEach((p) => {
+        if (!dbIds.has(p.id) && !deletedSet.has(p.id) && p.seller?.id === myUserId) {
+          mergedMap.set(p.id, p);
+        }
+      });
+      setItem('all_products', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('productsChanged'));
     }
   } catch {
@@ -93,12 +92,11 @@ export async function syncProductsFromDB(): Promise<void> {
   }
 }
 
-/** 상품을 DB에 저장 */
-export async function syncProductToDB(product: Product): Promise<void> {
+/** 상품을 DB에 저장 — 성공 여부 반환 */
+export async function syncProductToDB(product: Product): Promise<boolean> {
   try {
-    // 판매자 먼저 저장 (FK: seller_id → users.id)
     await syncUserToDB(product.seller);
-    await api.post<unknown>('/api/products', {
+    const res = await api.post<unknown>('/api/products', {
       id: product.id,
       title: product.title,
       description: product.description,
@@ -113,27 +111,30 @@ export async function syncProductToDB(product: Product): Promise<void> {
       is_free_share: product.isFreeShare,
       allow_offer: product.allowOffer,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 상품 상태 업데이트 */
-export async function syncProductStatusToDB(productId: string, status: string): Promise<void> {
+export async function syncProductStatusToDB(productId: string, status: string): Promise<boolean> {
   try {
-    await api.patch(`/api/products/${productId}/status`, { status });
+    const res = await api.patch(`/api/products/${productId}/status`, { status });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 상품 삭제 */
-export async function syncProductDeleteToDB(productId: string): Promise<void> {
+export async function syncProductDeleteToDB(productId: string): Promise<boolean> {
   try {
     const res = await api.delete(`/api/products/${productId}`);
     if (res.ok) clearDeletedProductId(productId);
+    return res.ok;
   } catch {
-    // 오프라인 시 무시 — deleted_product_ids에 남아있어서 다음 sync에서도 필터됨
+    return false;
   }
 }
 
@@ -191,10 +192,9 @@ export async function syncPostsFromDB(): Promise<void> {
   }
 }
 
-/** 게시물을 DB에 저장 */
-export async function syncPostToDB(post: Post): Promise<void> {
+/** 게시물을 DB에 저장 — 성공 여부 반환 */
+export async function syncPostToDB(post: Post): Promise<boolean> {
   try {
-    // 작성자 먼저 저장 (FK 제약: author_id → users.id)
     await api.post('/api/users', {
       id: post.author.id,
       nickname: post.author.nickname || undefined,
@@ -206,7 +206,7 @@ export async function syncPostToDB(post: Post): Promise<void> {
       trade_count: post.author.tradeCount || 0,
       activity_region: post.author.activityRegion,
     });
-    await api.post('/api/posts', {
+    const res = await api.post('/api/posts', {
       id: post.id,
       title: post.title,
       content: post.content,
@@ -220,17 +220,19 @@ export async function syncPostToDB(post: Post): Promise<void> {
       order_id: post.orderId,
       attached_product_id: post.attachedProduct?.id,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 게시물 삭제 */
-export async function syncPostDeleteToDB(postId: string): Promise<void> {
+export async function syncPostDeleteToDB(postId: string): Promise<boolean> {
   try {
-    await api.delete(`/api/posts/${postId}`);
+    const res = await api.delete(`/api/posts/${postId}`);
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
@@ -267,11 +269,11 @@ function mapPostFromDB(row: Record<string, unknown>): Post {
 
 // ─── 주문 동기화 ──────────────────────────────────────────────
 
-/** 주문을 DB에 저장 (upsert) */
-export async function syncOrderToDB(order: Order): Promise<void> {
+/** 주문을 DB에 저장 (upsert) — 성공 여부 반환 */
+export async function syncOrderToDB(order: Order): Promise<boolean> {
   try {
     await Promise.all([syncUserToDB(order.buyer), syncUserToDB(order.seller)]);
-    await api.post('/api/orders', {
+    const res = await api.post('/api/orders', {
       id: order.id,
       product_id: order.product.id,
       buyer_id: order.buyer.id,
@@ -286,6 +288,7 @@ export async function syncOrderToDB(order: Order): Promise<void> {
       buyer_completed: order.buyerCompleted,
       seller_completed: order.sellerCompleted,
     });
+    if (!res.ok) return false;
     if (order.timeline?.length) {
       const last = order.timeline[order.timeline.length - 1];
       await api.post(`/api/orders/${order.id}/timeline`, {
@@ -294,20 +297,22 @@ export async function syncOrderToDB(order: Order): Promise<void> {
         description: last.description,
       });
     }
+    return true;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
-/** 주문 상태 업데이트 */
+/** 주문 상태 업데이트 — 성공 여부 반환 */
 export async function syncOrderStatusToDB(
   orderId: string,
   status: string,
   timelineEvent?: { id: string; type: string; description: string },
   extra?: { buyer_completed?: boolean; seller_completed?: boolean; meetup_location?: string; meetup_date?: string; meetup_time?: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await api.put(`/api/orders/${orderId}`, { status, ...extra });
+    const res = await api.put(`/api/orders/${orderId}`, { status, ...extra });
+    if (!res.ok) return false;
     if (timelineEvent) {
       await api.post(`/api/orders/${orderId}/timeline`, {
         id: timelineEvent.id,
@@ -315,12 +320,25 @@ export async function syncOrderStatusToDB(
         description: timelineEvent.description,
       });
     }
+    return true;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
-/** DB에서 내 주문 목록을 로드해 localStorage 갱신 (로컬 전용 주문 보존) */
+/** DB row + 로컬 캐시 병합 — 주문 필드는 DB 우선 */
+function mergeOrderDbPreferred(dbOrder: Order, local?: Order): Order {
+  if (!local) return dbOrder;
+  return {
+    ...dbOrder,
+    timeline: local.timeline?.length ? local.timeline : dbOrder.timeline,
+    product: local.product?.title ? local.product : dbOrder.product,
+    buyer: local.buyer?.nickname ? local.buyer : dbOrder.buyer,
+    seller: local.seller?.nickname ? local.seller : dbOrder.seller,
+  };
+}
+
+/** DB에서 내 주문 목록을 로드해 localStorage 갱신 (DB-first) */
 export async function syncOrdersFromDB(userId: string): Promise<void> {
   if (!userId) return;
   try {
@@ -333,43 +351,14 @@ export async function syncOrdersFromDB(userId: string): Promise<void> {
           return raw ? JSON.parse(raw) : [];
         } catch { return []; }
       })();
-      const mergedMap = new Map(existing.map((o) => [o.id, o]));
+      const existingMap = new Map(existing.map((o) => [o.id, o]));
+      const mergedMap = new Map<string, Order>();
       rows.forEach((row) => {
         const id = String(row.id);
-        const local = mergedMap.get(id);
-        if (local) {
-          const dbStatus = String(row.status || '');
-          const dbBuyerCompleted = Boolean(row.buyer_completed);
-          const dbSellerCompleted = Boolean(row.seller_completed);
-          if (dbBuyerCompleted && !local.buyerCompleted) local.buyerCompleted = true;
-          if (dbSellerCompleted && !local.sellerCompleted) local.sellerCompleted = true;
-          const statusOrder = [
-            ORDER_STATUS_VALUE.PENDING_OFFER,
-            ORDER_STATUS_VALUE.ACCEPTED,
-            ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
-            ORDER_STATUS_VALUE.MEETUP_SET,
-            ORDER_STATUS_VALUE.SHIPPED,
-            ORDER_STATUS_VALUE.DELIVERED,
-            ORDER_STATUS_VALUE.RECEIVED,
-            ORDER_STATUS_VALUE.COMPLETE,
-          ];
-          if (dbStatus === ORDER_STATUS_VALUE.DISPUTE) {
-            local.status = ORDER_STATUS_VALUE.DISPUTE;
-          } else {
-            const localIdx = statusOrder.indexOf(local.status as any);
-            const dbIdx = statusOrder.indexOf(dbStatus as any);
-            if (dbIdx > localIdx) local.status = dbStatus as Order['status'];
-          }
-          if (local.buyerCompleted && local.sellerCompleted && local.status !== ORDER_STATUS_VALUE.COMPLETE) {
-            local.status = ORDER_STATUS_VALUE.COMPLETE;
-          }
-          if (!local.meetupPlace && row.meetup_place) local.meetupPlace = String(row.meetup_place);
-          if (!local.meetupDate && row.meetup_date) local.meetupDate = String(row.meetup_date);
-          if (!local.meetupTime && row.meetup_time) local.meetupTime = String(row.meetup_time);
-          mergedMap.set(id, local);
-        } else {
-          mergedMap.set(id, mapOrderFromDB(row));
-        }
+        mergedMap.set(id, mergeOrderDbPreferred(mapOrderFromDB(row), existingMap.get(id)));
+      });
+      existing.forEach((o) => {
+        if (!mergedMap.has(o.id)) mergedMap.set(o.id, o);
       });
       setItem('all_orders', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('ordersChanged'));
@@ -431,34 +420,37 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
 
 // ─── 채팅 동기화 ──────────────────────────────────────────────
 
-/** 채팅방을 DB에 저장 */
-export async function syncChatRoomToDB(room: ChatRoom): Promise<void> {
+/** 채팅방을 DB에 저장 — 성공 여부 반환 (DB-first) */
+export async function syncChatRoomToDB(room: ChatRoom): Promise<boolean> {
   try {
-    // 구매자/판매자 먼저 저장 (FK: buyer_id, seller_id → users.id)
     const syncUsers: Promise<void>[] = [];
-    if (room.buyerInfo) { syncUsers.push(syncUserToDB(room.buyerInfo)); }
-    if (room.sellerInfo) { syncUsers.push(syncUserToDB(room.sellerInfo)); }
-
-
+    if (room.buyerInfo) syncUsers.push(syncUserToDB(room.buyerInfo));
+    if (room.sellerInfo) syncUsers.push(syncUserToDB(room.sellerInfo));
     if (syncUsers.length) await Promise.all(syncUsers);
-    await api.post('/api/chat-rooms', {
+
+    const res = await api.post('/api/chat-rooms', {
       id: room.id,
       buyer_id: room.buyerId,
       seller_id: room.sellerId,
       product_id: room.product?.id,
       order_id: room.order?.id,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
-/** 메시지를 DB에 저장 */
-export async function syncMessageToDB(roomId: string, message: ChatMessage): Promise<void> {
+/** 메시지를 DB에 저장 — 성공 여부 반환 (DB-first) */
+export async function syncMessageToDB(roomId: string, message: ChatMessage): Promise<boolean> {
   try {
-    // 채팅방이 DB에 없으면 메시지도 실패하므로 송신자를 먼저 저장
-    // (sender_id → users.id FK)
-    await api.post(`/api/chat-rooms/${roomId}/messages`, {
+    if (message.senderId && message.senderId !== 'system') {
+      const myUser = getMyUser();
+      if (myUser?.id === message.senderId) {
+        await syncUserToDB(myUser);
+      }
+    }
+    const res = await api.post(`/api/chat-rooms/${roomId}/messages`, {
       id: message.id,
       sender_id: message.senderId,
       content: message.content,
@@ -472,12 +464,28 @@ export async function syncMessageToDB(roomId: string, message: ChatMessage): Pro
       meetup_date: message.meetupDate,
       meetup_time: message.meetupTime,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
-/** DB에서 내 채팅방 목록을 로드해 localStorage 갱신 */
+/** DB row + 로컬 캐시 병합 — 메타데이터는 DB 우선 */
+function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
+  if (!local) return dbRoom;
+  return {
+    ...dbRoom,
+    messages: local.messages?.length ? local.messages : dbRoom.messages,
+    readStatus: local.readStatus ?? dbRoom.readStatus,
+    lastReadAt: local.lastReadAt ?? dbRoom.lastReadAt,
+    order: local.order ?? dbRoom.order,
+    leftUserIds: local.leftUserIds ?? dbRoom.leftUserIds,
+    buyerInfo: local.buyerInfo ?? dbRoom.buyerInfo,
+    sellerInfo: local.sellerInfo ?? dbRoom.sellerInfo,
+  };
+}
+
+/** DB에서 내 채팅방 목록을 로드해 localStorage 갱신 (DB-first) */
 export async function syncChatRoomsFromDB(userId: string): Promise<void> {
   if (!userId) return;
   try {
@@ -488,33 +496,15 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
         try { return JSON.parse(getItem('all_chatrooms') || '[]'); } catch { return []; }
       })();
       const existingMap = new Map(existing.map((r) => [r.id, r]));
-      // Keep rooms that exist only locally (not yet in API / failed sync) — old logic dropped them entirely
-      const mergedMap = new Map<string, ChatRoom>(existingMap);
+      const mergedMap = new Map<string, ChatRoom>();
       rows.forEach((row) => {
         const id = String(row.id);
         const dbRoom = mapChatRoomFromDB(row);
-        const local = existingMap.get(id);
-        if (local) {
-          if (dbRoom.otherUser && dbRoom.otherUser.nickname && (!local.otherUser || !local.otherUser.nickname)) {
-            local.otherUser = dbRoom.otherUser;
-          }
-          if (!local.sellerInfo && dbRoom.otherUser && local.sellerId !== userId) {
-            local.sellerInfo = dbRoom.otherUser;
-          }
-          if (!local.buyerInfo && dbRoom.otherUser && local.buyerId !== userId) {
-            local.buyerInfo = dbRoom.otherUser;
-          }
-          if (!local.product && dbRoom.product) {
-            local.product = dbRoom.product;
-          }
-          if (dbRoom.lastMessage && new Date(dbRoom.lastMessageTime) > new Date(local.lastMessageTime)) {
-            local.lastMessage = dbRoom.lastMessage;
-            local.lastMessageTime = dbRoom.lastMessageTime;
-          }
-          mergedMap.set(id, local);
-        } else {
-          mergedMap.set(id, dbRoom);
-        }
+        mergedMap.set(id, mergeRoomDbPreferred(dbRoom, existingMap.get(id)));
+      });
+      // 아직 DB에 없는 로컬 전용 방(생성 직후 등)은 캐시로 유지
+      existing.forEach((room) => {
+        if (!mergedMap.has(room.id)) mergedMap.set(room.id, room);
       });
       setItem('all_chatrooms', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('chatRoomsChanged'));
@@ -549,9 +539,8 @@ function mapChatMessageFromDB(row: Record<string, unknown>): ChatMessage {
 }
 
 /**
- * 특정 채팅방의 메시지를 DB에서 받아 로컬(localStorage)에 병합.
- * 방이 로컬에 없으면 (userId 제공 시) 방 목록을 먼저 동기화한다.
- * DB가 원본, 로컬은 캐시 — 알림만 오고 채팅이 비어 보이는 문제 해결용.
+ * 특정 채팅방의 메시지를 DB에서 받아 로컬(localStorage)에 반영.
+ * DB가 원본, 로컬은 캐시.
  */
 export async function syncRoomMessagesFromDB(roomId: string, userId?: string): Promise<void> {
   if (!roomId) return;
@@ -571,24 +560,16 @@ export async function syncRoomMessagesFromDB(roomId: string, userId?: string): P
     const room = rooms.find((r) => r.id === roomId);
     if (!room) return;
 
-    if (!room.messages) room.messages = [];
-    const localIds = new Set(room.messages.map((m) => m.id));
-    let added = false;
-    res.data.forEach((row) => {
-      const msg = mapChatMessageFromDB(row);
-      if (!localIds.has(msg.id)) {
-        room.messages!.push(msg);
-        added = true;
-      }
-    });
-    if (!added) return;
+    const dbMessages = res.data.map(mapChatMessageFromDB);
+    dbMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    room.messages = dbMessages;
 
-    room.messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const last = room.messages[room.messages.length - 1];
-    if (last && new Date(last.timestamp) >= new Date(room.lastMessageTime || 0)) {
+    const last = dbMessages[dbMessages.length - 1];
+    if (last) {
       room.lastMessage = last.images && last.images.length > 0 ? (last.content || 'Photo') : last.content;
       room.lastMessageTime = last.timestamp;
     }
+
     setItem('all_chatrooms', JSON.stringify(rooms));
     window.dispatchEvent(new Event('chatRoomsChanged'));
   } catch {
@@ -668,33 +649,35 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
 // ─── 댓글 동기화 ──────────────────────────────────────────────
 
-/** 댓글을 DB에 저장 */
+/** 댓글을 DB에 저장 — 성공 여부 반환 */
 export async function syncCommentToDB(
   postId: string,
   comment: { id: string; authorId: string; content: string; parentId?: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await api.post(`/api/posts/${postId}/comments`, {
+    const res = await api.post(`/api/posts/${postId}/comments`, {
       id: comment.id,
       author_id: comment.authorId,
       content: comment.content,
       parent_id: comment.parentId,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 댓글 삭제 */
-export async function syncCommentDeleteToDB(commentId: string): Promise<void> {
+export async function syncCommentDeleteToDB(commentId: string): Promise<boolean> {
   try {
-    await api.delete(`/api/comments/${commentId}`);
+    const res = await api.delete(`/api/comments/${commentId}`);
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
-/** DB에서 게시물의 댓글을 로드 */
+/** DB에서 게시물의 댓글을 로드 (DB-first) */
 export async function syncCommentsFromDB(postId: string): Promise<void> {
   try {
     const res = await api.get<Record<string, unknown>[]>(`/api/posts/${postId}/comments`);
@@ -721,15 +704,9 @@ export async function syncCommentsFromDB(postId: string): Promise<void> {
         parentId: (row.parent_id as string | undefined) || undefined,
         createdAt: String(row.created_at || new Date().toISOString()),
       }));
-      // community_comments는 heavyStorage에 저장됨
       const raw = getItem('community_comments');
       const all: Record<string, unknown[]> = raw ? JSON.parse(raw) : {};
-      const localList = Array.isArray(all[postId]) ? (all[postId] as Record<string, unknown>[]) : [];
-      // 로컬과 DB를 id 기준으로 병합 (DB 데이터를 우선하되 로컬에만 있는 것도 유지)
-      const byId = new Map<string, Record<string, unknown>>();
-      for (const c of localList) byId.set(String((c as { id: unknown }).id || ''), c);
-      for (const c of dbComments) byId.set(c.id, c);
-      all[postId] = Array.from(byId.values()).sort((a, b) => {
+      all[postId] = dbComments.sort((a, b) => {
         const ta = new Date(String((a as { createdAt?: string }).createdAt || 0)).getTime();
         const tb = new Date(String((b as { createdAt?: string }).createdAt || 0)).getTime();
         return ta - tb;
@@ -776,17 +753,56 @@ export async function syncReviewToDB(review: {
   }
 }
 
+/** DB에서 받은 리뷰 로드 (DB-first) */
+export async function syncReviewsFromDB(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const res = await api.get<Record<string, unknown>[]>(`/api/reviews?reviewee_id=${userId}`);
+    if (!res.ok || !Array.isArray(res.data)) return;
+    const reviews = res.data.map((row) => {
+      const reviewer = (row.reviewer as Record<string, unknown>) || {};
+      return {
+        id: String(row.id),
+        orderId: String(row.order_id || ''),
+        rating: Number(row.rating || 0),
+        tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+        comment: String(row.comment || ''),
+        productTitle: String(row.product_title || ''),
+        productImage: String(row.product_image || ''),
+        createdAt: String(row.created_at || new Date().toISOString()),
+        reviewer: {
+          id: String(reviewer.id || row.reviewer_id || ''),
+          nickname: String(reviewer.nickname || ''),
+          profileImage: reviewer.profile_image as string | undefined,
+          kycStatus: 'verified' as const,
+          trustScore: 0,
+          rating: 0,
+          tradeCount: 0,
+        },
+      };
+    });
+    const map: Record<string, unknown[]> = (() => {
+      try { return JSON.parse(getItem('all_received_reviews') || '{}'); } catch { return {}; }
+    })();
+    map[userId] = reviews;
+    setItem('all_received_reviews', JSON.stringify(map));
+    window.dispatchEvent(new Event('reviewsChanged'));
+  } catch {
+    // ignore
+  }
+}
+
 // ─── 분쟁 동기화 ─────────────────────────────────────────────
 
-/** 분쟁을 DB에 저장 */
+/** 분쟁을 DB에 저장 — 성공 여부 반환 */
 export async function syncDisputeToDB(dispute: {
   id: string; orderId: string; productTitle: string; productImage: string;
   proposedPrice: number; tradeMethod: string; buyerId: string;
   sellerId: string; reason: string; action: string; description: string;
   evidence: string[];
-}): Promise<void> {
+}): Promise<boolean> {
   try {
-    await api.post('/api/disputes', {
+    const res = await api.post('/api/disputes', {
       id: dispute.id,
       order_id: dispute.orderId,
       product_title: dispute.productTitle,
@@ -800,32 +816,82 @@ export async function syncDisputeToDB(dispute: {
       description: dispute.description,
       evidence: dispute.evidence,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
+  }
+}
+
+function mapDisputeFromDB(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    orderId: String(row.order_id || ''),
+    productTitle: String(row.product_title || ''),
+    productImage: String(row.product_image || ''),
+    proposedPrice: Number(row.proposed_price || 0),
+    tradeMethod: String(row.trade_method || ''),
+    buyerId: String(row.buyer_id || ''),
+    buyerNickname: String(row.buyer_nickname || ''),
+    sellerId: String(row.seller_id || ''),
+    sellerNickname: String(row.seller_nickname || ''),
+    reason: String(row.reason || ''),
+    action: String(row.action || ''),
+    description: String(row.description || ''),
+    evidence: Array.isArray(row.evidence) ? (row.evidence as string[]) : [],
+    status: String(row.status || 'OPEN') as 'OPEN' | 'IN_REVIEW' | 'RESOLVED',
+    createdAt: String(row.created_at || new Date().toISOString()),
+    resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
+    adminResponse: row.admin_response ? String(row.admin_response) : undefined,
+  };
+}
+
+/** DB에서 내 분쟁 목록 로드 (DB-first) */
+export async function syncDisputesFromDB(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const [buyerRes, sellerRes] = await Promise.all([
+      api.get<Record<string, unknown>[]>(`/api/disputes?buyer_id=${userId}`),
+      api.get<Record<string, unknown>[]>(`/api/disputes?seller_id=${userId}`),
+    ]);
+    const rows = [
+      ...(buyerRes.ok && Array.isArray(buyerRes.data) ? buyerRes.data : []),
+      ...(sellerRes.ok && Array.isArray(sellerRes.data) ? sellerRes.data : []),
+    ] as Record<string, unknown>[];
+    const byId = new Map<string, ReturnType<typeof mapDisputeFromDB>>();
+    rows.forEach((row) => {
+      const d = mapDisputeFromDB(row);
+      byId.set(d.id, d);
+    });
+    setItem('myDisputes', JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('disputesChanged'));
+  } catch {
+    // ignore
   }
 }
 
 // ─── 즐겨찾기 동기화 ─────────────────────────────────────────
 
-/** 즐겨찾기 추가 */
-export async function syncFavoriteAddToDB(userId: string, productId: string): Promise<void> {
+/** 즐겨찾기 추가 — 성공 여부 반환 */
+export async function syncFavoriteAddToDB(userId: string, productId: string): Promise<boolean> {
   try {
     if (!_userSyncedCache.has(userId)) {
       const uRes = await api.post('/api/users', { id: userId, kyc_status: 'unverified' }).catch(() => null);
       if (uRes && uRes.ok) _userSyncedCache.set(userId, JSON.stringify({ id: userId, kyc_status: 'unverified' }));
     }
-    await api.post('/api/favorites', { user_id: userId, product_id: productId });
+    const res = await api.post('/api/favorites', { user_id: userId, product_id: productId });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 즐겨찾기 삭제 */
-export async function syncFavoriteRemoveFromDB(userId: string, productId: string): Promise<void> {
+export async function syncFavoriteRemoveFromDB(userId: string, productId: string): Promise<boolean> {
   try {
-    await api.delete(`/api/favorites?user_id=${userId}&product_id=${productId}`);
+    const res = await api.delete(`/api/favorites?user_id=${userId}&product_id=${productId}`);
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
@@ -855,13 +921,13 @@ export async function syncFavoritesFromDB(userId: string): Promise<void> {
 export async function syncNotificationToDB(notification: {
   id: string; targetUserId: string; type: string;
   title: string; content: string; link?: string;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     if (!_userSyncedCache.has(notification.targetUserId)) {
       const uRes = await api.post('/api/users', { id: notification.targetUserId, kyc_status: 'unverified' }).catch(() => null);
       if (uRes && uRes.ok) _userSyncedCache.set(notification.targetUserId, JSON.stringify({ id: notification.targetUserId, kyc_status: 'unverified' }));
     }
-    await api.post('/api/notifications', {
+    const res = await api.post('/api/notifications', {
       id: notification.id,
       target_user_id: notification.targetUserId,
       type: notification.type,
@@ -869,17 +935,19 @@ export async function syncNotificationToDB(notification: {
       content: notification.content,
       link: notification.link,
     });
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
 /** 알림 읽음 처리 DB 반영 */
-export async function syncNotificationReadToDB(notifId: string): Promise<void> {
+export async function syncNotificationReadToDB(notifId: string): Promise<boolean> {
   try {
-    await api.put(`/api/notifications/${notifId}/read`, {});
+    const res = await api.put(`/api/notifications/${notifId}/read`, {});
+    return res.ok;
   } catch {
-    // 오프라인 시 무시
+    return false;
   }
 }
 
@@ -905,12 +973,7 @@ export async function syncNotificationsFromDB(userId: string): Promise<void> {
       const existing: { id: string; read?: boolean; targetUserId?: string; [k: string]: unknown }[] = raw ? JSON.parse(raw) : [];
       // 현재 사용자 것만 DB에서 가져온 dbNotifs로 교체, 다른 사용자 것은 유지
       const otherUsersNotifs = existing.filter((n) => n.targetUserId !== userId);
-      const existingMap = new Map(existing.map((n) => [n.id, n]));
-      const merged = dbNotifs.map((n) => {
-        const local = existingMap.get(n.id);
-        return local?.read ? { ...n, read: true } : n;
-      });
-      const all = [...merged, ...otherUsersNotifs];
+      const all = [...dbNotifs, ...otherUsersNotifs];
       setItem('all_notifications', JSON.stringify(all));
       window.dispatchEvent(new Event('notificationsChanged'));
     }
@@ -1017,6 +1080,8 @@ export async function initDBSync(userId?: string): Promise<void> {
     tasks.push(syncChatRoomsFromDB(userId));
     tasks.push(syncFavoritesFromDB(userId));
     tasks.push(syncNotificationsFromDB(userId));
+    tasks.push(syncReviewsFromDB(userId));
+    tasks.push(syncDisputesFromDB(userId));
   }
   await Promise.all(tasks);
 }

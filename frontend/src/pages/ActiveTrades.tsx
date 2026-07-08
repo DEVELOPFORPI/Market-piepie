@@ -99,15 +99,16 @@ export const ActiveTrades: React.FC = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm('Confirm trade completion?')) {
-                const updated = confirmOrderCompletion(order.id, isSeller ? 'seller' : 'buyer');
+              void (async () => {
+                if (!confirm('Confirm trade completion?')) return;
+                const updated = await confirmOrderCompletion(order.id, isSeller ? 'seller' : 'buyer');
                 if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                  addTradeCompletedToChat(updated);
+                  void addTradeCompletedToChat(updated);
                   navigate(`/review/${order.id}`);
                   return;
                 }
                 loadOrders();
-              }
+              })();
             }}
             className="px-3 py-1.5 text-xs font-medium text-white rounded-lg"
             style={{ backgroundColor: '#00A8A3' }}

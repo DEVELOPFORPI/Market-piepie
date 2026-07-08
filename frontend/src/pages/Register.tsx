@@ -206,7 +206,11 @@ export const Register: React.FC = () => {
     };
 
     try {
-      saveProduct(product);
+      const saved = await saveProduct(product);
+      if (!saved) {
+        alert('Could not save listing. Check your connection and try again.');
+        return;
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not save.';
       alert(message);

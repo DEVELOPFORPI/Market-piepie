@@ -21,17 +21,21 @@ export const ShareApply: React.FC = () => {
     if (found) setProduct(found);
   }, [productId]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!product) return;
 
-    const order = createOrder({
+    const order = await createOrder({
       product,
       proposedPrice: 0,
       tradeMethod: TRADE_METHOD_VALUE.IN_PERSON,
       memo: message || 'Requesting a free share.',
     });
+    if (!order) {
+      alert('Could not send request. Check your connection and try again.');
+      return;
+    }
 
-    addNotification({
+    void addNotification({
       targetUserId: order.seller.id,
       type: 'order',
       title: NOTIFY_FREE_SHARE_REQUEST_ARRIVED,

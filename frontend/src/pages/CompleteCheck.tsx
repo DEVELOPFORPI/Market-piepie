@@ -26,7 +26,7 @@ export const CompleteCheck: React.FC = () => {
     ? (isSeller ? order.buyer.nickname : order.seller.nickname)
     : '';
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!completed && !hasProblem) {
       alert('Choose trade complete or report a problem.');
       return;
@@ -46,12 +46,12 @@ export const CompleteCheck: React.FC = () => {
         return;
       }
       // Problem flow ??dispute
-      updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, 'Dispute filed');
+      await updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, 'Dispute filed');
       navigate(`/dispute/${orderId}`);
     } else {
-      const updated = confirmOrderCompletion(orderId, isSeller ? 'seller' : 'buyer');
+      const updated = await confirmOrderCompletion(orderId, isSeller ? 'seller' : 'buyer');
       if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-        addTradeCompletedToChat(updated);
+        void addTradeCompletedToChat(updated);
         alert('Trade completed. You can leave a review.');
         navigate(`/review/${orderId}`, { replace: true });
         return;

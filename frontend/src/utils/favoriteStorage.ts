@@ -3,9 +3,7 @@ import { userKey, getCurrentUserId } from '@/utils/authStorage';
 import { syncFavoriteAddToDB, syncFavoriteRemoveFromDB } from '@/utils/dbSync';
 
 const BASE_FAVORITES = 'myFavorites';
-const LIKE_COUNTS_KEY = 'productLikeCounts'; // global like counts
-
-/* --- Like counts (shared) --- */
+const LIKE_COUNTS_KEY = 'productLikeCounts';
 
 const getLikeCounts = (): Record<string, number> => {
   try {
@@ -36,14 +34,11 @@ const decrementLikeCount = (productId: string) => {
   saveLikeCounts(counts);
 };
 
-/* --- Favorites per user --- */
-
 export const getFavorites = (): Product[] => {
   const data = localStorage.getItem(userKey(BASE_FAVORITES));
   return data ? JSON.parse(data) : [];
 };
 
-/** Favorite count for a user id (badge stats; same key pattern as userKey) */
 export const getFavoritesCountForUserId = (userId: string): number => {
   if (!userId) return 0;
   try {
@@ -60,33 +55,36 @@ export const isFavorite = (productId: string): boolean => {
   return getFavorites().some((p) => p.id === productId);
 };
 
-export const addFavorite = (product: Product) => {
+export const addFavorite = async (product: Product): Promise<boolean> => {
+  const userId = getCurrentUserId();
+  if (!userId) return false;
+  if (getFavorites().some((p) => p.id === product.id)) return true;
+  const ok = await syncFavoriteAddToDB(userId, product.id);
+  if (!ok) return false;
   const favorites = getFavorites();
-  if (!favorites.some((p) => p.id === product.id)) {
-    favorites.push({ ...product, liked: true });
-    localStorage.setItem(userKey(BASE_FAVORITES), JSON.stringify(favorites));
-    incrementLikeCount(product.id);
-    window.dispatchEvent(new Event('favoritesChanged'));
-    const userId = getCurrentUserId();
-    if (userId) syncFavoriteAddToDB(userId, product.id);
-  }
+  favorites.push({ ...product, liked: true });
+  localStorage.setItem(userKey(BASE_FAVORITES), JSON.stringify(favorites));
+  incrementLikeCount(product.id);
+  window.dispatchEvent(new Event('favoritesChanged'));
+  return true;
 };
 
-export const removeFavorite = (productId: string) => {
+export const removeFavorite = async (productId: string): Promise<boolean> => {
+  const userId = getCurrentUserId();
+  if (!userId) return false;
+  const ok = await syncFavoriteRemoveFromDB(userId, productId);
+  if (!ok) return false;
   const favorites = getFavorites().filter((p) => p.id !== productId);
   localStorage.setItem(userKey(BASE_FAVORITES), JSON.stringify(favorites));
   decrementLikeCount(productId);
   window.dispatchEvent(new Event('favoritesChanged'));
-  const userId = getCurrentUserId();
-  if (userId) syncFavoriteRemoveFromDB(userId, productId);
+  return true;
 };
 
-export const toggleFavorite = (product: Product): boolean => {
+export const toggleFavorite = async (product: Product): Promise<boolean> => {
   if (isFavorite(product.id)) {
-    removeFavorite(product.id);
-    return false;
-  } else {
-    addFavorite(product);
-    return true;
+    const ok = await removeFavorite(product.id);
+    return ok ? false : isFavorite(product.id);
   }
+  return addFavorite(product);
 };

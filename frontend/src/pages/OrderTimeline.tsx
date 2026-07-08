@@ -69,7 +69,7 @@ export const OrderTimeline: React.FC = () => {
     updateOrderStatus(orderId, newStatus, description);
     if (newStatus === ORDER_STATUS_VALUE.ACCEPTED) {
       const updated = getOrderById(orderId);
-      if (updated) ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
+      if (updated) void ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
     }
     loadOrder();
   };
@@ -100,7 +100,7 @@ export const OrderTimeline: React.FC = () => {
       content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
       link: `/product/${order.product.id}`,
     });
-    addPriceOfferResultToChat(order, 'rejected');
+    void addPriceOfferResultToChat(order, 'rejected');
     deleteOrder(order.id);
     navigate('/my/orders', { replace: true });
   };
@@ -207,17 +207,13 @@ export const OrderTimeline: React.FC = () => {
                 <button
 
                   onClick={() => {
-
-                    const updated = confirmOrderCompletion(order.id, 'seller');
-
-                    if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-
-                      addTradeCompletedToChat(updated);
-
-                    }
-
-                    loadOrder();
-
+                    void (async () => {
+                      const updated = await confirmOrderCompletion(order.id, 'seller');
+                      if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
+                        void addTradeCompletedToChat(updated);
+                      }
+                      loadOrder();
+                    })();
                   }}
 
                   className="w-full px-4 py-3 text-white rounded-lg font-medium"
@@ -282,23 +278,16 @@ export const OrderTimeline: React.FC = () => {
             <button
 
               onClick={() => {
-
-                const updated = confirmOrderCompletion(order.id, 'seller');
-
-                if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-
-                  addTradeCompletedToChat(updated);
-
-                }
-
-                loadOrder();
-
-                if (orderId && !getReviewByOrderId(orderId)) {
-
-                  setTimeout(() => navigate(`/review/${orderId}`), 300);
-
-                }
-
+                void (async () => {
+                  const updated = await confirmOrderCompletion(order.id, 'seller');
+                  if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
+                    void addTradeCompletedToChat(updated);
+                  }
+                  loadOrder();
+                  if (orderId && !getReviewByOrderId(orderId)) {
+                    setTimeout(() => navigate(`/review/${orderId}`), 300);
+                  }
+                })();
               }}
 
               className="w-full px-4 py-3 text-white rounded-lg font-medium"

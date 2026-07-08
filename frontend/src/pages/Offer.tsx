@@ -27,15 +27,19 @@ export const Offer: React.FC = () => {
     }
   }, [productId, navigate]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!product || !price) return;
 
-    const order = createOrder({
+    const order = await createOrder({
       product,
       proposedPrice: Number(price),
       tradeMethod: TRADE_METHOD_VALUE.IN_PERSON,
       memo,
     });
+    if (!order) {
+      alert('Could not send offer. Check your connection and try again.');
+      return;
+    }
 
     alert('Offer sent.');
     navigate(`/order/${order.id}`, { replace: true });

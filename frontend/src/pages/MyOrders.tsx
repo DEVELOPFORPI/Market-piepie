@@ -52,10 +52,12 @@ export const MyOrders: React.FC = () => {
     e.stopPropagation();
     if (!order?.product) return;
     if (confirm(`Accept the buyer's offer for "${order.product.title}"?`)) {
-      updateOrderStatus(order.id, ORDER_STATUS_VALUE.ACCEPTED, 'Offer accepted');
-      const updated = getOrderById(order.id);
-      if (updated) ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
-      loadOrders();
+      void (async () => {
+        await updateOrderStatus(order.id, ORDER_STATUS_VALUE.ACCEPTED, 'Offer accepted');
+        const updated = getOrderById(order.id);
+        if (updated) void ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
+        loadOrders();
+      })();
     }
   };
 
@@ -79,7 +81,7 @@ export const MyOrders: React.FC = () => {
         content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
         link: `/product/${order.product.id}`,
       });
-      addPriceOfferResultToChat(order, 'rejected');
+      void addPriceOfferResultToChat(order, 'rejected');
       deleteOrder(order.id);
       loadOrders();
     }
@@ -179,12 +181,14 @@ export const MyOrders: React.FC = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                const updated = confirmOrderCompletion(order.id, isSeller ? 'seller' : 'buyer');
-                if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                  addTradeCompletedToChat(updated);
-                  navigate(`/review/${order.id}`);
-                }
-                loadOrders();
+                void (async () => {
+                  const updated = await confirmOrderCompletion(order.id, isSeller ? 'seller' : 'buyer');
+                  if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
+                    void addTradeCompletedToChat(updated);
+                    navigate(`/review/${order.id}`);
+                  }
+                  loadOrders();
+                })();
               }}
               className="mt-2 w-full px-3 py-1.5 text-xs font-medium text-white rounded-lg"
               style={{ backgroundColor: '#00A8A3' }}

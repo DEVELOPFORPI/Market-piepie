@@ -31,11 +31,15 @@ const CHATROOMS_KEY = 'all_chatrooms';
  * 새 방의 DB 저장이 끝나기 전에 메시지 POST가 나가면 FK 오류로 유실된다.
  * 방 생성 → DB 저장 promise를 기억해 두고, 첫 메시지는 이걸 기다린 후 전송.
  */
-const pendingRoomSyncs = new Map<string, Promise<void>>();
+const pendingRoomSyncs = new Map<string, Promise<boolean>>();
 
-const trackRoomSync = (room: ChatRoom): void => {
+const trackRoomSync = (room: ChatRoom): Promise<boolean> => {
+  const existing = pendingRoomSyncs.get(room.id);
+  if (existing) return existing;
+
   const p = syncChatRoomToDB(room).finally(() => pendingRoomSyncs.delete(room.id));
   pendingRoomSyncs.set(room.id, p);
+  return p;
 };
 
 /** WebSocket에서 받은 메시지를 로컬에 추가 (중복 방지) */
@@ -199,7 +203,7 @@ const findOrderForChat = (productId: string, buyerId: string, sellerId: string):
 };
 
 /** Create or return existing room; attach in-progress order if any */
-export const createOrGetChatRoom = (product: Product): ChatRoom => {
+export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> => {
   const existing = getChatRoomByProduct(product.id);
   if (existing) {
     const userId = getCurrentUserId();
@@ -215,7 +219,7 @@ export const createOrGetChatRoom = (product: Product): ChatRoom => {
         room = { ...existing, leftUserIds };
         rooms[idx] = room;
         saveAllChatRooms(rooms, existing.id);
-        void syncChatRoomToDB(room);
+        await syncChatRoomToDB(room);
         rejoinedAfterLeave = true;
       }
     }
@@ -265,10 +269,10 @@ export const createOrGetChatRoom = (product: Product): ChatRoom => {
   const rooms = getAllChatRooms();
   rooms.unshift(room);
   saveAllChatRooms(rooms, room.id);
-  trackRoomSync(room);
+  await trackRoomSync(room);
   notifyNewRoom(room);
 
-  addNotification({
+  void addNotification({
     targetUserId: product.seller.id,
     type: 'chat',
     title: NOTIFY_NEW_CHAT,
@@ -279,13 +283,22 @@ export const createOrGetChatRoom = (product: Product): ChatRoom => {
   return room;
 };
 
-/** Append message; returns whether save succeeded */
-export const addMessage = (roomId: string, message: ChatMessage): boolean => {
+/** Append message — DB 저장 성공 후 로컬 캐시 갱신 */
+export const addMessage = async (roomId: string, message: ChatMessage): Promise<boolean> => {
   const rooms = getAllChatRooms();
   const room = rooms.find((r) => r.id === roomId);
   if (!room) {
     return false;
   }
+
+  const pendingRoom = pendingRoomSyncs.get(roomId);
+  if (pendingRoom) {
+    const roomOk = await pendingRoom;
+    if (!roomOk) return false;
+  }
+
+  const dbOk = await syncMessageToDB(roomId, message);
+  if (!dbOk) return false;
 
   if (!room.messages) room.messages = [];
   room.messages.push(message);
@@ -304,13 +317,6 @@ export const addMessage = (roomId: string, message: ChatMessage): boolean => {
   room.readStatus[senderId] = true;
 
   const saveResult = saveAllChatRooms(rooms, roomId);
-  // 방 생성 DB 저장이 진행 중이면 완료 후 메시지 전송 (FK 유실 방지)
-  const pendingRoom = pendingRoomSyncs.get(roomId);
-  if (pendingRoom) {
-    pendingRoom.then(() => syncMessageToDB(roomId, message));
-  } else {
-    syncMessageToDB(roomId, message);
-  }
   sendMessageViaSocket(roomId, message, { buyerId: room.buyerId || '', sellerId: room.sellerId || '' });
   return saveResult;
 };
@@ -363,7 +369,7 @@ export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
 };
 
 /** Ensure room for order; create if missing. Optional creator marks other party unread + notification */
-export const ensureChatRoomForOrder = (order: Order, createdByUserId?: string): ChatRoom => {
+export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: string): Promise<ChatRoom> => {
   const existing = getChatRoomByOrder(order);
   if (existing) {
     existing.order = order;
@@ -406,11 +412,11 @@ export const ensureChatRoomForOrder = (order: Order, createdByUserId?: string): 
   const rooms = getAllChatRooms();
   rooms.unshift(room);
   saveAllChatRooms(rooms, room.id);
-  trackRoomSync(room);
+  await trackRoomSync(room);
   notifyNewRoom(room);
 
   if (otherUserId) {
-    addNotification({
+    void addNotification({
       targetUserId: otherUserId,
       type: 'chat',
       title: NOTIFY_CHAT_ROOM_CREATED,
@@ -422,9 +428,9 @@ export const ensureChatRoomForOrder = (order: Order, createdByUserId?: string): 
 };
 
 /** Meetup confirmed: add gradient card; persist room.order so receive flow works */
-export const addMeetupConfirmedToChat = (order: Order) => {
+export const addMeetupConfirmedToChat = async (order: Order) => {
   if (!order.meetupPlace || !order.meetupDate || !order.meetupTime) return;
-  const room = ensureChatRoomForOrder(order);
+  const room = await ensureChatRoomForOrder(order);
   const rooms = getAllChatRooms();
   const r = rooms.find((x) => x.id === room.id);
   if (r) {
@@ -441,11 +447,11 @@ export const addMeetupConfirmedToChat = (order: Order) => {
     meetupDate: order.meetupDate,
     meetupTime: order.meetupTime,
   };
-  addMessage(room.id, msg);
+  await addMessage(room.id, msg);
 };
 
 /** Meetup updated: gradient message + refresh room.order */
-export const addMeetupUpdatedToChat = (order: Order) => {
+export const addMeetupUpdatedToChat = async (order: Order) => {
   if (!order.meetupPlace || !order.meetupDate || !order.meetupTime) return;
   const rooms = getAllChatRooms();
   const room = rooms.find(
@@ -467,7 +473,7 @@ export const addMeetupUpdatedToChat = (order: Order) => {
     meetupDate: order.meetupDate,
     meetupTime: order.meetupTime,
   };
-  addMessage(room.id, msg);
+  await addMessage(room.id, msg);
 };
 
 /** Meetup canceled: notification only (no chat system message) */
@@ -476,7 +482,7 @@ export const addMeetupCancelledToChat = (_order: Order) => {
 };
 
 /** Seller started meetup from chat: gradient card + buyer unread badge */
-export const addSellerMeetupStartedToChat = (order: Order, roomIdHint?: string) => {
+export const addSellerMeetupStartedToChat = async (order: Order, roomIdHint?: string) => {
   const rooms = getAllChatRooms();
   let room =
     (roomIdHint ? rooms.find((r) => r.id === roomIdHint) : undefined) ||
@@ -488,7 +494,7 @@ export const addSellerMeetupStartedToChat = (order: Order, roomIdHint?: string) 
     ) ||
     null;
   if (!room) {
-    room = ensureChatRoomForOrder(order);
+    room = await ensureChatRoomForOrder(order);
   }
   const msg: ChatMessage = {
     id: `seller_meetup_${Date.now()}`,
@@ -497,35 +503,39 @@ export const addSellerMeetupStartedToChat = (order: Order, roomIdHint?: string) 
     timestamp: new Date().toISOString(),
     type: 'meetup_confirmed',
   };
-  if (!room.messages) room.messages = [];
-  room.messages.push(msg);
-  room.lastMessage = msg.content;
-  room.lastMessageTime = msg.timestamp;
-  if (!room.readStatus) room.readStatus = {};
-  room.readStatus[order.buyer.id] = false;
-  room.readStatus[order.seller.id] = true;
-  room.order = order;
-  saveAllChatRooms(rooms, room.id);
+  await addMessage(room.id, msg);
+  const roomsAfter = getAllChatRooms();
+  const r = roomsAfter.find((x) => x.id === room!.id);
+  if (r) {
+    r.order = order;
+    saveAllChatRooms(roomsAfter, room!.id);
+  }
 };
 
 /** Trade completed: notification only (no chat system message) */
-export const addTradeCompletedToChat = (order: Order) => { const room = ensureChatRoomForOrder(order); addMessage(room.id, { id: `tradedone_${Date.now()}`, senderId: "system", content: "Trade completed successfully.", timestamp: new Date().toISOString(), type: "system" }); return;
+export const addTradeCompletedToChat = async (order: Order) => {
+  const room = await ensureChatRoomForOrder(order);
+  await addMessage(room.id, { id: `tradedone_${Date.now()}`, senderId: 'system', content: 'Trade completed successfully.', timestamp: new Date().toISOString(), type: 'system' });
   // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
 };
 
 /** Receipt confirmed: notification only (no chat system message) */
-export const addReceiptConfirmedToChat = (order: Order) => { const room = ensureChatRoomForOrder(order); addMessage(room.id, { id: `receipt_${Date.now()}`, senderId: "system", content: `${order.buyer?.nickname || "Buyer"} confirmed receipt.`, timestamp: new Date().toISOString(), type: "system" }); return;
+export const addReceiptConfirmedToChat = async (order: Order) => {
+  const room = await ensureChatRoomForOrder(order);
+  await addMessage(room.id, { id: `receipt_${Date.now()}`, senderId: 'system', content: `${order.buyer?.nickname || 'Buyer'} confirmed receipt.`, timestamp: new Date().toISOString(), type: 'system' });
   // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
 };
 
 /** Review written: notification only (no chat system message) */
-export const addReviewToChat = (order: Order, reviewerNickname: string) => { const room = ensureChatRoomForOrder(order); addMessage(room.id, { id: `review_${Date.now()}`, senderId: "system", content: `${reviewerNickname} wrote a review.`, timestamp: new Date().toISOString(), type: "system" }); return;
+export const addReviewToChat = async (order: Order, reviewerNickname: string) => {
+  const room = await ensureChatRoomForOrder(order);
+  await addMessage(room.id, { id: `review_${Date.now()}`, senderId: 'system', content: `${reviewerNickname} wrote a review.`, timestamp: new Date().toISOString(), type: 'system' });
   // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
 };
 
 /** Buyer price/share offer card (create room if needed); free share uses share copy */
-export const addPriceOfferToChat = (order: Order) => {
-  const room = ensureChatRoomForOrder(order, order.buyer.id);
+export const addPriceOfferToChat = async (order: Order) => {
+  const room = await ensureChatRoomForOrder(order, order.buyer.id);
   const originalPrice = order.product?.price ?? 0;
   const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
   const msg: ChatMessage = {
@@ -538,11 +548,11 @@ export const addPriceOfferToChat = (order: Order) => {
     originalPrice,
     proposedPrice: order.proposedPrice,
   };
-  addMessage(room.id, msg);
+  await addMessage(room.id, msg);
 };
 
 /** Price offer accept/reject result (different copy for free share) */
-export const addPriceOfferResultToChat = (order: Order, result: 'accepted' | 'rejected') => {
+export const addPriceOfferResultToChat = async (order: Order, result: 'accepted' | 'rejected') => {
   const room = getChatRoomByOrder(order);
   if (!room) return;
   const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
@@ -565,7 +575,7 @@ export const addPriceOfferResultToChat = (order: Order, result: 'accepted' | 're
     proposedPrice: order.proposedPrice,
     offerResult: result,
   };
-  addMessage(room.id, msg);
+  await addMessage(room.id, msg);
 };
 
 /** Detach order from rooms when order deleted */
@@ -578,7 +588,7 @@ export const clearOrderFromRoom = (orderId: string) => {
 };
 
 /** Leave room: system message, hide only for current user */
-export const leaveChatRoom = (roomId: string): boolean => {
+export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const allRooms = getAllChatRooms();
   const room = allRooms.find((r) => r.id === roomId);
   if (!room) return false;
@@ -594,7 +604,8 @@ export const leaveChatRoom = (roomId: string): boolean => {
     timestamp: new Date().toISOString(),
     type: 'system',
   };
-  addMessage(roomId, msg);
+  const messageSaved = await addMessage(roomId, msg);
+  if (!messageSaved) return false;
 
   const leftUserIds = [...(room.leftUserIds || []), userId].filter((id): id is string => id != null);
   const roomsAfterMessage = getAllChatRooms();

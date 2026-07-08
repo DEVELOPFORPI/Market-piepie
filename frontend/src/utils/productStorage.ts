@@ -27,8 +27,7 @@ export const getMyProducts = (): Product[] => {
 export const QUOTA_EXCEEDED_MESSAGE =
   'Not enough storage to save this listing. Free space in Settings, then try again.';
 
-/** Save listing (create/update). On quota error, drops oldest others until save succeeds */
-export const saveProduct = (product: Product): void => {
+const cacheProductLocally = (product: Product): void => {
   let products = getAllProducts();
   const existingIndex = products.findIndex((p) => p.id === product.id);
   if (existingIndex >= 0) {
@@ -40,8 +39,6 @@ export const saveProduct = (product: Product): void => {
     try {
       setItem(STORAGE_KEY, JSON.stringify(products));
       window.dispatchEvent(new Event('productsChanged'));
-      syncProductToDB(product);
-      broadcastProductChange('upserted', product.id);
       return;
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -57,6 +54,15 @@ export const saveProduct = (product: Product): void => {
       }
     }
   }
+};
+
+/** Save listing — DB 저장 성공 후 로컬 캐시 갱신 */
+export const saveProduct = async (product: Product): Promise<boolean> => {
+  const ok = await syncProductToDB(product);
+  if (!ok) return false;
+  cacheProductLocally(product);
+  broadcastProductChange('upserted', product.id);
+  return true;
 };
 
 /** Free space: remove up to maxToRemove oldest listings */
@@ -76,25 +82,29 @@ export function trimOldestProducts(maxToRemove: number): void {
   }
 }
 
-export const deleteProduct = (productId: string) => {
+export const deleteProduct = async (productId: string): Promise<boolean> => {
   markProductDeletedLocally(productId);
+  const ok = await syncProductDeleteToDB(productId);
+  if (!ok) return false;
   const products = getAllProducts().filter((p) => p.id !== productId);
   setItem(STORAGE_KEY, JSON.stringify(products));
   window.dispatchEvent(new Event('productsChanged'));
-  syncProductDeleteToDB(productId);
   broadcastProductChange('deleted', productId);
+  return true;
 };
 
-export const updateProductStatus = (productId: string, status: Product['status']) => {
+export const updateProductStatus = async (productId: string, status: Product['status']): Promise<boolean> => {
+  const ok = await syncProductStatusToDB(productId, status);
+  if (!ok) return false;
   const products = getAllProducts();
   const product = products.find((p) => p.id === productId);
   if (product) {
     product.status = status;
     setItem(STORAGE_KEY, JSON.stringify(products));
     window.dispatchEvent(new Event('productsChanged'));
-    syncProductStatusToDB(productId, status);
     broadcastProductChange('status_changed', productId);
   }
+  return true;
 };
 
 export const getProductById = (productId: string): Product | null => {

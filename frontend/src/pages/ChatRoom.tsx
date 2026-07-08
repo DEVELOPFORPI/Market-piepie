@@ -451,7 +451,7 @@ export const ChatRoom: React.FC = () => {
     setPreviewImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (uploadingImages) return;
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
@@ -466,12 +466,12 @@ export const ChatRoom: React.FC = () => {
         type: 'user',
         images: [...previewImages],
       };
-      const saved = addMessage(roomId, imgMessage);
+      const saved = await addMessage(roomId, imgMessage);
       if (saved) {
         setPreviewImages([]);
         setInput('');
       } else {
-        alert('Could not save photos. Try fewer images or smaller files.');
+        alert('Could not send photos. Check your connection and try again.');
       }
       return;
     }
@@ -484,8 +484,12 @@ export const ChatRoom: React.FC = () => {
       timestamp: new Date().toISOString(),
       type: 'user',
     };
-    addMessage(roomId, newMessage);
-    setInput('');
+    const saved = await addMessage(roomId, newMessage);
+    if (saved) {
+      setInput('');
+    } else {
+      alert('Message could not be sent. Check your connection and try again.');
+    }
   };
 
 
@@ -539,8 +543,9 @@ export const ChatRoom: React.FC = () => {
                   onClick={() => {
                     setShowMenu(false);
                     if (roomId && confirm(CHAT_LEAVE_ROOM_CONFIRM)) {
-                      leaveChatRoom(roomId);
-                      navigate('/chat', { replace: true });
+                      void leaveChatRoom(roomId).then((ok) => {
+                        if (ok) navigate('/chat', { replace: true });
+                      });
                     }
                   }}
                   className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
@@ -676,24 +681,31 @@ export const ChatRoom: React.FC = () => {
                           alert('Could not load listing.');
                           return;
                         }
+                        const product = room.product;
                         const buyer = getOtherUser(room);
                         if (!buyer?.id) {
                           alert('Could not load chat partner. Try again.');
                           return;
                         }
-                        try {
-                          const order = createOrderBySeller({ product: room.product, buyer });
-                          ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
-                          addSellerMeetupStartedToChat(order, roomId);
-                          navigate(`/meetup/${order.id}`);
-                        } catch (e) {
-                          if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-                            alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
-                          } else {
-                            console.error(e);
-                            alert('Could not start meetup scheduling. Try again.');
+                        void (async () => {
+                          try {
+                            const order = await createOrderBySeller({ product, buyer });
+                            if (!order) {
+                              alert('Could not start meetup. Check your connection and try again.');
+                              return;
+                            }
+                            await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
+                            await addSellerMeetupStartedToChat(order, roomId);
+                            navigate(`/meetup/${order.id}`);
+                          } catch (e) {
+                            if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+                              alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
+                            } else {
+                              console.error(e);
+                              alert('Could not start meetup scheduling. Try again.');
+                            }
                           }
-                        }
+                        })();
                       }}
                       className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
@@ -738,14 +750,15 @@ export const ChatRoom: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm('Confirm trade completion?')) {
-                                const updated = confirmOrderCompletion(currentOrder.id, 'seller');
+                              void (async () => {
+                                if (!confirm('Confirm trade completion?')) return;
+                                const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
                                 if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                                  addTradeCompletedToChat(updated);
+                                  void addTradeCompletedToChat(updated);
                                   navigate(`/review/${currentOrder.id}`);
                                 }
                                 setRoom(getChatRoom(roomId!));
-                              }
+                              })();
                             }}
                             className="flex-1 min-w-[120px] px-4 py-2.5 text-white rounded-lg text-sm font-medium"
                             style={{ backgroundColor: '#00A8A3' }}
@@ -1024,9 +1037,10 @@ export const ChatRoom: React.FC = () => {
                             content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
                             link: `/product/${order.product.id}`,
                           });
-                          addPriceOfferResultToChat(order, 'rejected');
-                          deleteOrder(order.id);
-                          setMessages(getMessages(roomId!));
+                          void addPriceOfferResultToChat(order, 'rejected').then(() => {
+                            deleteOrder(order.id);
+                            setMessages(getMessages(roomId!));
+                          });
                         }}
                         className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
                       >

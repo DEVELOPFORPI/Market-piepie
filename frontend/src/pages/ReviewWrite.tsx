@@ -95,7 +95,7 @@ export const ReviewWrite: React.FC = () => {
           content: `${review.reviewer.nickname} left a ${rating}-star review for "${order.product.title}".`,
           link: '/my/reviews',
         });
-        addReviewToChat(order, review.reviewer.nickname);
+        void addReviewToChat(order, review.reviewer.nickname);
       } catch (e) {
         console.log('[REVIEW] notification/chat side effects FAILED', e);
       }

@@ -229,7 +229,7 @@ export const ProductDetail: React.FC = () => {
         />
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); const now = toggleFavorite(product); setLiked(now); }}
+          onClick={(e) => { e.stopPropagation(); void toggleFavorite(product).then(setLiked); }}
           className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-white/90 rounded-lg shadow-sm hover:bg-white"
         >
           <svg className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -384,8 +384,7 @@ export const ProductDetail: React.FC = () => {
             <p className="flex-1 text-sm text-gray-500">This listing is sold.</p>
             <button
               onClick={() => {
-                const nowLiked = toggleFavorite(product);
-                setLiked(nowLiked);
+                void toggleFavorite(product).then(setLiked);
               }}
               className={`p-3 rounded-lg shrink-0 ${
                 liked ? 'text-red-500' : 'text-gray-600'
@@ -411,8 +410,7 @@ export const ProductDetail: React.FC = () => {
             <p className="flex-1 text-sm text-gray-500">This item is reserved.</p>
             <button
               onClick={() => {
-                const nowLiked = toggleFavorite(product);
-                setLiked(nowLiked);
+                void toggleFavorite(product).then(setLiked);
               }}
               className={`p-3 rounded-lg shrink-0 ${
                 liked ? 'text-red-500' : 'text-gray-600'
@@ -438,8 +436,7 @@ export const ProductDetail: React.FC = () => {
             <p className="flex-1 text-sm text-gray-500">This listing has an open dispute.</p>
             <button
               onClick={() => {
-                const nowLiked = toggleFavorite(product);
-                setLiked(nowLiked);
+                void toggleFavorite(product).then(setLiked);
               }}
               className={`p-3 rounded-lg shrink-0 ${
                 liked ? 'text-red-500' : 'text-gray-600'
@@ -466,8 +463,9 @@ export const ProductDetail: React.FC = () => {
               <button
                 onClick={() => {
                   if (guestGuard('chat')) return;
-                  const room = createOrGetChatRoom(product);
-                  navigate(`/chat/${room.id}`);
+                  void createOrGetChatRoom(product).then((room) => {
+                    navigate(`/chat/${room.id}`);
+                  });
                 }}
                 className="flex-1 px-4 py-3 text-white rounded-lg font-medium"
                 style={{ backgroundColor: '#00A8A3' }}
@@ -476,8 +474,7 @@ export const ProductDetail: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  const nowLiked = toggleFavorite(product);
-                  setLiked(nowLiked);
+                  void toggleFavorite(product).then(setLiked);
                 }}
                 className={`p-3 rounded-lg shrink-0 ${
                   liked ? 'text-red-500' : 'text-gray-600'

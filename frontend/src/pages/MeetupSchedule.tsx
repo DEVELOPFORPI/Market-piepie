@@ -1,4 +1,3 @@
-import { api } from "@/utils/api";
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
@@ -124,22 +123,21 @@ export const MeetupSchedule: React.FC = () => {
     const orderBefore = getOrderById(orderId);
     const wasEdit = !!(orderBefore?.meetupPlace || orderBefore?.meetupDate || orderBefore?.meetupTime);
 
-    const updatedOrder = updateOrderMeetup(orderId, {
+    const updatedOrder = await updateOrderMeetup(orderId, {
       meetupPlace: place,
       meetupDate: date.trim(),
       meetupTime: normalizedTime,
     });
     if (updatedOrder) {
-      api.put(`/api/orders/${orderId}`, { status: updatedOrder.status, meetup_place: place, meetup_date: date.trim(), meetup_time: normalizedTime }).catch(e => console.error('DB meetup sync fail', e));
       if (wasEdit) {
-        addMeetupUpdatedToChat(updatedOrder);
+        void addMeetupUpdatedToChat(updatedOrder);
       } else {
-        addMeetupConfirmedToChat(updatedOrder);
+        void addMeetupConfirmedToChat(updatedOrder);
       }
       const currentUserId = getCurrentUserId();
       const isSeller = currentUserId === updatedOrder.seller.id;
       const otherUser = isSeller ? updatedOrder.buyer : updatedOrder.seller;
-      addNotification({
+      void addNotification({
         targetUserId: otherUser.id,
         type: 'order',
         title: wasEdit ? NOTIFY_MEETUP_UPDATED : NOTIFY_MEETUP_CONFIRMED,
@@ -157,17 +155,17 @@ export const MeetupSchedule: React.FC = () => {
     navigate(-1);
   };
 
-  const handleCancelMeetup = () => {
+  const handleCancelMeetup = async () => {
     if (!orderId) return;
     const orderBefore = getOrderById(orderId);
     if (!orderBefore) return;
     if (!confirm('Cancel this meetup? The other person will be notified.')) return;
-    const cancelled = cancelOrderMeetup(orderId);
+    const cancelled = await cancelOrderMeetup(orderId);
     if (cancelled) {
       addMeetupCancelledToChat(orderBefore);
       const currentUserId = getCurrentUserId();
       const otherUser = currentUserId === orderBefore.seller.id ? orderBefore.buyer : orderBefore.seller;
-      addNotification({
+      void addNotification({
         targetUserId: otherUser.id,
         type: 'order',
         title: NOTIFY_MEETUP_CANCELED,

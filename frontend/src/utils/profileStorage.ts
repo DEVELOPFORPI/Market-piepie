@@ -1,6 +1,7 @@
 import { ORDER_STATUS_VALUE } from '@/types';
 import { getCurrentUserId, userKey } from '@/utils/authStorage';
 import { getItem } from '@/utils/heavyStorage';
+import { saveMyProfileToDB } from '@/utils/dbSync';
 import { getReceivedReviews } from '@/utils/reviewStorage';
 import { getUnlockedBadgeIds } from '@/utils/activityBadgeStorage';
 import { computeUnlockedActivityBadgeIds } from '@/utils/activityBadgeRules';
@@ -87,15 +88,20 @@ export function resolveDisplayNickname(
   return 'User';
 }
 
-export const saveProfile = (profile: StoredProfile): void => {
+export const saveProfile = async (profile: StoredProfile): Promise<boolean> => {
+  const userId = getCurrentUserId();
+  if (!userId) return false;
+  const ok = await saveMyProfileToDB(userId, {
+    nickname: profile.nickname || 'My nickname',
+    bio: profile.bio,
+    profileImage: profile.profileImage,
+    activityRegion: profile.activityRegion,
+  });
+  if (!ok) return false;
   const key = userKey(BASE_KEY);
   localStorage.setItem(key, JSON.stringify(profile));
   window.dispatchEvent(new Event('profileSaved'));
-  // DB 동기화 (비동기)
-  import('@/utils/dbSync').then(({ syncUserToDB }) => {
-    const user = getMyUser();
-    syncUserToDB({ ...user, ...profile, nickname: profile.nickname || user.nickname });
-  }).catch(() => {});
+  return true;
 };
 
 /** True if profile image is activity badge SVG (`/Batch/xx.svg`) */
@@ -145,12 +151,12 @@ export function setDisplayActivityBadgeId(next: string | null): void {
   if (next) {
     if (!getUnlockedBadgeIds().has(next)) return;
     const same = profile.displayActivityBadgeId === next;
-    saveProfile({
+    void saveProfile({
       ...profile,
       displayActivityBadgeId: same ? undefined : next,
     });
   } else {
-    saveProfile({ ...profile, displayActivityBadgeId: undefined });
+    void saveProfile({ ...profile, displayActivityBadgeId: undefined });
   }
   window.dispatchEvent(new Event('profileDisplayBadgeChanged'));
 }
@@ -161,7 +167,7 @@ export function pruneInvalidDisplayActivityBadge(): void {
   if (!id || typeof id !== 'string') return;
   if (!getUnlockedBadgeIds().has(id)) {
     const profile = getProfile();
-    saveProfile({ ...profile, displayActivityBadgeId: undefined });
+    void saveProfile({ ...profile, displayActivityBadgeId: undefined });
     window.dispatchEvent(new Event('profileDisplayBadgeChanged'));
   }
 }

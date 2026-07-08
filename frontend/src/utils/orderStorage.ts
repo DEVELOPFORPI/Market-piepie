@@ -164,7 +164,9 @@ export function trimOldestOrders(maxToRemove: number): void {
   setOrdersWithQuotaRetry(remaining);
 }
 
-export const saveOrder = (order: Order) => {
+export const saveOrder = async (order: Order): Promise<boolean> => {
+  const ok = await syncOrderToDB(order);
+  if (!ok) return false;
   const orders = getAllOrders();
   const idx = orders.findIndex((o) => o.id === order.id);
   if (idx >= 0) {
@@ -174,7 +176,7 @@ export const saveOrder = (order: Order) => {
   }
   setOrdersWithQuotaRetry(orders, order.id);
   window.dispatchEvent(new Event('ordersChanged'));
-  syncOrderToDB(order);
+  return true;
 };
 
 export const deleteOrder = (orderId: string) => {
@@ -190,67 +192,71 @@ export const clearAllOrders = (): void => {
   window.dispatchEvent(new Event('ordersChanged'));
 };
 
-export const updateOrderStatus = (orderId: string, status: OrderStatus, description?: string) => {
+export const updateOrderStatus = async (orderId: string, status: OrderStatus, description?: string): Promise<boolean> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
-  if (order) {
-    order.status = status;
-    const timelineEvent = {
-      id: nextTimelineId(),
-      type: status,
-      timestamp: new Date().toISOString(),
-      description: description || descriptionForOrderStatusForTimeline(status),
-    };
-    order.timeline.push(timelineEvent);
-    syncOrderStatusToDB(orderId, status, timelineEvent);
-    if (status === ORDER_STATUS_VALUE.ACCEPTED) {
-      addNotification({
-        targetUserId: order.buyer.id,
-        type: 'order',
-        title: NOTIFY_OFFER_ACCEPTED,
-        content: `${order.seller.nickname} accepted your offer for "${order.product.title}".`,
-        link: `/order/${order.id}`,
-      });
-      addPriceOfferResultToChat(order, 'accepted');
-    }
-    if (status === ORDER_STATUS_VALUE.RECEIVED) {
-      const isShare = isShareOrder(order.proposedPrice ?? 0, order.product);
-      addNotification({
-        targetUserId: order.seller.id,
-        type: 'order',
-        title: NOTIFY_RECEIVE_CONFIRM,
-        content: isShare
-          ? `${order.buyer.nickname} confirmed receipt for "${order.product.title}". The trade is complete.`
-          : `${order.buyer.nickname} confirmed receipt for "${order.product.title}". Please complete your side of the trade check.`,
-        link: `/order/${order.id}`,
-      });
-    }
-    if (status === ORDER_STATUS_VALUE.COMPLETE) {
-      updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
-    }
-    setOrdersWithQuotaRetry(orders, orderId);
-    window.dispatchEvent(new Event('ordersChanged'));
-    notifyOrderCounterpart(order);
+  if (!order) return false;
+
+  const timelineEvent = {
+    id: nextTimelineId(),
+    type: status,
+    timestamp: new Date().toISOString(),
+    description: description || descriptionForOrderStatusForTimeline(status),
+  };
+  const ok = await syncOrderStatusToDB(orderId, status, timelineEvent);
+  if (!ok) return false;
+
+  order.status = status;
+  order.timeline.push(timelineEvent);
+  if (status === ORDER_STATUS_VALUE.ACCEPTED) {
+    void addNotification({
+      targetUserId: order.buyer.id,
+      type: 'order',
+      title: NOTIFY_OFFER_ACCEPTED,
+      content: `${order.seller.nickname} accepted your offer for "${order.product.title}".`,
+      link: `/order/${order.id}`,
+    });
+    void addPriceOfferResultToChat(order, 'accepted');
   }
+  if (status === ORDER_STATUS_VALUE.RECEIVED) {
+    const isShare = isShareOrder(order.proposedPrice ?? 0, order.product);
+    void addNotification({
+      targetUserId: order.seller.id,
+      type: 'order',
+      title: NOTIFY_RECEIVE_CONFIRM,
+      content: isShare
+        ? `${order.buyer.nickname} confirmed receipt for "${order.product.title}". The trade is complete.`
+        : `${order.buyer.nickname} confirmed receipt for "${order.product.title}". Please complete your side of the trade check.`,
+      link: `/order/${order.id}`,
+    });
+  }
+  if (status === ORDER_STATUS_VALUE.COMPLETE) {
+    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+  }
+  setOrdersWithQuotaRetry(orders, orderId);
+  window.dispatchEvent(new Event('ordersChanged'));
+  notifyOrderCounterpart(order);
+  return true;
 };
 
 /** Trade completion check (both sides must confirm) */
-export const confirmOrderCompletion = (
+export const confirmOrderCompletion = async (
   orderId: string,
   role: 'buyer' | 'seller'
-): Order | undefined => {
+): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
   if (role === 'buyer') order.buyerCompleted = true;
   if (role === 'seller') order.sellerCompleted = true;
 
-  order.timeline.push({
+  const timelineEvent = {
     id: nextTimelineId(),
     type: TIMELINE_EVENT_TYPE.COMPLETE_CHECK,
     timestamp: new Date().toISOString(),
     description: role === 'buyer' ? 'Buyer confirmed trade complete' : 'Seller confirmed trade complete',
-  });
+  };
+  order.timeline.push(timelineEvent);
 
   const otherUser = role === 'buyer' ? order.seller : order.buyer;
   const whoConfirmed = role === 'buyer' ? order.buyer : order.seller;
@@ -271,9 +277,9 @@ export const confirmOrderCompletion = (
       description: 'Trade completed',
     });
 
-    updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
     const other = role === 'buyer' ? order.seller : order.buyer;
-    addNotification({
+    void addNotification({
       targetUserId: other.id,
       type: 'order',
       title: NOTIFY_TRADE_COMPLETED,
@@ -282,20 +288,20 @@ export const confirmOrderCompletion = (
     });
   }
 
-  setOrdersWithQuotaRetry(orders, orderId);
-  window.dispatchEvent(new Event('ordersChanged'));
-  notifyOrderCounterpart(order);
-
-  syncOrderStatusToDB(orderId, order.status, undefined, {
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent, {
     buyer_completed: order.buyerCompleted,
     seller_completed: order.sellerCompleted,
   });
+  if (!ok) return undefined;
 
+  setOrdersWithQuotaRetry(orders, orderId);
+  window.dispatchEvent(new Event('ordersChanged'));
+  notifyOrderCounterpart(order);
   return order;
 };
 
 /** Free share: on receive confirm, complete immediately (no dual completion check) */
-export const completeShareOrderOnReceive = (orderId: string): Order | undefined => {
+export const completeShareOrderOnReceive = async (orderId: string): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order || !isShareOrder(order.proposedPrice ?? 0, order.product)) return undefined;
@@ -303,13 +309,21 @@ export const completeShareOrderOnReceive = (orderId: string): Order | undefined 
   order.buyerCompleted = true;
   order.sellerCompleted = true;
   order.status = ORDER_STATUS_VALUE.COMPLETE;
-  order.timeline.push({
+  const timelineEvent = {
     id: nextTimelineId(),
     type: ORDER_STATUS_VALUE.COMPLETE,
     timestamp: new Date().toISOString(),
     description: 'Trade completed',
+  };
+  order.timeline.push(timelineEvent);
+
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent, {
+    buyer_completed: true,
+    seller_completed: true,
   });
-  updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+  if (!ok) return undefined;
+
+  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
   addNotification({
     targetUserId: order.seller.id,
     type: 'order',
@@ -324,73 +338,84 @@ export const completeShareOrderOnReceive = (orderId: string): Order | undefined 
 };
 
 /** Save meetup; set status to meetup set */
-export const updateOrderMeetup = (
+export const updateOrderMeetup = async (
   orderId: string,
   params: { meetupPlace: string; meetupDate: string; meetupTime: string }
-): Order | undefined => {
+): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
+
+  const timelineEvent = {
+    id: nextTimelineId(),
+    type: ORDER_STATUS_VALUE.MEETUP_SET,
+    timestamp: new Date().toISOString(),
+    description: 'Meetup confirmed',
+  };
+  const ok = await syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.MEETUP_SET, timelineEvent, {
+    meetup_location: params.meetupPlace,
+    meetup_date: params.meetupDate,
+    meetup_time: params.meetupTime,
+  });
+  if (!ok) return undefined;
 
   order.meetupPlace = params.meetupPlace;
   order.meetupDate = params.meetupDate;
   order.meetupTime = params.meetupTime;
   order.status = ORDER_STATUS_VALUE.MEETUP_SET;
-  order.timeline.push({
-    id: nextTimelineId(),
-    type: ORDER_STATUS_VALUE.MEETUP_SET,
-    timestamp: new Date().toISOString(),
-    description: 'Meetup confirmed',
-  });
-  updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
+  order.timeline.push(timelineEvent);
+  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
-  syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.MEETUP_SET,
-    order.timeline[order.timeline.length - 1],
-    {
-      meetup_location: params.meetupPlace,
-      meetup_date: params.meetupDate,
-      meetup_time: params.meetupTime,
-    }
-  );
   return order;
 };
 
 /** Buyer accepts the scheduled meetup */
-export const acceptOrderMeetup = (orderId: string): Order | undefined => {
+export const acceptOrderMeetup = async (orderId: string): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
-  order.meetupAccepted = true;
-  order.timeline.push({
+  const timelineEvent = {
     id: nextTimelineId(),
     type: 'meetup_accepted',
     timestamp: new Date().toISOString(),
     description: 'Buyer accepted the meetup',
-  });
+  };
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent);
+  if (!ok) return undefined;
+
+  order.meetupAccepted = true;
+  order.timeline.push(timelineEvent);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
-  syncOrderStatusToDB(orderId, order.status);
   return order;
 };
 
 /** Cancel meetup: clear fields, revert to accepted */
-export const cancelOrderMeetup = (orderId: string): Order | undefined => {
+export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
-  order.meetupPlace = undefined;
-  order.meetupDate = undefined;
-  order.meetupTime = undefined;
-  order.status = ORDER_STATUS_VALUE.ACCEPTED;
-  order.timeline.push({
+  const timelineEvent = {
     id: nextTimelineId(),
     type: ORDER_STATUS_VALUE.ACCEPTED,
     timestamp: new Date().toISOString(),
     description: 'Meetup canceled',
+  };
+  const ok = await syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.ACCEPTED, timelineEvent, {
+    meetup_location: '',
+    meetup_date: '',
+    meetup_time: '',
   });
+  if (!ok) return undefined;
+
+  order.meetupPlace = undefined;
+  order.meetupDate = undefined;
+  order.meetupTime = undefined;
+  order.status = ORDER_STATUS_VALUE.ACCEPTED;
+  order.timeline.push(timelineEvent);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   return order;
@@ -409,7 +434,7 @@ interface CreateOrderParams {
 const isShareOrder = (price: number, product?: Product) =>
   price === 0 || product?.isFreeShare || product?.price === 0;
 
-export const createOrder = (params: CreateOrderParams): Order => {
+export const createOrder = async (params: CreateOrderParams): Promise<Order | null> => {
   const myUser = getMyUser();
   const now = new Date().toISOString();
   const isShare = isShareOrder(params.proposedPrice, params.product);
@@ -442,10 +467,11 @@ export const createOrder = (params: CreateOrderParams): Order => {
     ],
   };
 
-  saveOrder(order);
+  const saved = await saveOrder(order);
+  if (!saved) return null;
 
   if (!isShare) {
-    addNotification({
+    void addNotification({
       targetUserId: order.seller.id,
       type: 'order',
       title: NOTIFY_PURCHASE_OFFER_ARRIVED,
@@ -454,13 +480,12 @@ export const createOrder = (params: CreateOrderParams): Order => {
     });
   }
 
-  addPriceOfferToChat(order);
-
+  void addPriceOfferToChat(order);
   return order;
 };
 
 /** Seller starts meetup flow without buyer offer (price = listing; free share = 0) */
-export const createOrderBySeller = (params: { product: Product; buyer: User }): Order => {
+export const createOrderBySeller = async (params: { product: Product; buyer: User }): Promise<Order | null> => {
   const seller = getMyUser();
   const now = new Date().toISOString();
   const { product, buyer } = params;
@@ -494,8 +519,9 @@ export const createOrderBySeller = (params: { product: Product; buyer: User }): 
     ],
   };
 
-  saveOrder(order);
-  updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
+  const saved = await saveOrder(order);
+  if (!saved) return null;
+  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
 
   addNotification({
     targetUserId: buyer.id,
@@ -505,6 +531,5 @@ export const createOrderBySeller = (params: { product: Product; buyer: User }): 
     link: `/order/${order.id}`,
   });
   notifyOrderCounterpart(order);
-
   return order;
 };

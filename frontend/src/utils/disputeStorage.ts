@@ -95,7 +95,7 @@ export const updateDisputeStatus = (disputeId: string, status: DisputeStatus, ad
       // Resolved: remove product listing (community dispute posts stay)
       const order = getOrderById(dispute.orderId);
       if (order?.product?.id) {
-        deleteProduct(order.product.id);
+        void deleteProduct(order.product.id);
       }
     }
     if (adminResponse) {
@@ -128,7 +128,7 @@ interface CreateDisputeParams {
   evidence: string[];
 }
 
-export const createDispute = (params: CreateDisputeParams): Dispute => {
+export const createDispute = async (params: CreateDisputeParams): Promise<Dispute | null> => {
   const dispute: Dispute = {
     id: `dispute_${Date.now()}`,
     ...params,
@@ -136,7 +136,8 @@ export const createDispute = (params: CreateDisputeParams): Dispute => {
     createdAt: new Date().toISOString(),
   };
 
+  const ok = await syncDisputeToDB(dispute);
+  if (!ok) return null;
   saveDispute(dispute);
-  syncDisputeToDB(dispute);
   return dispute;
 };

@@ -48,9 +48,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   const [likeCount, setLikeCount] = useState(() => getLikeCount(product.id));
   const handleLike = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const nowLiked = toggleFavorite(product);
-    setLiked(nowLiked);
-    setLikeCount(getLikeCount(product.id));
+    void (async () => {
+      const nowLiked = await toggleFavorite(product);
+      setLiked(nowLiked);
+      setLikeCount(getLikeCount(product.id));
+    })();
   }, [product]);
 
   const chatCount = getChatRoomCountByProductId(product.id);

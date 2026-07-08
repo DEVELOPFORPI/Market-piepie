@@ -45,15 +45,14 @@ export const getUnreadCount = (): number => {
   return getNotifications().filter((n) => !n.read).length;
 };
 
-/** Append notification for a user */
-export const addNotification = (params: {
+/** Append notification — DB 저장 성공 후 로컬 캐시 */
+export const addNotification = async (params: {
   targetUserId: string;
   type: NotificationType;
   title: string;
   content: string;
   link?: string;
-}) => {
-  const list = getAll();
+}): Promise<boolean> => {
   const notif: StoredNotification = {
     id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     targetUserId: params.targetUserId,
@@ -64,50 +63,40 @@ export const addNotification = (params: {
     read: false,
     link: params.link,
   };
+  const ok = await syncNotificationToDB(notif);
+  if (!ok) return false;
+  const list = getAll();
   list.unshift(notif);
   saveAll(list);
-  syncNotificationToDB(notif);
   broadcastNotification(params.targetUserId);
+  return true;
 };
 
 /** Mark one as read */
-export const markAsRead = (id: string) => {
+export const markAsRead = async (id: string): Promise<boolean> => {
+  const ok = await syncNotificationReadToDB(id);
+  if (!ok) return false;
   const list = getAll();
   const i = list.findIndex((n) => n.id === id);
   if (i >= 0) {
     list[i].read = true;
     saveAll(list);
-    syncNotificationReadToDB(id);
   }
+  return true;
 };
 
 /** Mark all for current user read */
-export const markAllAsRead = () => {
-
+export const markAllAsRead = async (): Promise<boolean> => {
   const userId = getCurrentUserId();
-
   const list = getAll();
-
-  const toSync: string[] = [];
-
-  const updated = list.map((n) => {
-
-    if (n.targetUserId === userId && !n.read) {
-
-      toSync.push(n.id);
-
-      return { ...n, read: true };
-
-    }
-
-    return n;
-
-  });
-
+  const toSync = list.filter((n) => n.targetUserId === userId && !n.read).map((n) => n.id);
+  const results = await Promise.all(toSync.map((id) => syncNotificationReadToDB(id)));
+  if (results.some((ok) => !ok)) return false;
+  const updated = list.map((n) =>
+    n.targetUserId === userId && !n.read ? { ...n, read: true } : n
+  );
   saveAll(updated);
-
-  toSync.forEach((id) => syncNotificationReadToDB(id));
-
+  return true;
 };
 
 /** Delete notifications by id */
