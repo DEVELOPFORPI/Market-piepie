@@ -11,7 +11,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addSellerMeetupStartedToChat, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addSellerMeetupStartedToChat, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getOrderById, getOrders, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, acceptOrderMeetup, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -32,6 +32,8 @@ import {
   CHAT_MSG_SELLER_MEETUP_STARTED,
   CHAT_LEAVE_ROOM,
   CHAT_LEAVE_ROOM_CONFIRM,
+  CHAT_NEW_MESSAGES,
+  CHAT_UNREAD_FROM_HERE,
   displayChatMessageContent,
   isMeetupCanceledMessage,
   labelBuyerChatTab,
@@ -55,6 +57,22 @@ const DISPUTE_ELIGIBLE = new Set<OrderStatus>([
   ORDER_STATUS_VALUE.DISPUTE,
 ]);
 
+const NEAR_BOTTOM_PX = 80;
+
+function findFirstUnreadIndex(
+  msgs: ChatMessage[],
+  lastReadAt: string | undefined,
+  myId: string | undefined,
+): number {
+  if (lastReadAt) {
+    return msgs.findIndex((m) => m.timestamp > lastReadAt);
+  }
+  if (myId) {
+    return msgs.findIndex((m) => m.senderId !== myId);
+  }
+  return msgs.length > 0 ? 0 : -1;
+}
+
 export const ChatRoom: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,7 +92,11 @@ export const ChatRoom: React.FC = () => {
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
   const [buyerTab, setBuyerTab] = useState<BuyerChatTab>(BUYER_CHAT_TAB_VALUE.RECEIVE);
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const initialScrollDoneRef = useRef(false);
+  const prevMessageCountRef = useRef(0);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   /** Message ids for which we already showed the "meetup started" popup */
@@ -96,6 +118,9 @@ export const ChatRoom: React.FC = () => {
 
   // Sync room when roomId changes; reset deleted-listing ref
   useEffect(() => {
+    initialScrollDoneRef.current = false;
+    prevMessageCountRef.current = 0;
+    setNewMessageCount(0);
     setRoom(roomId ? getChatRoom(roomId) : null);
     deletedProductPopupShownRef.current = false;
   }, [roomId]);
@@ -105,14 +130,11 @@ export const ChatRoom: React.FC = () => {
     if (!roomId) return;
     connectChatSocket();
     wsJoinRoom(roomId);
-    emitReadReceipt(roomId);
 
     const unsub = onNewMessage((data) => {
       if (data.roomId === roomId) {
         addRemoteMessage(roomId, data.message);
         setMessages(getMessages(roomId));
-        markAsRead(roomId);
-        emitReadReceipt(roomId);
         checkNewMeetupFromOther([data.message]);
       }
     });
@@ -140,7 +162,7 @@ export const ChatRoom: React.FC = () => {
     navigate('/chat', { replace: true });
   }, [isProductDeleted, roomId, navigate]);
 
-  // On enter: mark read, load messages, check listing exists
+  // On enter: load messages, check listing exists (read when user actually views messages)
   useEffect(() => {
     if (roomId) {
       const r = getChatRoom(roomId);
@@ -148,30 +170,10 @@ export const ChatRoom: React.FC = () => {
         navigate('/chat', { replace: true });
         return;
       }
-      markAsRead(roomId);
       setMessages(getMessages(roomId));
       checkProductDeleted();
     }
   }, [roomId, navigate]);
-
-  // DB가 원본: 진입 시 방+메시지를 서버에서 받아 로컬에 병합
-  // (상대 기기에는 방이 로컬에 없어 알림만 오고 채팅이 비어 보이던 문제 해결)
-  useEffect(() => {
-    if (!roomId) return;
-    let cancelled = false;
-    (async () => {
-      const uid = getCurrentUserId();
-      await syncRoomMessagesFromDB(roomId, uid || undefined);
-      if (cancelled) return;
-      const r = getChatRoom(roomId);
-      if (r) {
-        setRoom(r);
-        setMessages(getMessages(roomId));
-        markAsRead(roomId);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [roomId]);
 
   // After meetup flow: refresh room and messages
   useEffect(() => {
@@ -424,13 +426,128 @@ export const ChatRoom: React.FC = () => {
     if (!roomId) return;
   }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled, buyerTab, buyerTabOptions]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const firstUnreadIndex = findFirstUnreadIndex(
+    displayMessages,
+    userId ? room?.lastReadAt?.[userId] : undefined,
+    userId || undefined,
+  );
+
+  const isNearBottom = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  };
+
+  const scrollToMessageIndex = (index: number) => {
+    const el = messagesContainerRef.current?.querySelector(`[data-msg-index="${index}"]`);
+    el?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  };
+
+  const scrollToBottomInstant = () => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  const markReadFromViewport = () => {
+    if (!roomId) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (isNearBottom()) {
+      markAsRead(roomId);
+      emitReadReceipt(roomId);
+      setRoom(getChatRoom(roomId));
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const nodes = container.querySelectorAll('[data-msg-timestamp]');
+    let latestVisible = '';
+    nodes.forEach((node) => {
+      const rect = node.getBoundingClientRect();
+      if (rect.top < containerRect.bottom - 20 && rect.bottom > containerRect.top) {
+        const ts = node.getAttribute('data-msg-timestamp') || '';
+        if (ts > latestVisible) latestVisible = ts;
+      }
+    });
+    if (latestVisible && markAsReadUpTo(roomId, latestVisible)) {
+      emitReadReceipt(roomId);
+      setRoom(getChatRoom(roomId));
+    }
+  };
+
+  const handleMessagesScroll = () => {
+    if (isNearBottom()) {
+      setNewMessageCount(0);
+    }
+    markReadFromViewport();
+  };
+
+  const handleJumpToNewMessages = () => {
+    scrollToBottomInstant();
+    setNewMessageCount(0);
+    if (roomId) {
+      markAsRead(roomId);
+      emitReadReceipt(roomId);
+      setRoom(getChatRoom(roomId));
+    }
+  };
+
+  const scrollToInitialPosition = (msgs: ChatMessage[]) => {
+    if (initialScrollDoneRef.current || msgs.length === 0) return;
+    initialScrollDoneRef.current = true;
+    prevMessageCountRef.current = msgs.length;
+    requestAnimationFrame(() => {
+      const r = roomId ? getChatRoom(roomId) : null;
+      const uid = getCurrentUserId();
+      const lastRead = uid ? r?.lastReadAt?.[uid] : undefined;
+      const idx = findFirstUnreadIndex(msgs, lastRead, uid || undefined);
+      if (idx >= 0) scrollToMessageIndex(idx);
+      else scrollToBottomInstant();
+    });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!roomId) return;
+
+    const count = messages.length;
+    const prev = prevMessageCountRef.current;
+
+    if (!initialScrollDoneRef.current && count > 0) {
+      scrollToInitialPosition(messages);
+    } else if (count > prev && initialScrollDoneRef.current) {
+      if (isNearBottom()) {
+        setNewMessageCount(0);
+        markAsRead(roomId);
+        emitReadReceipt(roomId);
+        setRoom(getChatRoom(roomId));
+      } else {
+        setNewMessageCount((c) => c + (count - prev));
+      }
+    }
+
+    prevMessageCountRef.current = count;
+  }, [messages, roomId]);
+
+  // DB가 원본: 진입 시 방+메시지를 서버에서 받아 로컬에 병합
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    (async () => {
+      const uid = getCurrentUserId();
+      await syncRoomMessagesFromDB(roomId, uid || undefined);
+      if (cancelled) return;
+      const r = getChatRoom(roomId);
+      if (r) {
+        setRoom(r);
+        const synced = getMessages(roomId);
+        setMessages(synced);
+        initialScrollDoneRef.current = false;
+        scrollToInitialPosition(synced);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId]);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -457,6 +574,16 @@ export const ChatRoom: React.FC = () => {
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
 
+    const scrollAfterSend = () => {
+      requestAnimationFrame(() => {
+        scrollToBottomInstant();
+        markAsRead(roomId);
+        emitReadReceipt(roomId);
+        setRoom(getChatRoom(roomId));
+        setNewMessageCount(0);
+      });
+    };
+
     // Image message (random suffix avoids duplicate keys in same ms)
     if (previewImages.length > 0) {
       const imgMessage: ChatMessage = {
@@ -471,6 +598,7 @@ export const ChatRoom: React.FC = () => {
       if (saved) {
         setPreviewImages([]);
         setInput('');
+        scrollAfterSend();
       } else {
         alert('Could not send photos. Check your connection and try again.');
       }
@@ -488,6 +616,7 @@ export const ChatRoom: React.FC = () => {
     const saved = await addMessage(roomId, newMessage);
     if (saved) {
       setInput('');
+      scrollAfterSend();
     } else {
       alert('Message could not be sent. Check your connection and try again.');
     }
@@ -897,7 +1026,7 @@ export const ChatRoom: React.FC = () => {
       )}
 
       {/* Messages */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 relative">
         {currentOrder && currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime && (
           <div className="flex-shrink-0 px-4 pt-4 pb-2">
             <div
@@ -935,16 +1064,31 @@ export const ChatRoom: React.FC = () => {
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+        >
         {displayMessages.map((msg, msgIndex) => {
           const isMe = msg.senderId === getCurrentUserId();
           const msgKey = `${msg.id}-${msgIndex}`;
+          const showUnreadDivider = msgIndex === firstUnreadIndex && firstUnreadIndex >= 0;
+          const unreadDivider = showUnreadDivider ? (
+            <div className="flex justify-center py-1">
+              <span className="text-xs font-medium text-[#00A8A3] px-3 py-1 bg-teal-50 rounded-full">
+                {CHAT_UNREAD_FROM_HERE}
+              </span>
+            </div>
+          ) : null;
           if (msg.type === 'system') {
             return (
-              <div key={msgKey} className="flex justify-center">
+              <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+                {unreadDivider}
+                <div className="flex justify-center">
                 <span className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
                   {displayChatMessageContent(msg.content)}
                 </span>
+                </div>
               </div>
             );
           }
@@ -966,7 +1110,9 @@ export const ChatRoom: React.FC = () => {
             const meetupTime = msg.meetupTime ?? (useOrderMeetup ? currentOrder!.meetupTime : undefined);
             const hasDetail = !!(meetupPlace || meetupDate || meetupTime);
             return (
-              <div key={msgKey} className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
+              <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+                {unreadDivider}
+                <div className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
                 <div className="flex flex-col max-w-[85%]">
                   <div
                     role="button"
@@ -1003,6 +1149,7 @@ export const ChatRoom: React.FC = () => {
                     })}
                   </p>
                 </div>
+                </div>
               </div>
             );
           }
@@ -1020,7 +1167,9 @@ export const ChatRoom: React.FC = () => {
             });
             const isShareOffer = msg.originalPrice === 0 && msg.proposedPrice === 0;
             return (
-              <div key={msgKey} className={`flex ${isOfferFromMe ? 'justify-end' : 'justify-start'}`}>
+              <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+                {unreadDivider}
+                <div className={`flex ${isOfferFromMe ? 'justify-end' : 'justify-start'}`}>
                 <div className="flex flex-col max-w-[85%]">
                   <div
                     className="rounded-lg px-4 py-3 text-white text-sm shadow-sm"
@@ -1091,6 +1240,7 @@ export const ChatRoom: React.FC = () => {
                     })}
                   </p>
                 </div>
+                </div>
               </div>
             );
           }
@@ -1100,7 +1250,9 @@ export const ChatRoom: React.FC = () => {
             // Seller sent accept/decline: align to seller when me
             const isResultFromMe = getCurrentUserId() === room?.sellerId;
             return (
-              <div key={msgKey} className={`flex ${isResultFromMe ? 'justify-end' : 'justify-start'}`}>
+              <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+                {unreadDivider}
+                <div className={`flex ${isResultFromMe ? 'justify-end' : 'justify-start'}`}>
                 <div className="flex flex-col max-w-[85%]">
                   <div
                     className={`rounded-lg px-4 py-2.5 text-sm font-medium ${
@@ -1123,14 +1275,16 @@ export const ChatRoom: React.FC = () => {
                     })}
                   </p>
                 </div>
+                </div>
               </div>
             );
           }
           return (
-            <div
-              key={msgKey}
-              className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+              {unreadDivider}
+              <div
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+              >
               <div className="flex flex-col max-w-[70%]">
                 {/* Images */}
                 {msg.images && msg.images.length > 0 && (
@@ -1178,10 +1332,23 @@ export const ChatRoom: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
           );
         })}
         <div ref={messagesEndRef} />
         </div>
+        {newMessageCount > 0 && (
+          <button
+            type="button"
+            onClick={handleJumpToNewMessages}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-white shadow-lg active:opacity-90"
+            style={{ backgroundColor: '#00A8A3' }}
+          >
+            <span aria-hidden>↓</span>
+            {CHAT_NEW_MESSAGES}
+            {newMessageCount > 1 ? ` (${newMessageCount})` : ''}
+          </button>
+        )}
       </div>
 
       {/* Image Preview */}

@@ -140,6 +140,8 @@ export const CHAT_LEAVE_ROOM_CONFIRM = pick(
   '채팅방을 나가시겠습니까?\n상대방에게 나간 것이 표시됩니다.',
 );
 export const CHAT_LASTMSG_PHOTO = pick('Sent a photo', '사진을 보냈습니다');
+export const CHAT_NEW_MESSAGES = pick('New messages', '새 메시지');
+export const CHAT_UNREAD_FROM_HERE = pick('Unread from here', '여기부터 안 읽음');
 export const CHAT_FALLBACK_NICKNAME = pick('Someone', '알 수 없음');
 
 // --- Notification titles (persisted; match across app) ---

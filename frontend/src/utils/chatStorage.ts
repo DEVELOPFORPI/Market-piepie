@@ -336,6 +336,37 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
   return saveResult;
 };
 
+/** Mark room read through a specific message timestamp (partial or full read) */
+export const markAsReadUpTo = (roomId: string, readThroughTimestamp: string): boolean => {
+  const rooms = getAllChatRooms();
+  const room = rooms.find((r) => r.id === roomId);
+  if (!room) return false;
+
+  const userId = getCurrentUserId();
+  if (!userId) return false;
+
+  if (!room.readStatus) room.readStatus = {};
+  if (!room.lastReadAt) room.lastReadAt = {};
+
+  const prev = room.lastReadAt[userId] || '';
+  if (readThroughTimestamp <= prev) return false;
+
+  room.lastReadAt[userId] = readThroughTimestamp;
+  const messages = room.messages || [];
+  const hasUnread = messages.some((m) => m.timestamp > readThroughTimestamp);
+  room.readStatus[userId] = !hasUnread;
+  room.isRead = !hasUnread;
+  room.unreadCount = hasUnread ? Math.max(room.unreadCount || 0, 1) : 0;
+
+  saveAllChatRooms(rooms, roomId);
+  void syncChatRoomMetaToDB(roomId, {
+    read_state: {
+      [userId]: { read: !hasUnread, lastReadAt: room.lastReadAt[userId] },
+    },
+  });
+  return true;
+};
+
 /** Mark room read for current user */
 export const markAsRead = (roomId: string) => {
   const rooms = getAllChatRooms();
@@ -345,9 +376,11 @@ export const markAsRead = (roomId: string) => {
   const userId = getCurrentUserId();
   if (!room.readStatus) room.readStatus = {};
   if (!room.lastReadAt) room.lastReadAt = {};
+  const messages = room.messages || [];
+  const lastTs = messages.length ? messages[messages.length - 1].timestamp : new Date().toISOString();
   if (userId) {
     room.readStatus[userId] = true;
-    room.lastReadAt[userId] = new Date().toISOString();
+    room.lastReadAt[userId] = lastTs;
   }
   room.isRead = true;
   room.unreadCount = 0;
