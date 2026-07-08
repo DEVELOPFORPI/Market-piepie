@@ -1,5 +1,5 @@
 import { ChatRoom, ChatMessage, Product, Order, ORDER_STATUS_VALUE } from '@/types';
-import { syncChatRoomToDB, syncMessageToDB } from '@/utils/dbSync';
+import { syncChatRoomToDB, syncMessageToDB, syncChatRoomMetaToDB } from '@/utils/dbSync';
 import { sendMessageViaSocket, notifyNewRoom } from '@/utils/chatSocket';
 import {
   CHAT_FALLBACK_NICKNAME,
@@ -219,7 +219,7 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
         room = { ...existing, leftUserIds };
         rooms[idx] = room;
         saveAllChatRooms(rooms, existing.id);
-        await syncChatRoomToDB(room);
+        await syncChatRoomToDB(room, { rejoin: true });
         rejoinedAfterLeave = true;
       }
     }
@@ -317,6 +317,16 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
   room.readStatus[senderId] = true;
 
   const saveResult = saveAllChatRooms(rooms, roomId);
+  const readPatch: Record<string, { read?: boolean; lastReadAt?: string }> = {};
+  if (senderId) {
+    readPatch[senderId] = { read: true, lastReadAt: room.lastReadAt?.[senderId] || message.timestamp };
+  }
+  otherIds.forEach((otherId) => {
+    if (otherId) readPatch[otherId] = { read: false };
+  });
+  if (Object.keys(readPatch).length) {
+    void syncChatRoomMetaToDB(roomId, { read_state: readPatch });
+  }
   sendMessageViaSocket(roomId, message, { buyerId: room.buyerId || '', sellerId: room.sellerId || '' });
   return saveResult;
 };
@@ -338,6 +348,13 @@ export const markAsRead = (roomId: string) => {
   room.unreadCount = 0;
 
   saveAllChatRooms(rooms, roomId);
+  if (userId) {
+    void syncChatRoomMetaToDB(roomId, {
+      read_state: {
+        [userId]: { read: true, lastReadAt: room.lastReadAt[userId] },
+      },
+    });
+  }
 };
 
 /** 상대방이 채팅방을 읽었음을 로컬에 반영 */
@@ -350,6 +367,11 @@ export const markAsReadByOther = (roomId: string, otherUserId: string) => {
   room.readStatus[otherUserId] = true;
   room.lastReadAt[otherUserId] = new Date().toISOString();
   saveAllChatRooms(rooms, roomId);
+  void syncChatRoomMetaToDB(roomId, {
+    read_state: {
+      [otherUserId]: { read: true, lastReadAt: room.lastReadAt[otherUserId] },
+    },
+  });
 };
 
 /** Messages for a room */
@@ -612,7 +634,9 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const idx = roomsAfterMessage.findIndex((r) => r.id === roomId);
   if (idx >= 0) {
     roomsAfterMessage[idx] = { ...roomsAfterMessage[idx], leftUserIds };
-    return saveAllChatRooms(roomsAfterMessage, roomId);
+    const saved = saveAllChatRooms(roomsAfterMessage, roomId);
+    void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+    return saved;
   }
   return false;
 };

@@ -356,12 +356,14 @@ export const updateOrderMeetup = async (
     meetup_location: params.meetupPlace,
     meetup_date: params.meetupDate,
     meetup_time: params.meetupTime,
+    meetup_accepted: false,
   });
   if (!ok) return undefined;
 
   order.meetupPlace = params.meetupPlace;
   order.meetupDate = params.meetupDate;
   order.meetupTime = params.meetupTime;
+  order.meetupAccepted = false;
   order.status = ORDER_STATUS_VALUE.MEETUP_SET;
   order.timeline.push(timelineEvent);
   void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
@@ -382,7 +384,9 @@ export const acceptOrderMeetup = async (orderId: string): Promise<Order | undefi
     timestamp: new Date().toISOString(),
     description: 'Buyer accepted the meetup',
   };
-  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent);
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent, {
+    meetup_accepted: true,
+  });
   if (!ok) return undefined;
 
   order.meetupAccepted = true;
@@ -408,12 +412,14 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
     meetup_location: '',
     meetup_date: '',
     meetup_time: '',
+    meetup_accepted: false,
   });
   if (!ok) return undefined;
 
   order.meetupPlace = undefined;
   order.meetupDate = undefined;
   order.meetupTime = undefined;
+  order.meetupAccepted = false;
   order.status = ORDER_STATUS_VALUE.ACCEPTED;
   order.timeline.push(timelineEvent);
   setOrdersWithQuotaRetry(orders, orderId);
@@ -530,6 +536,73 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
     content: `${seller.nickname} ${notifContent}`,
     link: `/order/${order.id}`,
   });
+  notifyOrderCounterpart(order);
+  return order;
+};
+
+/** Buyer submits shipping address for delivery trades */
+export const saveOrderShippingInfo = async (
+  orderId: string,
+  info: { recipientName: string; recipientPhone: string; address: string; requestNote?: string },
+): Promise<Order | undefined> => {
+  const orders = getAllOrders();
+  const order = orders.find((o) => o.id === orderId);
+  if (!order) return undefined;
+
+  const timelineEvent = {
+    id: nextTimelineId(),
+    type: ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
+    timestamp: new Date().toISOString(),
+    description: 'Buyer submitted shipping details',
+  };
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent, {
+    shipping_name: info.recipientName,
+    shipping_phone: info.recipientPhone,
+    shipping_address: info.address,
+  });
+  if (!ok) return undefined;
+
+  order.shippingInfo = {
+    recipientName: info.recipientName,
+    recipientPhone: info.recipientPhone,
+    address: info.address,
+    requestNote: info.requestNote,
+  };
+  if (info.requestNote) order.memo = info.requestNote;
+  order.timeline.push(timelineEvent);
+  setOrdersWithQuotaRetry(orders, orderId);
+  window.dispatchEvent(new Event('ordersChanged'));
+  notifyOrderCounterpart(order);
+  return order;
+};
+
+/** Seller submits tracking number */
+export const saveOrderTracking = async (
+  orderId: string,
+  params: { trackingNumber: string; shippingCompany: string },
+): Promise<Order | undefined> => {
+  const orders = getAllOrders();
+  const order = orders.find((o) => o.id === orderId);
+  if (!order) return undefined;
+
+  const timelineEvent = {
+    id: nextTimelineId(),
+    type: ORDER_STATUS_VALUE.SHIPPED,
+    timestamp: new Date().toISOString(),
+    description: `Shipped via ${params.shippingCompany}`,
+  };
+  const ok = await syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.SHIPPED, timelineEvent, {
+    tracking_number: params.trackingNumber,
+    shipping_company: params.shippingCompany,
+  });
+  if (!ok) return undefined;
+
+  order.trackingNumber = params.trackingNumber;
+  order.shippingCompany = params.shippingCompany;
+  order.status = ORDER_STATUS_VALUE.SHIPPED;
+  order.timeline.push(timelineEvent);
+  setOrdersWithQuotaRetry(orders, orderId);
+  window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
   return order;
 };

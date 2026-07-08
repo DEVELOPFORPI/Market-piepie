@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { getOrderById, saveOrderTracking } from '@/utils/orderStorage';
 
 export const ShippingInfo: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const order = orderId ? getOrderById(orderId) : null;
   const [trackingNumber, setTrackingNumber] = useState('');
   const [shippingCompany, setShippingCompany] = useState('');
   const [shippingProof, setShippingProof] = useState<string[]>([]);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (order?.trackingNumber) setTrackingNumber(order.trackingNumber);
+    if (order?.shippingCompany) setShippingCompany(order.shippingCompany);
+  }, [order?.trackingNumber, order?.shippingCompany]);
 
   const shippingCompanies = ['CJ Logistics', 'Hanjin', 'Logen', 'Lotte', 'Other'];
 
@@ -29,15 +37,29 @@ export const ShippingInfo: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
-    console.log('Submit shipping:', {
-      orderId,
-      trackingNumber,
-      shippingCompany,
-      shippingProof,
-    });
+  const handleSubmit = async () => {
+    if (!orderId || !trackingNumber || !shippingCompany) return;
+    setSubmitting(true);
+    const updated = await saveOrderTracking(orderId, { trackingNumber, shippingCompany });
+    setSubmitting(false);
+    if (!updated) {
+      alert('Could not save tracking info. Check your connection and try again.');
+      return;
+    }
+    if (shippingProof.length) {
+      console.log('Shipping proof uploaded locally:', shippingProof);
+    }
+    alert('Tracking info saved.');
     navigate(-1);
   };
+
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Order not found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-24">
@@ -53,6 +75,11 @@ export const ShippingInfo: React.FC = () => {
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm text-gray-700">{order.product.title}</p>
+          <p className="text-base font-bold text-gray-900 mt-1">{order.proposedPrice.toLocaleString()} Pi</p>
+        </div>
+
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-800">
             We will notify the buyer. Enter the tracking number and proof carefully.
@@ -67,6 +94,7 @@ export const ShippingInfo: React.FC = () => {
             {shippingCompanies.map((company) => (
               <button
                 key={company}
+                type="button"
                 onClick={() => setShippingCompany(company)}
                 className={`px-4 py-3 border rounded-lg font-medium ${
                   shippingCompany === company
@@ -102,6 +130,7 @@ export const ShippingInfo: React.FC = () => {
               <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
                 <img src={getDisplayImageUrl(img)} alt={`Proof ${idx + 1}`} className="w-full h-full object-cover" />
                 <button
+                  type="button"
                   onClick={() => setShippingProof(shippingProof.filter((_, i) => i !== idx))}
                   className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white"
                 >
@@ -124,19 +153,16 @@ export const ShippingInfo: React.FC = () => {
               </svg>
             </label>
           </div>
-          <p className="text-xs text-gray-500">
-            Upload label photo or receipt if you want.
-          </p>
         </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
-          onClick={handleSubmit}
-          disabled={!trackingNumber || !shippingCompany || uploadingProof}
+          onClick={() => void handleSubmit()}
+          disabled={!trackingNumber || !shippingCompany || uploadingProof || submitting}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          {uploadingProof ? 'Uploading...' : 'Mark shipped'}
+          {uploadingProof || submitting ? 'Saving...' : 'Mark shipped'}
         </button>
       </div>
     </div>

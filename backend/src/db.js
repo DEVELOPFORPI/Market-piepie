@@ -62,6 +62,7 @@ const TABLE_COLUMNS = {
     'memo',
     'seller_completed',
     'buyer_completed',
+    'meetup_accepted',
     'created_at',
   ],
   chat_rooms: [
@@ -74,6 +75,7 @@ const TABLE_COLUMNS = {
     'last_message_time',
     'unread_count',
     'left_user_ids',
+    'read_state',
     'created_at',
   ],
   chat_messages: [

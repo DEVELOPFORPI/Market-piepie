@@ -287,6 +287,12 @@ export async function syncOrderToDB(order: Order): Promise<boolean> {
       memo: order.memo,
       buyer_completed: order.buyerCompleted,
       seller_completed: order.sellerCompleted,
+      meetup_accepted: order.meetupAccepted || false,
+      shipping_address: order.shippingInfo?.address,
+      shipping_name: order.shippingInfo?.recipientName,
+      shipping_phone: order.shippingInfo?.recipientPhone,
+      tracking_number: order.trackingNumber,
+      shipping_company: order.shippingCompany,
     });
     if (!res.ok) return false;
     if (order.timeline?.length) {
@@ -303,12 +309,26 @@ export async function syncOrderToDB(order: Order): Promise<boolean> {
   }
 }
 
+export type OrderStatusSyncExtra = {
+  buyer_completed?: boolean;
+  seller_completed?: boolean;
+  meetup_location?: string;
+  meetup_date?: string;
+  meetup_time?: string;
+  meetup_accepted?: boolean;
+  shipping_address?: string;
+  shipping_name?: string;
+  shipping_phone?: string;
+  tracking_number?: string;
+  shipping_company?: string;
+};
+
 /** 주문 상태 업데이트 — 성공 여부 반환 */
 export async function syncOrderStatusToDB(
   orderId: string,
   status: string,
   timelineEvent?: { id: string; type: string; description: string },
-  extra?: { buyer_completed?: boolean; seller_completed?: boolean; meetup_location?: string; meetup_date?: string; meetup_time?: string }
+  extra?: OrderStatusSyncExtra,
 ): Promise<boolean> {
   try {
     const res = await api.put(`/api/orders/${orderId}`, { status, ...extra });
@@ -331,10 +351,11 @@ function mergeOrderDbPreferred(dbOrder: Order, local?: Order): Order {
   if (!local) return dbOrder;
   return {
     ...dbOrder,
-    timeline: local.timeline?.length ? local.timeline : dbOrder.timeline,
-    product: local.product?.title ? local.product : dbOrder.product,
-    buyer: local.buyer?.nickname ? local.buyer : dbOrder.buyer,
-    seller: local.seller?.nickname ? local.seller : dbOrder.seller,
+    timeline: dbOrder.timeline?.length ? dbOrder.timeline : local.timeline,
+    product: dbOrder.product?.title ? dbOrder.product : local.product,
+    buyer: dbOrder.buyer?.nickname ? dbOrder.buyer : local.buyer,
+    seller: dbOrder.seller?.nickname ? dbOrder.seller : local.seller,
+    shippingInfo: dbOrder.shippingInfo?.address ? dbOrder.shippingInfo : local.shippingInfo,
   };
 }
 
@@ -368,23 +389,78 @@ export async function syncOrdersFromDB(userId: string): Promise<void> {
   }
 }
 
+function parseMeetupFromOrderRow(row: Record<string, unknown>) {
+  let meetupDate = row.meetup_date ? String(row.meetup_date) : undefined;
+  let meetupTime = row.meetup_time ? String(row.meetup_time) : undefined;
+  if (meetupTime && /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}/.test(meetupTime)) {
+    const [datePart, timePart] = meetupTime.split(/\s+/);
+    meetupDate = meetupDate || datePart;
+    meetupTime = timePart;
+  }
+  return {
+    meetupPlace: row.meetup_place ? String(row.meetup_place) : undefined,
+    meetupDate,
+    meetupTime,
+  };
+}
+
+function parseTimelineFromDB(raw: unknown): Order['timeline'] {
+  if (!raw) return [];
+  let items: unknown[] = [];
+  if (Array.isArray(raw)) items = raw;
+  else if (typeof raw === 'string') {
+    try { items = JSON.parse(raw); } catch { return []; }
+  }
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((e) => e && typeof e === 'object')
+    .map((e) => {
+      const ev = e as Record<string, unknown>;
+      return {
+        id: String(ev.id || ''),
+        type: String(ev.type || ''),
+        timestamp: String(ev.timestamp || ev.created_at || new Date().toISOString()),
+        description: String(ev.description || ''),
+      };
+    });
+}
+
 function mapOrderFromDB(row: Record<string, unknown>): Order {
   const buyer = (row.buyer as Record<string, unknown>) || {};
   const seller = (row.seller as Record<string, unknown>) || {};
   const product = (row.product as Record<string, unknown>) || {};
+  const meetup = parseMeetupFromOrderRow(row);
+  const timeline = parseTimelineFromDB(row.timeline);
+  const meetupAcceptedFromDb = Boolean(row.meetup_accepted);
+  const meetupAcceptedFromTimeline = timeline.some((e) => e.type === 'meetup_accepted');
+  const shippingName = row.shipping_name ? String(row.shipping_name) : undefined;
+  const shippingPhone = row.shipping_phone ? String(row.shipping_phone) : undefined;
+  const shippingAddress = row.shipping_address ? String(row.shipping_address) : undefined;
   return {
     id: String(row.id),
     status: String(row.status || '') as Order['status'],
     proposedPrice: Number(row.proposed_price || 0),
     tradeMethod: String(row.trade_method || '') as Order['tradeMethod'],
-    meetupPlace: row.meetup_place as string | undefined,
-    meetupDate: row.meetup_date as string | undefined,
-    meetupTime: row.meetup_time as string | undefined,
+    meetupPlace: meetup.meetupPlace,
+    meetupDate: meetup.meetupDate,
+    meetupTime: meetup.meetupTime,
     memo: row.memo as string | undefined,
     buyerCompleted: Boolean(row.buyer_completed),
     sellerCompleted: Boolean(row.seller_completed),
+    meetupAccepted: meetupAcceptedFromDb || meetupAcceptedFromTimeline,
+    trackingNumber: row.tracking_number ? String(row.tracking_number) : undefined,
+    shippingCompany: row.shipping_company ? String(row.shipping_company) : undefined,
+    shippingInfo:
+      shippingName || shippingPhone || shippingAddress
+        ? {
+            recipientName: shippingName,
+            recipientPhone: shippingPhone,
+            address: shippingAddress,
+            requestNote: row.memo ? String(row.memo) : undefined,
+          }
+        : undefined,
     createdAt: String(row.created_at || new Date().toISOString()),
-    timeline: [],
+    timeline,
     buyer: {
       id: String(buyer.id || ''), nickname: String(buyer.nickname || ''),
       profileImage: buyer.profile_image as string | undefined,
@@ -421,7 +497,10 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
 // ─── 채팅 동기화 ──────────────────────────────────────────────
 
 /** 채팅방을 DB에 저장 — 성공 여부 반환 (DB-first) */
-export async function syncChatRoomToDB(room: ChatRoom): Promise<boolean> {
+export async function syncChatRoomToDB(
+  room: ChatRoom,
+  options?: { rejoin?: boolean },
+): Promise<boolean> {
   try {
     const syncUsers: Promise<void>[] = [];
     if (room.buyerInfo) syncUsers.push(syncUserToDB(room.buyerInfo));
@@ -434,11 +513,43 @@ export async function syncChatRoomToDB(room: ChatRoom): Promise<boolean> {
       seller_id: room.sellerId,
       product_id: room.product?.id,
       order_id: room.order?.id,
+      left_user_ids: room.leftUserIds || [],
+      rejoin: options?.rejoin || false,
     });
     return res.ok;
   } catch {
     return false;
   }
+}
+
+/** 채팅방 메타(나가기·읽음·주문 연결) DB 저장 */
+export async function syncChatRoomMetaToDB(
+  roomId: string,
+  patch: {
+    left_user_ids?: string[];
+    order_id?: string | null;
+    read_state?: Record<string, { read?: boolean; lastReadAt?: string }>;
+  },
+): Promise<boolean> {
+  try {
+    const res = await api.patch(`/api/chat-rooms/${roomId}`, patch);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function parseReadStateFromDB(raw: unknown): { readStatus: Record<string, boolean>; lastReadAt: Record<string, string> } {
+  const readStatus: Record<string, boolean> = {};
+  const lastReadAt: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return { readStatus, lastReadAt };
+  for (const [userId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    if (v.read != null) readStatus[userId] = Boolean(v.read);
+    if (v.lastReadAt) lastReadAt[userId] = String(v.lastReadAt);
+  }
+  return { readStatus, lastReadAt };
 }
 
 /** 메시지를 DB에 저장 — 성공 여부 반환 (DB-first) */
@@ -476,10 +587,10 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
   return {
     ...dbRoom,
     messages: local.messages?.length ? local.messages : dbRoom.messages,
-    readStatus: local.readStatus ?? dbRoom.readStatus,
-    lastReadAt: local.lastReadAt ?? dbRoom.lastReadAt,
+    readStatus: Object.keys(dbRoom.readStatus || {}).length ? dbRoom.readStatus : local.readStatus,
+    lastReadAt: Object.keys(dbRoom.lastReadAt || {}).length ? dbRoom.lastReadAt : local.lastReadAt,
+    leftUserIds: dbRoom.leftUserIds?.length ? dbRoom.leftUserIds : local.leftUserIds,
     order: local.order ?? dbRoom.order,
-    leftUserIds: local.leftUserIds ?? dbRoom.leftUserIds,
     buyerInfo: local.buyerInfo ?? dbRoom.buyerInfo,
     sellerInfo: local.sellerInfo ?? dbRoom.sellerInfo,
   };
@@ -516,6 +627,23 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
 
 
 
+/** DB meetup_location / meetup_time → 프론트 meetupPlace·Date·Time */
+function parseMeetupFieldsFromDB(row: Record<string, unknown>): Pick<ChatMessage, 'meetupPlace' | 'meetupDate' | 'meetupTime'> {
+  const placeRaw = row.meetup_place ?? row.meetup_location;
+  const meetupPlace = placeRaw ? String(placeRaw) : undefined;
+
+  let meetupDate = row.meetup_date ? String(row.meetup_date) : undefined;
+  let meetupTime = row.meetup_time ? String(row.meetup_time) : undefined;
+
+  if (meetupTime && /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}/.test(meetupTime)) {
+    const [datePart, timePart] = meetupTime.split(/\s+/);
+    meetupDate = meetupDate || datePart;
+    meetupTime = timePart;
+  }
+
+  return { meetupPlace, meetupDate, meetupTime };
+}
+
 /** DB 메시지 row → ChatMessage */
 function mapChatMessageFromDB(row: Record<string, unknown>): ChatMessage {
   const rawType = String(row.type || 'user');
@@ -532,9 +660,7 @@ function mapChatMessageFromDB(row: Record<string, unknown>): ChatMessage {
     originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
     proposedPrice: row.proposed_price != null ? Number(row.proposed_price) : undefined,
     offerResult: (row.offer_result as ChatMessage['offerResult']) || undefined,
-    meetupPlace: row.meetup_place ? String(row.meetup_place) : undefined,
-    meetupDate: row.meetup_date ? String(row.meetup_date) : undefined,
-    meetupTime: row.meetup_time ? String(row.meetup_time) : undefined,
+    ...parseMeetupFieldsFromDB(row),
   };
 }
 
@@ -560,7 +686,18 @@ export async function syncRoomMessagesFromDB(roomId: string, userId?: string): P
     const room = rooms.find((r) => r.id === roomId);
     if (!room) return;
 
-    const dbMessages = res.data.map(mapChatMessageFromDB);
+    const localById = new Map((room.messages || []).map((m) => [m.id, m]));
+    const dbMessages = res.data.map((row) => {
+      const dbMsg = mapChatMessageFromDB(row);
+      const local = localById.get(dbMsg.id);
+      if (!local) return dbMsg;
+      return {
+        ...dbMsg,
+        meetupPlace: dbMsg.meetupPlace ?? local.meetupPlace,
+        meetupDate: dbMsg.meetupDate ?? local.meetupDate,
+        meetupTime: dbMsg.meetupTime ?? local.meetupTime,
+      };
+    });
     dbMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     room.messages = dbMessages;
 
@@ -582,6 +719,11 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
   const otherUser = row.other_user as Record<string, unknown> | undefined;
   const pd = row.product_data as Record<string, unknown> | undefined;
   const sellerUser = (row.seller_user ?? row.other_user) as Record<string, unknown> | undefined;
+  const { readStatus, lastReadAt } = parseReadStateFromDB(row.read_state);
+  const leftRaw = row.left_user_ids;
+  const leftUserIds = Array.isArray(leftRaw)
+    ? leftRaw.map((id) => String(id))
+    : [];
 
   const product = pd && pd.id ? {
     id: String(pd.id),
@@ -624,7 +766,11 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
     messages: [],
 
-    readStatus: {},
+    readStatus,
+
+    lastReadAt,
+
+    leftUserIds,
 
     product,
 

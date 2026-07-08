@@ -1,39 +1,56 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-
-const mockOrder = {
-  id: 'o1',
-  product: {
-    title: 'iPhone 14 Pro Max',
-  },
-  shippingInfo: {
-    recipientName: 'Jane Doe',
-    recipientPhone: '010-****-1234',
-    address: 'Gangnam-gu, Seoul ** (tap below for full address)',
-    requestNote: 'Leave at door',
-  },
-  hasShippingInfo: true,
-};
+import { getOrderById } from '@/utils/orderStorage';
+import { addNotification } from '@/utils/notificationStorage';
+import { getCurrentUserId } from '@/utils/authStorage';
 
 export const ShippingInfoRequest: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const order = orderId ? getOrderById(orderId) : null;
   const [showFullAddress, setShowFullAddress] = useState(false);
 
+  const hasShippingInfo = !!(
+    order?.shippingInfo?.recipientName &&
+    order?.shippingInfo?.address
+  );
+
   const handleRequest = () => {
-    console.log('Request shipping info:', { orderId });
+    if (!order) return;
+    void addNotification({
+      targetUserId: order.buyer.id,
+      type: 'order',
+      title: 'Shipping details needed',
+      content: `Please enter shipping details for "${order.product.title}".`,
+      link: `/shipping-info/${order.id}`,
+    });
     alert('We notified the buyer to enter shipping details.');
     navigate(-1);
-  };
-
-  const handleViewDetail = () => {
-    setShowFullAddress(true);
   };
 
   const handleShipping = () => {
     navigate(`/shipping/${orderId}`);
   };
+
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Order not found.</p>
+      </div>
+    );
+  }
+
+  const isSeller = getCurrentUserId() === order.seller.id;
+  if (!isSeller) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Only the seller can view this page.</p>
+      </div>
+    );
+  }
+
+  const info = order.shippingInfo;
 
   return (
     <div className="min-h-screen bg-white pb-24">
@@ -49,11 +66,11 @@ export const ShippingInfoRequest: React.FC = () => {
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
-        {!mockOrder.hasShippingInfo ? (
+        {!hasShippingInfo ? (
           <>
             <div className="p-4 bg-gray-50 rounded-lg">
               <h3 className="text-sm font-medium text-gray-700 mb-2">Item</h3>
-              <p className="text-sm text-gray-900">{mockOrder.product.title}</p>
+              <p className="text-sm text-gray-900">{order.product.title}</p>
             </div>
 
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -66,7 +83,7 @@ export const ShippingInfoRequest: React.FC = () => {
           <>
             <div className="p-4 bg-gray-50 rounded-lg">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Item</h3>
-              <p className="text-sm text-gray-900">{mockOrder.product.title}</p>
+              <p className="text-sm text-gray-900">{order.product.title}</p>
             </div>
 
             <div className="p-4 border border-gray-200 rounded-lg space-y-4">
@@ -74,37 +91,38 @@ export const ShippingInfoRequest: React.FC = () => {
 
               <div>
                 <p className="text-xs text-gray-600 mb-1">Recipient</p>
-                <p className="text-sm text-gray-900">{mockOrder.shippingInfo.recipientName}</p>
+                <p className="text-sm text-gray-900">{info?.recipientName}</p>
               </div>
 
               <div>
                 <p className="text-xs text-gray-600 mb-1">Phone</p>
-                <p className="text-sm text-gray-900">{mockOrder.shippingInfo.recipientPhone}</p>
+                <p className="text-sm text-gray-900">{info?.recipientPhone}</p>
               </div>
 
               <div>
                 <p className="text-xs text-gray-600 mb-1">Address</p>
                 {!showFullAddress ? (
                   <div>
-                    <p className="text-sm text-gray-900 mb-2">{mockOrder.shippingInfo.address}</p>
+                    <p className="text-sm text-gray-900 mb-2">
+                      {info?.address?.slice(0, 24)}…
+                    </p>
                     <button
-                      onClick={handleViewDetail}
+                      type="button"
+                      onClick={() => setShowFullAddress(true)}
                       className="text-sm text-primary underline"
                     >
                       Show full address
                     </button>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-900">
-                    123 Teheran-ro, Gangnam-gu, Seoul, Unit 456 (12345)
-                  </p>
+                  <p className="text-sm text-gray-900">{info?.address}</p>
                 )}
               </div>
 
-              {mockOrder.shippingInfo.requestNote && (
+              {info?.requestNote && (
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Delivery notes</p>
-                  <p className="text-sm text-gray-900">{mockOrder.shippingInfo.requestNote}</p>
+                  <p className="text-sm text-gray-900">{info.requestNote}</p>
                 </div>
               )}
             </div>
@@ -113,8 +131,9 @@ export const ShippingInfoRequest: React.FC = () => {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 space-y-2">
-        {!mockOrder.hasShippingInfo ? (
+        {!hasShippingInfo ? (
           <button
+            type="button"
             onClick={handleRequest}
             className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium"
           >
@@ -122,6 +141,7 @@ export const ShippingInfoRequest: React.FC = () => {
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleShipping}
             className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium"
           >

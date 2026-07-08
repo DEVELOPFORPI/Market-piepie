@@ -1,40 +1,49 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-
-const mockOrder = {
-  id: 'o1',
-  product: {
-    title: 'iPhone 14 Pro Max',
-  },
-  proposedPrice: 500,
-};
+import { getOrderById, saveOrderShippingInfo } from '@/utils/orderStorage';
 
 export const ShippingInfoInput: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const [recipientName, setRecipientName] = useState('');
-  const [recipientPhone, setRecipientPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [requestNote, setRequestNote] = useState('');
+  const order = orderId ? getOrderById(orderId) : null;
+  const [recipientName, setRecipientName] = useState(order?.shippingInfo?.recipientName || '');
+  const [recipientPhone, setRecipientPhone] = useState(order?.shippingInfo?.recipientPhone || '');
+  const [address, setAddress] = useState(order?.shippingInfo?.address || '');
+  const [requestNote, setRequestNote] = useState(order?.shippingInfo?.requestNote || '');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!recipientName || !recipientPhone || !address) {
+  const handleSubmit = async () => {
+    if (!orderId || !recipientName || !recipientPhone || !address) {
       alert('Fill in all required fields.');
       return;
     }
 
-    console.log('Submit shipping info:', {
-      orderId,
+    setSubmitting(true);
+    const updated = await saveOrderShippingInfo(orderId, {
       recipientName,
       recipientPhone,
       address,
-      requestNote,
+      requestNote: requestNote || undefined,
     });
+    setSubmitting(false);
+
+    if (!updated) {
+      alert('Could not save shipping details. Check your connection and try again.');
+      return;
+    }
 
     alert('Shipping details sent.');
     navigate(-1);
   };
+
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <p className="text-gray-600">Order not found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-20">
@@ -61,9 +70,9 @@ export const ShippingInfoInput: React.FC = () => {
 
         <div className="p-4 bg-gray-50 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-2">Item</h3>
-          <p className="text-sm text-gray-900">{mockOrder.product.title}</p>
+          <p className="text-sm text-gray-900">{order.product.title}</p>
           <p className="text-base font-bold text-gray-900 mt-1">
-            {mockOrder.proposedPrice.toLocaleString()} Pi
+            {order.proposedPrice.toLocaleString()} Pi
           </p>
         </div>
 
@@ -122,11 +131,11 @@ export const ShippingInfoInput: React.FC = () => {
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
-          onClick={handleSubmit}
-          disabled={!recipientName || !recipientPhone || !address}
+          onClick={() => void handleSubmit()}
+          disabled={!recipientName || !recipientPhone || !address || submitting}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          Send shipping info
+          {submitting ? 'Saving...' : 'Send shipping info'}
         </button>
       </div>
     </div>

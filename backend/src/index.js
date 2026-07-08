@@ -1484,6 +1484,9 @@ app.get("/api/orders", requireDb, async (req, res) => {
         THEN SUBSTRING(o.meetup_time, LOCATE(' ', o.meetup_time)+1)
         ELSE o.meetup_time
       END AS meetup_time_only,
+      (SELECT COALESCE(JSON_ARRAYAGG(
+        JSON_OBJECT('id', e.id, 'type', e.type, 'description', e.description, 'timestamp', e.created_at)
+      ), JSON_ARRAY()) FROM order_timeline_events e WHERE e.order_id = o.id) AS timeline,
       ${jsonObjectSql("p", "products")} AS product,
       ${jsonObjectSql("b", "users")} AS buyer,
       ${jsonObjectSql("s", "users")} AS seller
@@ -1521,10 +1524,36 @@ app.get("/api/orders", requireDb, async (req, res) => {
   }
 });
 
+function mapOrderRowForApi(row) {
+  if (!row) return row;
+  const meetupTimeOnly =
+    row.meetup_time_only ||
+    (row.meetup_time && String(row.meetup_time).includes(" ")
+      ? String(row.meetup_time).split(/\s+/).slice(1).join(" ")
+      : row.meetup_time);
+  const meetupDate =
+    row.meetup_date ||
+    (row.meetup_time && String(row.meetup_time).includes(" ")
+      ? String(row.meetup_time).split(/\s+/)[0]
+      : undefined);
+  return {
+    ...row,
+    meetup_place: row.meetup_place || row.meetup_location,
+    meetup_date: meetupDate,
+    meetup_time: meetupTimeOnly,
+  };
+}
+
 app.get("/api/orders/:id", requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT o.*,
+        o.meetup_location AS meetup_place,
+        SUBSTRING_INDEX(COALESCE(o.meetup_time,''), ' ', 1) AS meetup_date,
+        CASE WHEN LOCATE(' ', COALESCE(o.meetup_time,'')) > 0
+          THEN SUBSTRING(o.meetup_time, LOCATE(' ', o.meetup_time)+1)
+          ELSE o.meetup_time
+        END AS meetup_time_only,
         ${jsonObjectSql("p", "products")} AS product,
         ${jsonObjectSql("b", "users")} AS buyer,
         ${jsonObjectSql("s", "users")} AS seller
@@ -1536,7 +1565,7 @@ app.get("/api/orders/:id", requireDb, async (req, res) => {
       [req.params.id],
     );
     if (!rows.length) return res.status(404).json({ error: "Order not found" });
-    const order = rows[0];
+    const order = mapOrderRowForApi(rows[0]);
     const { rows: timeline } = await pool.query(
       "SELECT * FROM order_timeline_events WHERE order_id=$1 ORDER BY created_at ASC",
       [req.params.id],
@@ -1563,6 +1592,12 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
     memo,
     buyer_completed,
     seller_completed,
+    meetup_accepted,
+    shipping_address,
+    shipping_name,
+    shipping_phone,
+    tracking_number,
+    shipping_company,
   } = req.body;
   console.log("[POST /api/orders] REQUEST", {
     id,
@@ -1586,12 +1621,16 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
       : meetup_time || null;
   try {
     const { rows } = await queryReturning(
-      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        ON DUPLICATE KEY UPDATE
          status=VALUES(status), proposed_price=VALUES(proposed_price),
          meetup_location=VALUES(meetup_location), meetup_time=VALUES(meetup_time),
-         buyer_completed=VALUES(buyer_completed), seller_completed=VALUES(seller_completed)`,
+         buyer_completed=VALUES(buyer_completed), seller_completed=VALUES(seller_completed),
+         meetup_accepted=VALUES(meetup_accepted),
+         shipping_address=VALUES(shipping_address), shipping_name=VALUES(shipping_name),
+         shipping_phone=VALUES(shipping_phone), tracking_number=VALUES(tracking_number),
+         shipping_company=VALUES(shipping_company)`,
       [
         id,
         product_id,
@@ -1605,6 +1644,12 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
         memo,
         buyer_completed || false,
         seller_completed || false,
+        meetup_accepted || false,
+        shipping_address || null,
+        shipping_name || null,
+        shipping_phone || null,
+        tracking_number || null,
+        shipping_company || null,
       ],
       "orders",
     );
@@ -1665,10 +1710,14 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       meetup_time: meetupTimeCombined,
       tracking_number: req.body.tracking_number,
       shipping_company: req.body.shipping_company,
+      shipping_address: req.body.shipping_address,
+      shipping_name: req.body.shipping_name,
+      shipping_phone: req.body.shipping_phone,
       seller_completed: req.body.seller_completed,
       buyer_completed: req.body.buyer_completed,
       proposed_price: req.body.proposed_price,
       trade_method: req.body.trade_method,
+      meetup_accepted: req.body.meetup_accepted,
     };
     for (const [col, val] of Object.entries(fields)) {
       if (val !== undefined) {
@@ -1801,18 +1850,82 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
 });
 
 app.post("/api/chat-rooms", requireDb, requireAuth, async (req, res) => {
-  const { id, product_id, buyer_id, seller_id } = req.body;
+  const { id, product_id, buyer_id, seller_id, order_id, left_user_ids, rejoin } =
+    req.body;
   if (req.authUserId !== buyer_id && req.authUserId !== seller_id)
     return res.status(403).json({ error: "Forbidden" });
   try {
+    const leftIds = Array.isArray(left_user_ids) ? left_user_ids : [];
     const { rows } = await queryReturning(
-      `INSERT INTO chat_rooms (id, product_id, buyer_id, seller_id)
-       VALUES ($1,$2,$3,$4)
-       ON DUPLICATE KEY UPDATE left_user_ids = JSON_ARRAY()`,
-      [id, product_id, buyer_id, seller_id],
+      `INSERT INTO chat_rooms (id, product_id, buyer_id, seller_id, order_id, left_user_ids)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON DUPLICATE KEY UPDATE
+         product_id = COALESCE(VALUES(product_id), product_id),
+         order_id = COALESCE(VALUES(order_id), order_id),
+         left_user_ids = IF($7, JSON_ARRAY(), COALESCE(VALUES(left_user_ids), left_user_ids))`,
+      [
+        id,
+        product_id,
+        buyer_id,
+        seller_id,
+        order_id || null,
+        leftIds,
+        rejoin ? 1 : 0,
+      ],
       "chat_rooms",
     );
     res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch("/api/chat-rooms/:id", requireDb, requireAuth, async (req, res) => {
+  try {
+    const { rows: roomCheck } = await pool.query(
+      "SELECT buyer_id, seller_id, read_state, left_user_ids FROM chat_rooms WHERE id=$1",
+      [req.params.id],
+    );
+    if (!roomCheck.length)
+      return res.status(404).json({ error: "Room not found" });
+    if (
+      req.authUserId !== roomCheck[0].buyer_id &&
+      req.authUserId !== roomCheck[0].seller_id
+    ) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const sets = [];
+    const vals = [req.params.id];
+
+    if (req.body.left_user_ids !== undefined) {
+      vals.push(JSON.stringify(req.body.left_user_ids || []));
+      sets.push(`left_user_ids=$${vals.length}`);
+    }
+    if (req.body.order_id !== undefined) {
+      vals.push(req.body.order_id || null);
+      sets.push(`order_id=$${vals.length}`);
+    }
+    if (req.body.read_state !== undefined && req.body.read_state) {
+      const existing =
+        roomCheck[0].read_state && typeof roomCheck[0].read_state === "object"
+          ? roomCheck[0].read_state
+          : {};
+      const merged = { ...existing, ...req.body.read_state };
+      vals.push(JSON.stringify(merged));
+      sets.push(`read_state=$${vals.length}`);
+    }
+
+    if (sets.length === 0)
+      return res.status(400).json({ error: "No fields to update" });
+
+    const { rows } = await queryReturning(
+      `UPDATE chat_rooms SET ${sets.join(", ")} WHERE id=$1`,
+      vals,
+      "chat_rooms",
+    );
+    if (!rows.length) return res.status(404).json({ error: "Room not found" });
+    res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1841,9 +1954,14 @@ app.post(
     if (sender_id && req.authUserId !== sender_id)
       return res.status(403).json({ error: "Forbidden" });
     try {
+      const meetupLocation = meetup_place || meetup_location || null;
+      const meetupTimeCombined =
+        meetup_date && meetup_time
+          ? `${meetup_date} ${meetup_time}`
+          : meetup_time || null;
       const { rows } = await queryReturning(
-        `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result, meetup_location, meetup_time)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        ON DUPLICATE KEY UPDATE id=id`,
         [
           id,
@@ -1856,6 +1974,8 @@ app.post(
           original_price,
           proposed_price,
           offer_result,
+          meetupLocation,
+          meetupTimeCombined,
         ],
         "chat_messages",
         "id=$1",
@@ -2921,8 +3041,8 @@ io.on("connection", async (socket) => {
     if (pool && room) {
       try {
         await pool.query(
-          `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images)
-           VALUES ($1,$2,$3,$4,$5,$6) ON DUPLICATE KEY UPDATE id=id`,
+          `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result, meetup_location, meetup_time)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON DUPLICATE KEY UPDATE id=id`,
           [
             message.id,
             roomId,
@@ -2930,6 +3050,14 @@ io.on("connection", async (socket) => {
             message.content,
             message.type || "text",
             message.images || [],
+            message.orderId || null,
+            message.originalPrice ?? null,
+            message.proposedPrice ?? null,
+            message.offerResult || null,
+            message.meetupPlace || message.meetupLocation || null,
+            message.meetupDate && message.meetupTime
+              ? `${message.meetupDate} ${message.meetupTime}`
+              : message.meetupTime || null,
           ],
         );
       } catch (e) {

@@ -29,6 +29,7 @@ import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
   CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
+  CHAT_MSG_SELLER_MEETUP_STARTED,
   CHAT_LEAVE_ROOM,
   CHAT_LEAVE_ROOM_CONFIRM,
   displayChatMessageContent,
@@ -949,7 +950,21 @@ export const ChatRoom: React.FC = () => {
           }
           if (msg.type === 'meetup_confirmed') {
             const isSeller = room && getCurrentUserId() === room.sellerId;
-            const hasDetail = !!(msg.meetupPlace || msg.meetupDate || msg.meetupTime);
+            const contentLabel = displayChatMessageContent(msg.content);
+            const isSellerScheduling = contentLabel === CHAT_MSG_SELLER_MEETUP_STARTED;
+            const orderHasMeetup = !!(
+              currentOrder?.meetupPlace &&
+              currentOrder?.meetupDate &&
+              currentOrder?.meetupTime
+            );
+            const useOrderMeetup =
+              orderHasMeetup &&
+              !isSellerScheduling &&
+              contentLabel === CHAT_MSG_PRODUCT_RESERVED;
+            const meetupPlace = msg.meetupPlace ?? (useOrderMeetup ? currentOrder!.meetupPlace : undefined);
+            const meetupDate = msg.meetupDate ?? (useOrderMeetup ? currentOrder!.meetupDate : undefined);
+            const meetupTime = msg.meetupTime ?? (useOrderMeetup ? currentOrder!.meetupTime : undefined);
+            const hasDetail = !!(meetupPlace || meetupDate || meetupTime);
             return (
               <div key={msgKey} className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
                 <div className="flex flex-col max-w-[85%]">
@@ -965,19 +980,19 @@ export const ChatRoom: React.FC = () => {
                       {msg.type === 'meetup_confirmed' && <img src="/h.svg" alt="" className="w-4 h-4 inline-block" />}
                       {displayChatMessageContent(msg.content)}
                     </p>
-                    {msg.meetupPlace && (
+                    {meetupPlace && (
                       <p className="mb-0.5 text-white/95">
                         Meetup place
                         <br />
-                        <span className="font-bold text-base text-white">{msg.meetupPlace}</span>
+                        <span className="font-bold text-base text-white">{meetupPlace}</span>
                       </p>
                     )}
-                    {msg.meetupDate && msg.meetupTime && (
+                    {meetupDate && meetupTime && (
                       <p className="mt-2 text-white/95">
-                        Date {msg.meetupDate} {msg.meetupTime}
+                        Date {meetupDate} {meetupTime}
                       </p>
                     )}
-                    {!hasDetail && (
+                    {!hasDetail && !isSellerScheduling && (
                       <p className="mt-2 text-white/80 text-xs">Place and time not set yet</p>
                     )}
                   </div>
