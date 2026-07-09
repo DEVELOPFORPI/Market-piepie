@@ -8,6 +8,7 @@ import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE
 import { setItem, getItem } from '@/utils/heavyStorage';
 import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
+import { seedPostViewCounts } from '@/utils/postViewStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
 
@@ -255,6 +256,9 @@ export async function syncPostsFromDB(): Promise<void> {
       const dbPosts = (res.data as unknown as Record<string, unknown>[]).map((row) =>
         mapPostFromDB(row, favoriteIds),
       );
+      seedPostViewCounts(
+        dbPosts.map((p) => ({ postId: p.id, count: p.viewCount ?? 0 })),
+      );
       setItem('community_user_posts', JSON.stringify(dbPosts));
       cleanupLocalPostLeftovers(dbPosts);
       window.dispatchEvent(new Event('postsChanged'));
@@ -308,6 +312,7 @@ export async function syncPostFromDB(postId: string): Promise<Post | undefined> 
     if (!res.ok || !res.data) return undefined;
     const favoriteIds = getFavoriteProductIds();
     const mapped = mapPostFromDB(res.data, favoriteIds);
+    seedPostViewCounts([{ postId: mapped.id, count: mapped.viewCount ?? 0 }]);
     const posts: Post[] = (() => {
       try {
         const raw = getItem('community_user_posts');
@@ -387,6 +392,7 @@ function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<string>):
     content: String(row.content || ''),
     category: String(row.category || '') as Post['category'],
     commentCount: Number(row.comment_count || 0),
+    viewCount: Number(row.view_count || 0),
     createdAt: String(row.created_at || new Date().toISOString()),
     images: (row.images as string[]) || [],
     tags: (row.tags as string[]) || [],

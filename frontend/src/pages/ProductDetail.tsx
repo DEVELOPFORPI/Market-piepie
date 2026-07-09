@@ -9,9 +9,9 @@ import { getAllProducts, deleteProduct } from '@/utils/productStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { hasProductReservedOrder } from '@/utils/orderStorage';
+import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
-import { PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
+import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatusListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
@@ -118,12 +118,17 @@ export const ProductDetail: React.FC = () => {
     return () => window.removeEventListener('favoritesChanged', onFavChanged);
   }, [product.id]);
 
-  // Refresh CTAs when disputes change
-  const [, setDisputeRefresh] = useState(0);
+  // Refresh CTAs when disputes / orders change
+  const [ctaRefresh, setCtaRefresh] = useState(0);
   useEffect(() => {
-    const onDisputesChanged = () => setDisputeRefresh((n) => n + 1);
+    const onDisputesChanged = () => setCtaRefresh((n) => n + 1);
+    const onOrdersChanged = () => setCtaRefresh((n) => n + 1);
     window.addEventListener('disputesChanged', onDisputesChanged);
-    return () => window.removeEventListener('disputesChanged', onDisputesChanged);
+    window.addEventListener('ordersChanged', onOrdersChanged);
+    return () => {
+      window.removeEventListener('disputesChanged', onDisputesChanged);
+      window.removeEventListener('ordersChanged', onOrdersChanged);
+    };
   }, []);
 
   const handleDelete = () => {
@@ -136,6 +141,14 @@ export const ProductDetail: React.FC = () => {
 
   const chatCount = getChatRoomCountByProductId(product.id);
   const sellerDisputeCount = product.seller?.id ? getDisputeCountByUserId(product.seller.id) : 0;
+  const uid = getCurrentUserId();
+  void ctaRefresh;
+  const hasPendingOffer = Boolean(
+    uid
+    && getOrdersByProductId(product.id).some(
+      (o) => o.buyer?.id === uid && o.status === ORDER_STATUS_VALUE.PENDING_OFFER,
+    ),
+  );
 
   if (loading) {
     return (
@@ -496,12 +509,21 @@ export const ProductDetail: React.FC = () => {
               </button>
             </div>
             {product.allowOffer !== false && !product.isFreeShare && product.price > 0 && (
-              <button
-                onClick={() => { if (guestGuard('offer')) return; navigate(`/offer/${product.id}`); }}
-                className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
-              >
-                Make offer
-              </button>
+              hasPendingOffer ? (
+                <div className="w-full px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Offer sent
+                </div>
+              ) : (
+                <button
+                  onClick={() => { if (guestGuard('offer')) return; navigate(`/offer/${product.id}`); }}
+                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
+                >
+                  Make offer
+                </button>
+              )
             )}
             {(product.isFreeShare || product.price === 0) && (
               <button

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Review } from '@/types';
-import { getMyWrittenReviews, getReceivedReviews, deleteReview } from '@/utils/reviewStorage';
+import { getMyWrittenReviews, getReceivedReviews } from '@/utils/reviewStorage';
 
 type TabType = 'received' | 'written';
 
@@ -43,14 +43,6 @@ export const MyReviews: React.FC = () => {
     }
   }, [location.state]);
 
-  const handleDelete = (review: Review) => {
-    const title = review.productTitle || 'This review';
-    if (confirm(`Delete "${title}"?`)) {
-      deleteReview(review.id);
-      loadReviews();
-    }
-  };
-
   const renderStars = (rating: number) => (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
@@ -68,7 +60,7 @@ export const MyReviews: React.FC = () => {
     </div>
   );
 
-  const renderReviewCard = (review: Review, showActions: boolean) => (
+  const renderReviewCard = (review: Review) => (
     <div key={review.id} className="p-4 border border-gray-200 rounded-lg">
       {/* Product info */}
       {review.productTitle && (
@@ -114,18 +106,6 @@ export const MyReviews: React.FC = () => {
       {/* Comment */}
       {review.comment && (
         <p className="text-sm text-gray-700 leading-relaxed">{review.comment}</p>
-      )}
-
-      {/* Written reviews: delete only */}
-      {showActions && (
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-3">
-          <button
-            onClick={() => handleDelete(review)}
-            className="text-xs font-medium text-red-500"
-          >
-            Delete
-          </button>
-        </div>
       )}
     </div>
   );
@@ -192,7 +172,7 @@ export const MyReviews: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {receivedReviews.map((review) => renderReviewCard(review, false))}
+              {receivedReviews.map((review) => renderReviewCard(review))}
             </div>
           )
         ) : (
@@ -223,7 +203,7 @@ export const MyReviews: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {writtenReviews.map((review) => renderReviewCard(review, true))}
+              {writtenReviews.map((review) => renderReviewCard(review))}
             </div>
           )
         )}

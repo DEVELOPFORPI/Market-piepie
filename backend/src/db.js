@@ -104,6 +104,7 @@ const TABLE_COLUMNS = {
     'tags',
     'comment_count',
     'like_count',
+    'view_count',
     'region',
     'latitude',
     'longitude',

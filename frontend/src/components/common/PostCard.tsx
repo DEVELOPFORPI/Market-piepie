@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Post, PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
-import { getPostViewCount } from '@/utils/postViewStorage';
+import { getPostViewCount, syncPostViewFromDB } from '@/utils/postViewStorage';
 import { getDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
@@ -27,21 +27,33 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const navigate = useNavigate();
   const [liked, setLiked] = useState(isPostLiked(post.id));
   const [likeCount, setLikeCount] = useState(getPostLikeCount(post.id));
+  const [viewCount, setViewCount] = useState(() => post.viewCount ?? getPostViewCount(post.id));
 
   useEffect(() => {
     setLiked(isPostLiked(post.id));
     setLikeCount(getPostLikeCount(post.id));
+    setViewCount(post.viewCount ?? getPostViewCount(post.id));
     // DB에서 최신 좋아요 상태 동기화(다른 유저가 누른 좋아요 반영)
     syncPostLikeFromDB(post.id);
-  }, [post.id]);
+    void syncPostViewFromDB(post.id).then(() => {
+      setViewCount(getPostViewCount(post.id));
+    });
+  }, [post.id, post.viewCount]);
 
   useEffect(() => {
     const onLikesChanged = () => {
       setLiked(isPostLiked(post.id));
       setLikeCount(getPostLikeCount(post.id));
     };
+    const onViewCountsChanged = () => {
+      setViewCount(getPostViewCount(post.id));
+    };
     window.addEventListener('postLikesChanged', onLikesChanged);
-    return () => window.removeEventListener('postLikesChanged', onLikesChanged);
+    window.addEventListener('postViewCountsChanged', onViewCountsChanged);
+    return () => {
+      window.removeEventListener('postLikesChanged', onLikesChanged);
+      window.removeEventListener('postViewCountsChanged', onViewCountsChanged);
+    };
   }, [post.id]);
 
   const handleLikeClick = (e: React.MouseEvent) => {
@@ -119,7 +131,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
       {/* Bottom: views, likes, comments */}
       <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
-        <span className="flex items-center gap-1 text-gray-400">Views {getPostViewCount(post.id)}</span>
+        <span className="flex items-center gap-1 text-gray-400">Views {viewCount}</span>
         <button
           type="button"
           onClick={handleLikeClick}

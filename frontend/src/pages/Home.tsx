@@ -123,7 +123,12 @@ export const Home: React.FC = () => {
   };
 
   const filteredProducts = useMemo(() => {
-    let filtered = allProducts.filter((p) => p.status === PRODUCT_STATUS_VALUE.FOR_SALE);
+    const homeVisibleStatuses = new Set([
+      PRODUCT_STATUS_VALUE.FOR_SALE,
+      PRODUCT_STATUS_VALUE.RESERVED,
+      PRODUCT_STATUS_VALUE.SOLD,
+    ]);
+    let filtered = allProducts.filter((p) => homeVisibleStatuses.has(p.status));
 
     // Search query
     if (searchQuery.trim()) {

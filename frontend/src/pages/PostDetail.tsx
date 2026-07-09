@@ -185,10 +185,9 @@ export const PostDetail: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    if (id) {
-      incrementPostViewCount(id);
-      setViewCount(getPostViewCount(id));
-    }
+    if (!id) return;
+    setViewCount(getPostViewCount(id));
+    void incrementPostViewCount(id).then(setViewCount);
   }, [id]);
 
   useEffect(() => {

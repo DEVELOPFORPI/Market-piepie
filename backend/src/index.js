@@ -2196,7 +2196,6 @@ app.delete("/api/comments/:id", requireDb, requireAuth, async (req, res) => {
   }
 });
 
-// ??? ??? ??? ???????????????????????????????????????????
 // ?? ?? ??: { liked, count }
 app.get("/api/posts/:id/likes", requireDb, async (req, res) => {
   const { user_id } = req.query;
@@ -2214,6 +2213,36 @@ app.get("/api/posts/:id/likes", requireDb, async (req, res) => {
       liked = likedRes.rows.length > 0;
     }
     res.json({ liked, count: countRes.rows[0].count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Post view count */
+app.get("/api/posts/:id/views", requireDb, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT view_count FROM community_posts WHERE id=$1 LIMIT 1`,
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ count: Number(rows[0].view_count || 0) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/posts/:id/view", requireDb, async (req, res) => {
+  try {
+    const { rows } = await queryReturning(
+      `UPDATE community_posts SET view_count = view_count + 1 WHERE id=$1`,
+      [req.params.id],
+      "community_posts",
+      "id=$1",
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ count: Number(rows[0].view_count || 0) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

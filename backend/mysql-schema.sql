@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS community_posts (
   tags JSON NOT NULL DEFAULT (JSON_ARRAY()),
   comment_count INT NOT NULL DEFAULT 0,
   like_count INT NOT NULL DEFAULT 0,
+  view_count INT NOT NULL DEFAULT 0,
   region VARCHAR(255),
   latitude DECIMAL(10,8),
   longitude DECIMAL(11,8),

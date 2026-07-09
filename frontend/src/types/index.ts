@@ -218,6 +218,7 @@ export interface Post {
   attachedProduct?: Product;
   tags?: string[];
   commentCount: number;
+  viewCount?: number;
   createdAt: string;
   region?: string;
   latitude?: number;
