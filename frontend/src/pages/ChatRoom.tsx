@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
-import type { ChatRoom as ChatRoomType, BuyerChatTab } from '@/types';
+import type { ChatRoom as ChatRoomType } from '@/types';
 import {
   ChatMessage,
   BarterOrder,
   Order,
   OrderStatus,
-  BUYER_CHAT_TAB_VALUE,
   ORDER_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
@@ -35,7 +34,6 @@ import {
   CHAT_UNREAD_FROM_HERE,
   displayChatMessageContent,
   isMeetupCanceledMessage,
-  labelBuyerChatTab,
   NOTIFY_OFFER_DECLINED,
 } from '@/locale/enUI';
 
@@ -129,6 +127,39 @@ function isMeetupCanceledState(order: Order | null, msgs: ChatMessage[]): boolea
   return msgs.some((m) => m.type === 'system' && isMeetupCanceledMessage(m.content));
 }
 
+interface ChatChipAction {
+  key: string;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}
+
+function ChatActionChipRow({ chips }: { chips: ChatChipAction[] }) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          type="button"
+          disabled={chip.disabled || !chip.onClick}
+          onClick={chip.onClick}
+          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors ${
+            chip.disabled || !chip.onClick
+              ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+              : chip.primary
+                ? 'border-[#00A8A3] bg-[#00A8A3] text-white'
+                : 'border-gray-300 bg-gray-100 text-gray-800 hover:bg-gray-200'
+          }`}
+        >
+          {chip.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export const ChatRoom: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -146,7 +177,6 @@ export const ChatRoom: React.FC = () => {
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
-  const [buyerTab, setBuyerTab] = useState<BuyerChatTab>(BUYER_CHAT_TAB_VALUE.RECEIVE);
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [ordersRevision, setOrdersRevision] = useState(0);
@@ -490,18 +520,166 @@ export const ChatRoom: React.FC = () => {
   );
   // Hide dispute tab for free-share chats
   const isShareOrder = !!(
-    (currentOrder && (currentOrder.proposedPrice === 0 || currentOrder.product?.isFreeShare || currentOrder.product?.price === 0)) ||
+    (currentOrder && (currentOrder.proposedPrice === 0 || currentOrder?.product?.isFreeShare || currentOrder?.product?.price === 0)) ||
     (room?.product && (room.product.isFreeShare || room.product.price === 0))
   );
-  const buyerTabOptions = [
-    BUYER_CHAT_TAB_VALUE.RECEIVE,
-    ...(canOfferPrice ? [BUYER_CHAT_TAB_VALUE.OFFER] : []),
-    ...(isShareOrder ? [] : [BUYER_CHAT_TAB_VALUE.OPEN_DISPUTE]),
-  ] as BuyerChatTab[];
+
+  const handleSellerStartMeetup = () => {
+    if (!room?.product) {
+      alert('Could not load listing.');
+      return;
+    }
+    const product = room.product;
+    const buyer = getOtherUser(room);
+    if (!buyer?.id) {
+      alert('Could not load chat partner. Try again.');
+      return;
+    }
+    void (async () => {
+      try {
+        if (currentOrder?.id) {
+          navigate(`/meetup/${currentOrder.id}`);
+          return;
+        }
+        const order = await createOrderBySeller({ product, buyer });
+        if (!order) {
+          alert('Could not start meetup. Check your connection and try again.');
+          return;
+        }
+        await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
+        await addSellerMeetupStartedToChat(order, roomId);
+        navigate(`/meetup/${order.id}`);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+          alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
+        } else {
+          console.error(e);
+          alert('Could not start meetup scheduling. Try again.');
+        }
+      }
+    })();
+  };
+
+  const buyerChips: ChatChipAction[] = (() => {
+    if (!isBuyer || !room?.product || isProductDeleted) return [];
+    if (!currentOrder) {
+      return canOfferPrice
+        ? [{ key: 'offer', label: 'Send offer', onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
+        : [];
+    }
+    if (currentOrder.status === ORDER_STATUS_VALUE.COMPLETE) {
+      const chips: ChatChipAction[] = [];
+      if (getMyReviewForOrder(currentOrder.id)) {
+        chips.push({ key: 'review-done', label: 'Review submitted', disabled: true });
+      } else {
+        chips.push({
+          key: 'review',
+          label: 'Write review',
+          primary: true,
+          onClick: () => navigate(`/review/${currentOrder.id}`),
+        });
+      }
+      if (!isShareOrder) {
+        chips.push({
+          key: 'dispute',
+          label: 'Open dispute',
+          onClick: () => navigate(`/dispute/${currentOrder.id}`),
+          disabled: !canOpenDispute(currentOrder),
+        });
+      }
+      return chips;
+    }
+    const chips: ChatChipAction[] = [];
+    if (needsMeetupAccept) {
+      chips.push({
+        key: 'accept-meetup',
+        label: 'Accept meetup',
+        primary: true,
+        onClick: () => {
+          if (!confirm('Accept the scheduled meetup?')) return;
+          void acceptOrderMeetup(currentOrder.id).then(() => {
+            if (roomId) setRoom(getChatRoom(roomId));
+            setOrdersRevision((n) => n + 1);
+          });
+        },
+      });
+    } else {
+      chips.push({
+        key: 'receive',
+        label: 'Confirm receipt',
+        onClick: () => navigate(`/receive/${currentOrder.id}`),
+        disabled: !receiveEnabled,
+      });
+    }
+    if (canOfferPrice) {
+      chips.push({
+        key: 'offer',
+        label: 'Send offer',
+        onClick: () => navigate(`/offer/${room.product!.id}`),
+      });
+    }
+    if (!isShareOrder) {
+      chips.push({
+        key: 'dispute',
+        label: 'Open dispute',
+        onClick: () => navigate(`/dispute/${currentOrder.id}`),
+        disabled: !canOpenDispute(currentOrder),
+      });
+    }
+    return chips;
+  })();
+
+  const sellerChips: ChatChipAction[] = (() => {
+    if (!isSeller || !room?.product || isProductDeleted) return [];
+    if (!currentOrder) {
+      return [{ key: 'meetup', label: 'Schedule meetup', onClick: handleSellerStartMeetup }];
+    }
+    const chips: ChatChipAction[] = [];
+    if (currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted) {
+      chips.push({
+        key: 'complete',
+        label: 'Confirm complete',
+        primary: true,
+        onClick: () => {
+          void (async () => {
+            if (!confirm('Confirm trade completion?')) return;
+            const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
+            if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
+              void addTradeCompletedToChat(updated);
+              navigate(`/review/${currentOrder.id}`);
+            }
+            if (roomId) setRoom(getChatRoom(roomId));
+            setOrdersRevision((n) => n + 1);
+          })();
+        },
+      });
+    }
+    if (currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && !getMyReviewForOrder(currentOrder.id)) {
+      chips.push({
+        key: 'review',
+        label: 'Write review',
+        onClick: () => navigate(`/review/${currentOrder.id}`),
+      });
+    }
+    chips.push({
+      key: 'meetup',
+      label: 'Schedule meetup',
+      onClick: handleSellerStartMeetup,
+    });
+    if (!isShareOrder) {
+      chips.push({
+        key: 'dispute',
+        label: 'Open dispute',
+        onClick: () => navigate(`/dispute/${currentOrder.id}`),
+        disabled: !canOpenDispute(currentOrder),
+      });
+    }
+    return chips;
+  })();
 
   useEffect(() => {
     if (!roomId) return;
-  }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled, buyerTab, buyerTabOptions]);
+  }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled]);
 
   const firstUnreadIndex = findFirstUnreadIndex(
     displayMessages,
@@ -878,262 +1056,45 @@ export const ChatRoom: React.FC = () => {
 
       {/* Listing + buyer/seller actions */}
       {room?.product && !mockBarterOrder && (
-        <div className="border-b border-gray-200 bg-white px-4 py-4 shrink-0">
+        <div className="border-b border-gray-200 bg-white px-4 py-2.5 shrink-0">
           {isProductDeleted ? (
-            <div className="flex items-center gap-3 py-2">
-              <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center gap-2 py-1">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-400">Listing removed</p>
-                <p className="text-xs text-gray-400 mt-0.5">The seller deleted this listing</p>
-              </div>
+              <p className="text-sm text-gray-400">Listing removed</p>
             </div>
           ) : (
             <>
-              <div className="flex gap-3 mb-4">
-                <button
-                  type="button"
-                  onClick={() => navigate(`/product/${room.product!.id}`)}
-                  className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0"
-                  aria-label="View listing"
-                >
+              <button
+                type="button"
+                onClick={() => navigate(`/product/${room.product!.id}`)}
+                className="flex gap-3 items-center w-full text-left pb-2.5"
+                aria-label="View listing"
+              >
+                <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                   <img
                     src={room.product.images?.[0] || '/placeholder.jpg'}
                     alt={room.product.title}
                     className="w-full h-full object-cover"
                     draggable={false}
                   />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-medium text-gray-900 truncate mb-1">{room.product.title}</h2>
-                  <p className="text-2xl font-bold text-gray-900">
+                </div>
+                <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-900 truncate">{room.product.title}</p>
+                  <p className="text-sm font-bold text-gray-900 shrink-0">
                     {room.product.isFreeShare || room.product.price === 0
                       ? 'Free share'
                       : `${room.product.price.toLocaleString()} PI`}
                   </p>
                 </div>
+              </button>
+              <div className="border-t border-gray-200 pt-2">
+                {isBuyer && <ChatActionChipRow chips={buyerChips} />}
+                {isSeller && <ChatActionChipRow chips={sellerChips} />}
               </div>
-              {!currentOrder ? (
-                <div className="space-y-2">
-                  {isBuyer && (
-                    <div className="w-full space-y-3">
-                      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
-                        {buyerTabOptions.map((tab) => (
-                          <button key={tab} type="button" onClick={() => setBuyerTab(tab)} className={`flex-1 py-2 rounded-md text-sm font-medium ${buyerTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>
-                            {labelBuyerChatTab(tab)}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="min-h-[44px] flex items-center justify-center">
-                        {buyerTab === BUYER_CHAT_TAB_VALUE.RECEIVE && <p className="text-xs text-gray-500">You can confirm receipt once the trade progresses.</p>}
-                        {buyerTab === BUYER_CHAT_TAB_VALUE.OFFER && (canOfferPrice ? <button onClick={() => navigate(`/offer/${room!.product!.id}`)} className="w-full px-4 py-2.5 text-white rounded-lg text-sm font-medium" style={{ backgroundColor: '#00A8A3' }}>Send price offer</button> : <p className="text-xs text-gray-500">This listing does not accept offers.</p>)}
-                        {buyerTab === BUYER_CHAT_TAB_VALUE.OPEN_DISPUTE && <p className="text-xs text-gray-500">You can open a dispute after receipt is confirmed.</p>}
-                      </div>
-                    </div>
-                  )}
-                  {isSeller && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!room?.product) {
-                          alert('Could not load listing.');
-                          return;
-                        }
-                        const product = room.product;
-                        const buyer = getOtherUser(room);
-                        if (!buyer?.id) {
-                          alert('Could not load chat partner. Try again.');
-                          return;
-                        }
-                        void (async () => {
-                          try {
-                            const order = await createOrderBySeller({ product, buyer });
-                            if (!order) {
-                              alert('Could not start meetup. Check your connection and try again.');
-                              return;
-                            }
-                            await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
-                            await addSellerMeetupStartedToChat(order, roomId);
-                            navigate(`/meetup/${order.id}`);
-                          } catch (e) {
-                            if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-                              alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
-                            } else {
-                              console.error(e);
-                              alert('Could not start meetup scheduling. Try again.');
-                            }
-                          }
-                        })();
-                      }}
-                      className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Schedule meetup
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex gap-2 flex-wrap">
-                  {isSeller && (
-                    <div className="w-full space-y-3">
-                      {/* Order status indicator for seller */}
-                      {currentOrder.status === ORDER_STATUS_VALUE.MEETUP_SET && !currentOrder.meetupAccepted && (
-                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <p className="text-xs font-medium text-yellow-800">Waiting for buyer to accept meetup</p>
-                        </div>
-                      )}
-                      {currentOrder.status === ORDER_STATUS_VALUE.MEETUP_SET && currentOrder.meetupAccepted && (
-                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <p className="text-xs font-medium text-green-800">Buyer accepted meetup. Waiting for receipt confirmation.</p>
-                        </div>
-                      )}
-                      {currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && (
-                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <p className="text-xs font-medium text-green-800">
-                            Buyer confirmed receipt
-                            {currentOrder.sellerCompleted
-                              ? ' · You confirmed trade complete'
-                              : ' · Please confirm trade completion'}
-                          </p>
-                        </div>
-                      )}
-                      {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <p className="text-xs font-medium text-blue-800">Trade complete</p>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2 flex-wrap">
-                        {/* Confirm trade complete button (after buyer receipt) */}
-                        {currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void (async () => {
-                                if (!confirm('Confirm trade completion?')) return;
-                                const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
-                                if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                                  void addTradeCompletedToChat(updated);
-                                  navigate(`/review/${currentOrder.id}`);
-                                }
-                                setRoom(getChatRoom(roomId!));
-                              })();
-                            }}
-                            className="flex-1 min-w-[120px] px-4 py-2.5 text-white rounded-lg text-sm font-medium"
-                            style={{ backgroundColor: '#00A8A3' }}
-                          >
-                            Confirm trade complete
-                          </button>
-                        )}
-                        {/* Write review (after complete) — hidden if review already submitted */}
-                        {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && !getMyReviewForOrder(currentOrder.id) && (
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/review/${currentOrder.id}`)}
-                            className="flex-1 min-w-[120px] px-4 py-2.5 rounded-lg text-sm font-medium"
-                            style={{ borderWidth: 1, borderColor: '#00A8A3', color: '#00A8A3' }}
-                          >
-                            Write review
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!currentOrder?.id) {
-                              alert('Could not load order.');
-                              return;
-                            }
-                            navigate(`/meetup/${currentOrder.id}`);
-                          }}
-                          className="flex-1 min-w-[120px] px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Schedule meetup
-                        </button>
-                        {!isShareOrder && (
-                          <button onClick={() => navigate(`/dispute/${currentOrder.id}`)} disabled={!canOpenDispute(currentOrder)} className="flex-1 min-w-[120px] px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                            Open dispute
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {isBuyer && (
-                    <div className="w-full space-y-3">
-                      {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE ? (
-                        <div className="flex gap-2">
-                          {getMyReviewForOrder(currentOrder.id) ? (
-                            <div className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-center text-gray-400 border border-gray-200">
-                              Review submitted ✓
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => navigate(`/review/${currentOrder.id}`)}
-                              className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium"
-                              style={{ borderWidth: 1, borderColor: '#00A8A3', color: '#00A8A3' }}
-                            >
-                              Write review
-                            </button>
-                          )}
-                          {!isShareOrder && (
-                            <button onClick={() => navigate(`/dispute/${currentOrder.id}`)} disabled={!canOpenDispute(currentOrder)} className="flex-1 px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm font-medium disabled:opacity-50">
-                              Open dispute
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          {buyerTabOptions.length > 1 ? (
-                            <>
-                              <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
-                                {buyerTabOptions.map((tab) => (
-                                  <button key={tab} type="button" onClick={() => setBuyerTab(tab)} className={`flex-1 py-2 rounded-md text-sm font-medium ${buyerTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>
-                                    {labelBuyerChatTab(tab)}
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="min-h-[44px] flex items-center justify-center">
-                                {buyerTab === BUYER_CHAT_TAB_VALUE.RECEIVE && (meetupCanceled ? (
-                                  <p className="text-xs text-gray-500">You can confirm receipt once the trade progresses.</p>
-                                ) : needsMeetupAccept ? (
-                                  <button onClick={() => {
-                                    if (confirm('Accept the scheduled meetup?')) {
-                                      acceptOrderMeetup(currentOrder.id);
-                                    }
-                                  }} className="w-full px-4 py-2.5 text-white rounded-lg text-sm font-medium" style={{ backgroundColor: '#00A8A3' }}>Accept meetup</button>
-                                ) : (
-                                  <button onClick={() => {
-                                    navigate(`/receive/${currentOrder.id}`);
-                                  }} disabled={!receiveEnabled} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Confirm receipt</button>
-                                ))}
-                                {buyerTab === BUYER_CHAT_TAB_VALUE.OFFER && (canOfferPrice ? <button onClick={() => navigate(`/offer/${room!.product!.id}`)} className="w-full px-4 py-2.5 text-white rounded-lg text-sm font-medium" style={{ backgroundColor: '#00A8A3' }}>Send price offer</button> : <p className="text-xs text-gray-500">This listing does not accept offers.</p>)}
-                                {buyerTab === BUYER_CHAT_TAB_VALUE.OPEN_DISPUTE && (currentOrder?.proposedPrice === 0 || currentOrder?.product?.isFreeShare || currentOrder?.product?.price === 0 ? <p className="text-xs text-gray-500">Free shares cannot be disputed.</p> : <button onClick={() => navigate(`/dispute/${currentOrder.id}`)} disabled={!canOpenDispute(currentOrder)} className="w-full px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm font-medium disabled:opacity-50">Open dispute</button>)}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="min-h-[44px] flex items-center justify-center">
-                              {meetupCanceled ? (
-                                <p className="text-xs text-gray-500">You can confirm receipt once the trade progresses.</p>
-                              ) : needsMeetupAccept ? (
-                                <button onClick={() => {
-                                  if (confirm('Accept the scheduled meetup?')) {
-                                    acceptOrderMeetup(currentOrder.id);
-                                  }
-                                }} className="w-full px-4 py-2.5 text-white rounded-lg text-sm font-medium" style={{ backgroundColor: '#00A8A3' }}>Accept meetup</button>
-                              ) : (
-                                <button onClick={() => {
-                                  navigate(`/receive/${currentOrder.id}`);
-                                }} disabled={!receiveEnabled} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Confirm receipt</button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </div>
