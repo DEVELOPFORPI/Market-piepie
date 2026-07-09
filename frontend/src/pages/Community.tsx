@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PostCard } from '@/components/common/PostCard';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
+import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 import { PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { getAllPosts } from '@/utils/communityStorage';
+import { syncPostsFromDB } from '@/utils/dbSync';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { guestGuard } from '@/utils/guestGate';
 import { labelPostCategory } from '@/locale/enUI';
 
@@ -44,8 +47,16 @@ export const Community: React.FC = () => {
       : posts.filter((post) => post.category === activeCategory);
   }, [posts, activeCategory]);
 
+  const handlePullRefresh = useCallback(async () => {
+    await syncPostsFromDB();
+    setPosts(getAllPosts());
+  }, []);
+
+  const { pull, refreshing } = usePullToRefresh(handlePullRefresh);
+
   return (
     <div className="min-h-screen bg-white pb-20">
+      <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="flex items-center justify-between px-4 py-3 h-14">
           <div className="flex items-center gap-1">

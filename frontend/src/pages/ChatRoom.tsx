@@ -11,7 +11,7 @@ import {
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
-import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, acceptOrderMeetup, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -515,13 +515,11 @@ export const ChatRoom: React.FC = () => {
   const canReceiveConfirm = (order: Order | null): boolean => {
     if (!order) return false;
     if (order.status === ORDER_STATUS_VALUE.DISPUTE) return false;
-    if (order.status === ORDER_STATUS_VALUE.MEETUP_SET && !order.meetupAccepted) return false;
     const isDirect = order.tradeMethod !== TRADE_METHOD_VALUE.SHIPPING;
     if (isDirect) return DIRECT_RECEIVE_OK.has(order.status);
     return SHIPPING_RECEIVE_OK.has(order.status);
   };
   const receiveEnabled = canReceiveConfirm(currentOrder) && !meetupCanceled;
-  const needsMeetupAccept = !!(currentOrder && currentOrder.status === ORDER_STATUS_VALUE.MEETUP_SET && !currentOrder.meetupAccepted);
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;
@@ -607,28 +605,14 @@ export const ChatRoom: React.FC = () => {
       }
       return chips;
     }
-    const chips: ChatChipAction[] = [];
-    if (needsMeetupAccept) {
-      chips.push({
-        key: 'accept-meetup',
-        label: 'Accept meetup',
-        primary: true,
-        onClick: () => {
-          if (!confirm('Accept the scheduled meetup?')) return;
-          void acceptOrderMeetup(currentOrder.id).then(() => {
-            if (roomId) setRoom(getChatRoom(roomId));
-            setOrdersRevision((n) => n + 1);
-          });
-        },
-      });
-    } else {
-      chips.push({
+    const chips: ChatChipAction[] = [
+      {
         key: 'receive',
         label: 'Confirm receipt',
         onClick: () => navigate(`/receive/${currentOrder.id}`),
         disabled: !receiveEnabled,
-      });
-    }
+      },
+    ];
     if (!isShareOrder) {
       chips.push({
         key: 'dispute',

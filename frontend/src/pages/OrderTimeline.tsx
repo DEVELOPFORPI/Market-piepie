@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
-import { Order, OrderStatus, ORDER_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
-import { getOrderById, ensureOrderById, updateOrderStatus, deleteOrder, confirmOrderCompletion } from '@/utils/orderStorage';
-import { ensureChatRoomForOrder, addTradeCompletedToChat, addPriceOfferResultToChat } from '@/utils/chatStorage';
-import { getCurrentUserId } from '@/utils/authStorage';
-import { addNotification } from '@/utils/notificationStorage';
+import { Order, ORDER_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
+import { ensureOrderById } from '@/utils/orderStorage';
 import { getProductById } from '@/utils/productStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
-import { NOTIFY_OFFER_DECLINED, labelTradeMethod } from '@/locale/enUI';
+import { labelTradeMethod } from '@/locale/enUI';
 import { resolveDisplayNickname } from '@/utils/profileStorage';
 
 export const OrderTimeline: React.FC = () => {
@@ -71,308 +68,6 @@ export const OrderTimeline: React.FC = () => {
     };
   }, [orderId]);
 
-  const handleStatusChange = (newStatus: OrderStatus, description?: string) => {
-    if (!orderId) return;
-    updateOrderStatus(orderId, newStatus, description);
-    if (newStatus === ORDER_STATUS_VALUE.ACCEPTED) {
-      const updated = getOrderById(orderId);
-      if (updated) void ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
-    }
-    loadOrder();
-  };
-
-  const handleDelete = () => {
-    if (!order) return;
-    if (confirm(`Cancel this trade for "${order.product?.title ?? 'this listing'}"?`)) {
-      void (async () => {
-        const ok = await deleteOrder(order.id);
-        if (!ok) {
-          alert('Could not cancel this trade. Check your connection and try again.');
-          return;
-        }
-        navigate('/my/orders', { replace: true });
-      })();
-    }
-  };
-
-  const handleReject = () => {
-    if (!order) return;
-    const isShareOrder = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
-    if (
-      !confirm(
-        isShareOrder
-          ? `Decline the free share request for "${order.product.title}"?`
-          : `Decline the purchase offer for "${order.product.title}"?`
-      )
-    )
-      return;
-    addNotification({
-      targetUserId: order.buyer.id,
-      type: 'chat',
-      title: NOTIFY_OFFER_DECLINED,
-      content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
-      link: `/product/${order.product.id}`,
-    });
-    void (async () => {
-      await addPriceOfferResultToChat(order, 'rejected');
-      const ok = await deleteOrder(order.id);
-      if (!ok) {
-        alert('Could not decline this offer. Check your connection and try again.');
-        return;
-      }
-      navigate('/my/orders', { replace: true });
-    })();
-  };
-
-  const getActionButton = () => {
-    if (!order) return null;
-
-    const userId = getCurrentUserId();
-    const isBuyer = order.buyer.id === userId;
-    const isSeller = order.seller.id === userId;
-
-    switch (order.status) {
-      case ORDER_STATUS_VALUE.PENDING_OFFER:
-        if (isSeller) {
-          return (
-            <div className="space-y-2">
-              <button
-                onClick={() => handleStatusChange(ORDER_STATUS_VALUE.ACCEPTED, 'Offer accepted')}
-                className="w-full px-4 py-3 text-white rounded-lg font-medium"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                Accept offer
-              </button>
-              <button
-                onClick={handleReject}
-                className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium"
-              >
-                Decline offer
-              </button>
-            </div>
-          );
-        }
-        if (isBuyer) {
-          return (
-            <button
-              onClick={handleDelete}
-              className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium"
-            >
-              Withdraw offer
-            </button>
-          );
-        }
-        return null;
-
-      case ORDER_STATUS_VALUE.ACCEPTED:
-        if (isSeller) {
-          return (
-            <div className="space-y-2">
-              <button
-                onClick={() => handleStatusChange(ORDER_STATUS_VALUE.MEETUP_SET, 'Meetup confirmed')}
-                className="w-full px-4 py-3 text-white rounded-lg font-medium"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                Confirm meetup
-              </button>
-              <button
-                onClick={handleDelete}
-                className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-          );
-        }
-        if (isBuyer) {
-          return (
-            <p className="text-sm text-gray-500 text-center py-2">Waiting for the seller to confirm the meetup.</p>
-          );
-        }
-        return null;
-
-      case ORDER_STATUS_VALUE.MEETUP_SET: {
-        const isShareOrder = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
-        if (isBuyer) {
-          return (
-            <div className="space-y-2">
-              <button
-                onClick={() => orderId && navigate(`/receive/${orderId}`)}
-                className="w-full px-4 py-3 text-white rounded-lg font-medium"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                Confirm receipt
-              </button>
-              {!isShareOrder && (
-                <button
-                  onClick={() => handleStatusChange(ORDER_STATUS_VALUE.DISPUTE, 'Dispute opened')}
-                  className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium"
-                >
-                  Open dispute
-                </button>
-              )}
-            </div>
-          );
-        }
-        if (isSeller) {
-          return (
-            <div className="space-y-2">
-              {order.sellerCompleted ? (
-
-                <p className="text-xs text-gray-500 text-center py-2">Waiting for the buyer to confirm receipt</p>
-
-              ) : (
-
-                <button
-
-                  onClick={() => {
-                    void (async () => {
-                      const updated = await confirmOrderCompletion(order.id, 'seller');
-                      if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                        void addTradeCompletedToChat(updated);
-                      }
-                      loadOrder();
-                    })();
-                  }}
-
-                  className="w-full px-4 py-3 text-white rounded-lg font-medium"
-
-                  style={{ backgroundColor: '#00A8A3' }}
-
-                >
-
-                  Confirm delivery
-
-                </button>
-
-              )}
-              {!isShareOrder && (
-                <button
-                  onClick={() => handleStatusChange(ORDER_STATUS_VALUE.DISPUTE, 'Dispute opened')}
-                  className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium"
-                >
-                  Open dispute
-                </button>
-              )}
-            </div>
-          );
-        }
-        return null;
-      }
-
-      case ORDER_STATUS_VALUE.RECEIVED: {
-
-        if (isBuyer) {
-
-          return (
-
-            <p className="text-sm text-gray-500 text-center py-2">
-
-              Waiting for seller to confirm delivery.
-
-            </p>
-
-          );
-
-        }
-
-        if (isSeller) {
-
-          if (order.sellerCompleted) {
-
-            return (
-
-              <p className="text-sm text-gray-500 text-center py-2">
-
-                Delivery confirmed. Trade complete.
-
-              </p>
-
-            );
-
-          }
-
-          return (
-
-            <button
-
-              onClick={() => {
-                void (async () => {
-                  const updated = await confirmOrderCompletion(order.id, 'seller');
-                  if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                    void addTradeCompletedToChat(updated);
-                  }
-                  loadOrder();
-                  if (orderId && !getReviewByOrderId(orderId)) {
-                    setTimeout(() => navigate(`/review/${orderId}`), 300);
-                  }
-                })();
-              }}
-
-              className="w-full px-4 py-3 text-white rounded-lg font-medium"
-
-              style={{ backgroundColor: '#00A8A3' }}
-
-            >
-
-              Confirm delivery
-
-            </button>
-
-          );
-
-        }
-
-        return null;
-
-      }
-      case ORDER_STATUS_VALUE.COMPLETE: {
-
-        const myReview = orderId ? getReviewByOrderId(orderId) : undefined;
-
-        if (myReview) {
-
-          return (
-
-            <p className="text-sm text-gray-600 text-center py-2">
-
-              Review submitted
-
-            </p>
-
-          );
-
-        }
-
-        return (
-          <button
-            onClick={() => navigate(`/review/${orderId}`)}
-            className="w-full px-4 py-3 text-white rounded-lg font-medium"
-            style={{ backgroundColor: '#00A8A3' }}
-          >
-            Write review
-          </button>
-        );
-      }
-
-      case ORDER_STATUS_VALUE.DISPUTE:
-        return (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500 text-center">A dispute has been filed.</p>
-            <button
-              onClick={() => navigate(`/dispute/${orderId}`)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"
-            >
-              Dispute details
-            </button>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -402,7 +97,7 @@ export const OrderTimeline: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white">
       <TopBar
         leftContent={
           <button onClick={() => navigate(-1)} className="p-2">
@@ -414,7 +109,7 @@ export const OrderTimeline: React.FC = () => {
         title="Order detail"
       />
 
-      <div className="px-4 py-6 pb-24 space-y-6">
+      <div className="px-4 py-6 space-y-6">
         <div className="p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Status</span>
@@ -526,12 +221,6 @@ export const OrderTimeline: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {getActionButton() && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
-          {getActionButton()}
-        </div>
-      )}
     </div>
   );
 };

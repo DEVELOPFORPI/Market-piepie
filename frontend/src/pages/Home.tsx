@@ -10,6 +10,9 @@ import { labelTabType, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { getHomePopupConfig, shouldShowHomePopup, dismissHomePopupForSession } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
 import { usePiPrice } from '@/utils/piPrice';
+import { syncProductsFromDB } from '@/utils/dbSync';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 
 const defaultMockProducts: Product[] = [];
 
@@ -165,8 +168,17 @@ export const Home: React.FC = () => {
     return filtered;
   }, [allProducts, searchQuery, minPrice, maxPrice, kycOnly, activeTab]);
 
+  const handlePullRefresh = useCallback(async () => {
+    await syncProductsFromDB();
+    refreshHomeData();
+    refreshHomePromo();
+  }, [refreshHomePromo]);
+
+  const { pull, refreshing } = usePullToRefresh(handlePullRefresh);
+
   return (
     <div className="min-h-screen bg-white pb-20">
+      <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       {location.pathname === '/' && homePromoReady && homePromo.show && homePromo.config.enabled ? (
         <HomePromoPopup config={homePromo.config} onClose={closeHomePromo} />
       ) : null}

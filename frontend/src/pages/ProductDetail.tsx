@@ -10,7 +10,7 @@ import { getAllProducts, deleteProduct, updateProductStatus } from '@/utils/prod
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { getOrdersByProductId } from '@/utils/orderStorage';
+import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatus, labelProductStatusListing, labelInDispute, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
@@ -151,10 +151,13 @@ export const ProductDetail: React.FC = () => {
     setProduct((prev) => ({ ...prev, status }));
   };
 
-  const sellerStatusLocked = hasProductActiveDispute(product.id);
-  const sellerStatusLabel = sellerStatusLocked
+  const sellerMeetupLocked = hasProductReservedOrder(product.id);
+  const sellerStatusLocked = hasProductActiveDispute(product.id) || sellerMeetupLocked;
+  const sellerStatusLabel = hasProductActiveDispute(product.id)
     ? labelInDispute()
-    : labelProductStatus(product.status);
+    : sellerMeetupLocked
+      ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
+      : labelProductStatus(product.status);
 
   const sellerStatusOptions: ProductStatus[] = [
     PRODUCT_STATUS_VALUE.FOR_SALE,

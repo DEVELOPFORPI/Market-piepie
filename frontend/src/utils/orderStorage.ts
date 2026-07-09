@@ -373,16 +373,17 @@ export const updateOrderMeetup = async (
     meetup_location: params.meetupPlace,
     meetup_date: params.meetupDate,
     meetup_time: params.meetupTime,
-    meetup_accepted: false,
+    meetup_accepted: true,
   });
   if (!ok) return undefined;
 
   order.meetupPlace = params.meetupPlace;
   order.meetupDate = params.meetupDate;
   order.meetupTime = params.meetupTime;
-  order.meetupAccepted = false;
+  order.meetupAccepted = true;
   order.status = ORDER_STATUS_VALUE.MEETUP_SET;
   order.timeline.push(timelineEvent);
+  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
