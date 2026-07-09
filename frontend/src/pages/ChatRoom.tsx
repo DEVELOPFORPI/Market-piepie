@@ -7,6 +7,7 @@ import {
   Order,
   OrderStatus,
   ORDER_STATUS_VALUE,
+  PRODUCT_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
@@ -523,10 +524,18 @@ export const ChatRoom: React.FC = () => {
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;
+    if (order.status === ORDER_STATUS_VALUE.COMPLETE) return false;
+    if (order.buyerCompleted && order.sellerCompleted) return false;
     const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
     if (isShare) return false;
+    const productId = order.product?.id;
+    if (productId) {
+      const listing = getProductById(productId);
+      if (listing?.status === PRODUCT_STATUS_VALUE.SOLD) return false;
+    }
     return DISPUTE_ELIGIBLE.has(order.status);
   };
+  const disputeEnabled = canOpenDispute(currentOrder);
   /** Listing allows offers (reflect latest product from storage) */
   const productForOffer = room?.product ? getProductById(room.product.id) || room.product : null;
   const canOfferPrice = !!(
@@ -600,7 +609,7 @@ export const ChatRoom: React.FC = () => {
           key: 'dispute',
           label: 'Open dispute',
           onClick: () => navigate(`/dispute/${currentOrder.id}`),
-          disabled: !canOpenDispute(currentOrder),
+          disabled: !disputeEnabled,
         });
       }
       return chips;
@@ -618,7 +627,7 @@ export const ChatRoom: React.FC = () => {
         key: 'dispute',
         label: 'Open dispute',
         onClick: () => navigate(`/dispute/${currentOrder.id}`),
-        disabled: !canOpenDispute(currentOrder),
+        disabled: !disputeEnabled,
       });
     }
     return chips;
@@ -666,7 +675,7 @@ export const ChatRoom: React.FC = () => {
         key: 'dispute',
         label: 'Open dispute',
         onClick: () => navigate(`/dispute/${currentOrder.id}`),
-        disabled: !canOpenDispute(currentOrder),
+        disabled: !disputeEnabled,
       });
     }
     return chips;
@@ -674,7 +683,7 @@ export const ChatRoom: React.FC = () => {
 
   useEffect(() => {
     if (!roomId) return;
-  }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled]);
+  }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled, disputeEnabled]);
 
   const firstUnreadIndex = findFirstUnreadIndex(
     displayMessages,

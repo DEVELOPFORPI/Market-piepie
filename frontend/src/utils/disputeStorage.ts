@@ -56,7 +56,7 @@ export const hasProductActiveDispute = (productId: string): boolean => {
   const disputeOrders = orders.filter((o) => o.status === ORDER_STATUS_VALUE.DISPUTE);
   return disputeOrders.some((o) => {
     const d = getDisputeByOrderId(o.id);
-    return d && d.status !== 'RESOLVED';
+    return !d || d.status !== 'RESOLVED';
   });
 };
 

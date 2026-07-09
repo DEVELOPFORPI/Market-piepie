@@ -12,6 +12,7 @@ import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorag
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
+import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatus, labelProductStatusListing, labelInDispute, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
@@ -120,18 +121,36 @@ export const ProductDetail: React.FC = () => {
     return () => window.removeEventListener('favoritesChanged', onFavChanged);
   }, [product.id]);
 
-  // Refresh CTAs when disputes / orders change
   const [ctaRefresh, setCtaRefresh] = useState(0);
+
   useEffect(() => {
-    const onDisputesChanged = () => setCtaRefresh((n) => n + 1);
-    const onOrdersChanged = () => setCtaRefresh((n) => n + 1);
-    window.addEventListener('disputesChanged', onDisputesChanged);
-    window.addEventListener('ordersChanged', onOrdersChanged);
-    return () => {
-      window.removeEventListener('disputesChanged', onDisputesChanged);
-      window.removeEventListener('ordersChanged', onOrdersChanged);
+    if (!id) return;
+    const uid = getCurrentUserId();
+    void (async () => {
+      if (uid) {
+        await Promise.all([syncOrdersFromDB(uid), syncDisputesFromDB(uid)]);
+      }
+      const fresh = getAllProducts().find((p) => p.id === id);
+      if (fresh) setProduct(fresh);
+      setCtaRefresh((n) => n + 1);
+    })();
+  }, [id]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (id) {
+        const fresh = getAllProducts().find((p) => p.id === id);
+        if (fresh) setProduct(fresh);
+      }
+      setCtaRefresh((n) => n + 1);
     };
-  }, []);
+    window.addEventListener('disputesChanged', refresh);
+    window.addEventListener('ordersChanged', refresh);
+    return () => {
+      window.removeEventListener('disputesChanged', refresh);
+      window.removeEventListener('ordersChanged', refresh);
+    };
+  }, [id]);
 
   const handleDelete = () => {
     if (confirm(`Delete "${product.title}"?`)) {
@@ -152,12 +171,18 @@ export const ProductDetail: React.FC = () => {
   };
 
   const productMeetupReserved = hasProductReservedOrder(product.id);
-  const sellerStatusLocked = hasProductActiveDispute(product.id) || productMeetupReserved;
-  const productHeaderStatusLabel = hasProductActiveDispute(product.id)
+  const productDisputeOpen = hasProductActiveDispute(product.id);
+  const sellerStatusLocked = productDisputeOpen || productMeetupReserved;
+  const sellerHeaderStatusLabel = productDisputeOpen
     ? labelInDispute()
     : productMeetupReserved
       ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
       : labelProductStatus(product.status);
+  const buyerHeaderStatusLabel = productDisputeOpen
+    ? labelInDispute()
+    : labelProductStatus(product.status);
+  const headerStatusLabel = isMine ? sellerHeaderStatusLabel : buyerHeaderStatusLabel;
+  const headerStatusLocked = isMine ? sellerStatusLocked : productDisputeOpen;
 
   const sellerStatusOptions: ProductStatus[] = [
     PRODUCT_STATUS_VALUE.FOR_SALE,
@@ -233,13 +258,13 @@ export const ProductDetail: React.FC = () => {
             disabled={sellerStatusLocked}
             onClick={() => setShowStatusMenu(true)}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium border ${
-              sellerStatusLocked
+              headerStatusLocked
                 ? 'border-red-200 bg-red-50 text-red-700 cursor-not-allowed'
                 : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
             }`}
           >
-            <span>{productHeaderStatusLabel}</span>
-            {!sellerStatusLocked && (
+            <span>{headerStatusLabel}</span>
+            {!headerStatusLocked && (
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -248,12 +273,12 @@ export const ProductDetail: React.FC = () => {
         ) : (
           <span
             className={`flex items-center px-3 py-1.5 rounded-full text-sm font-medium border ${
-              sellerStatusLocked
+              headerStatusLocked
                 ? 'border-red-200 bg-red-50 text-red-700'
                 : 'border-gray-300 bg-white text-gray-900'
             }`}
           >
-            {productHeaderStatusLabel}
+            {headerStatusLabel}
           </span>
         )}
         rightContent={!isMine ? (
@@ -387,7 +412,7 @@ export const ProductDetail: React.FC = () => {
               <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
                 {labelProductStatusListing(product.status)}
               </Badge>
-              {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductActiveDispute(product.id) && (
+              {productDisputeOpen && (
                 <Badge variant="danger" size="sm">Dispute</Badge>
               )}
             </div>
