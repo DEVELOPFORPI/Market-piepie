@@ -38,10 +38,6 @@ import {
   NOTIFY_OFFER_DECLINED,
 } from '@/locale/enUI';
 
-const DIRECT_RECEIVE_OK = new Set<OrderStatus>([
-  ORDER_STATUS_VALUE.ACCEPTED,
-  ORDER_STATUS_VALUE.MEETUP_SET,
-]);
 const SHIPPING_RECEIVE_OK = new Set<OrderStatus>([
   ORDER_STATUS_VALUE.SHIPPED,
   ORDER_STATUS_VALUE.DELIVERED,
@@ -143,7 +139,7 @@ function shouldShowTradeActionChips(order: Order, meetupCanceled: boolean): bool
 function isMeetupCanceledState(order: Order | null, msgs: ChatMessage[]): boolean {
   if (!order) return false;
   if (order.status === ORDER_STATUS_VALUE.MEETUP_SET) return false;
-  if (order.meetupPlace && order.meetupDate && order.meetupTime) return false;
+  if (resolveMeetupBannerInfo(order, msgs)) return false;
   return msgs.some((m) => m.type === 'system' && isMeetupCanceledMessage(m.content));
 }
 
@@ -300,6 +296,7 @@ export const ChatRoom: React.FC = () => {
     if (!oid) return;
     void ensureOrderById(oid).then(() => {
       setRoom(getChatRoom(roomId));
+      setOrdersRevision((n) => n + 1);
     });
   }, [roomId, orderIdFromQuery]);
 
@@ -355,6 +352,7 @@ export const ChatRoom: React.FC = () => {
       if (!roomId) return;
       setRoom(getChatRoom(roomId));
       setMessages(getMessages(roomId));
+      setOrdersRevision((n) => n + 1);
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -411,16 +409,6 @@ export const ChatRoom: React.FC = () => {
                 console.log('[ORDERSYNC] compare', { orderId: row.id, dbStatus, localStatus: local.status, dbMeetupPlace, localMeetupPlace: local.meetupPlace, dbBuyerCompleted: row.buyer_completed, dbSellerCompleted: row.seller_completed, changed });
                 if (changed) {
                   const updated = { ...local };
-                  const statusOrder: OrderStatus[] = [
-                    ORDER_STATUS_VALUE.PENDING_OFFER,
-                    ORDER_STATUS_VALUE.ACCEPTED,
-                    ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
-                    ORDER_STATUS_VALUE.MEETUP_SET,
-                    ORDER_STATUS_VALUE.SHIPPED,
-                    ORDER_STATUS_VALUE.DELIVERED,
-                    ORDER_STATUS_VALUE.RECEIVED,
-                    ORDER_STATUS_VALUE.COMPLETE,
-                  ];
                   const dbOrderStatus = dbStatus as OrderStatus;
                   if (row.buyer_completed) updated.buyerCompleted = true;
                   if (row.seller_completed) updated.sellerCompleted = true;
@@ -434,10 +422,7 @@ export const ChatRoom: React.FC = () => {
                     && local.status === ORDER_STATUS_VALUE.MEETUP_SET
                   ) {
                     updated.status = ORDER_STATUS_VALUE.ACCEPTED;
-                  } else if (
-                    statusOrder.includes(dbOrderStatus)
-                    && statusOrder.indexOf(dbOrderStatus) > statusOrder.indexOf(local.status)
-                  ) {
+                  } else if (dbStatus !== local.status) {
                     updated.status = dbOrderStatus;
                   }
                   console.log('[ORDERSYNC] merging', { orderId: row.id, newStatus: updated.status, meetupPlace: updated.meetupPlace });
@@ -513,14 +498,19 @@ export const ChatRoom: React.FC = () => {
   const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
   const meetupCanceled = isMeetupCanceledState(currentOrder, displayMessages);
 
-  const canReceiveConfirm = (order: Order | null): boolean => {
+  const canReceiveConfirm = (order: Order | null, msgs: ChatMessage[]): boolean => {
     if (!order) return false;
     if (order.status === ORDER_STATUS_VALUE.DISPUTE) return false;
+    if (order.status === ORDER_STATUS_VALUE.COMPLETE || order.status === ORDER_STATUS_VALUE.RECEIVED) {
+      return false;
+    }
     const isDirect = order.tradeMethod !== TRADE_METHOD_VALUE.SHIPPING;
-    if (isDirect) return DIRECT_RECEIVE_OK.has(order.status);
+    if (isDirect) {
+      return !!resolveMeetupBannerInfo(order, msgs);
+    }
     return SHIPPING_RECEIVE_OK.has(order.status);
   };
-  const receiveEnabled = canReceiveConfirm(currentOrder) && !meetupCanceled;
+  const receiveEnabled = canReceiveConfirm(currentOrder, displayMessages) && !meetupCanceled;
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;

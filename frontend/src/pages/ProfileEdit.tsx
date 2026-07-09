@@ -26,7 +26,6 @@ export const ProfileEdit: React.FC = () => {
   const myUser = getMyUser();
   const initialData = {
     kycStatus: myUser.kycStatus,
-    trustScore: myUser.trustScore,
     rating: myUser.rating,
     tradeCount: myUser.tradeCount,
   };
@@ -190,12 +189,6 @@ export const ProfileEdit: React.FC = () => {
               <img src="/check_1.svg" alt="Verified" className="w-3 h-3" />
               <span className="text-sm font-medium" style={{ color: '#00A8A3' }}>Verified</span>
             </div>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
-            <span className="text-sm text-gray-700">Trust score</span>
-            <span className="text-sm font-semibold" style={{ color: '#00A8A3' }}>
-              Trust {initialData.trustScore}
-            </span>
           </div>
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
             <span className="text-sm text-gray-700">Rating</span>

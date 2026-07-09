@@ -176,11 +176,6 @@ export const My: React.FC = () => {
                 </>
               )}
             </div>
-            {/* Trust */}
-            <p className="text-sm font-semibold mt-1 mb-1.5">
-              <span className="text-gray-500">Trust </span>
-              <span style={{ color: '#00A8A3' }}>{user.trustScore}</span>
-            </p>
             <div className="flex items-center gap-1.5 flex-wrap">
               <img src="/star.svg" alt="Rating" className="w-4 h-4" />
               <span className="text-sm text-gray-700">

@@ -1,7 +1,6 @@
 import React from 'react';
 import { User } from '@/types';
 import { KYCBadge } from './KYCBadge';
-import { TrustBadge } from './TrustBadge';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { getShareCountByUserId } from '@/utils/orderStorage';
@@ -29,8 +28,6 @@ export const SellerMiniCard: React.FC<SellerMiniCardProps> = ({ seller, onClick 
           <KYCBadge status={seller.kycStatus} userId={seller.id} />
         </div>
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          <TrustBadge score={seller.trustScore} />
-          <span className="text-gray-400">·</span>
           <span className="inline-flex items-center gap-0.5 text-gray-500">
             <svg className="w-4 h-4 flex-shrink-0" style={{ color: '#00A8A3' }} fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />

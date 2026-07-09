@@ -29,7 +29,7 @@ export const AdminUsers: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ nickname: '', kyc_status: '', trust_score: 0, bio: '' });
+  const [editForm, setEditForm] = useState({ nickname: '', kyc_status: '', bio: '' });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -63,7 +63,7 @@ export const AdminUsers: React.FC = () => {
 
   const openDetail = (u: User) => {
     setSelected(u);
-    setEditForm({ nickname: u.nickname, kyc_status: u.kyc_status, trust_score: u.trust_score, bio: u.bio || '' });
+    setEditForm({ nickname: u.nickname, kyc_status: u.kyc_status, bio: u.bio || '' });
   };
 
   const handleSave = async () => {
@@ -72,7 +72,6 @@ export const AdminUsers: React.FC = () => {
     await api.put(`/api/admin/users/${selected.id}`, {
       nickname: editForm.nickname,
       kyc_status: editForm.kyc_status,
-      trust_score: editForm.trust_score,
       bio: editForm.bio,
       seller_type: selected.seller_type,
     }, { headers: adminPasswordHeaders() });
@@ -121,7 +120,6 @@ export const AdminUsers: React.FC = () => {
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">사용자</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">본인인증</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">신뢰점수</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">거래</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">지역</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">가입일</th>
@@ -152,7 +150,6 @@ export const AdminUsers: React.FC = () => {
                       {KYC_LABEL[u.kyc_status] || u.kyc_status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{u.trust_score}</td>
                   <td className="px-4 py-3 text-gray-700">{u.trade_count}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{u.activity_region || '-'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
@@ -164,7 +161,7 @@ export const AdminUsers: React.FC = () => {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-400 text-sm">사용자를 찾을 수 없습니다</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400 text-sm">사용자를 찾을 수 없습니다</td></tr>
               )}
             </tbody>
           </table>
@@ -194,11 +191,6 @@ export const AdminUsers: React.FC = () => {
                   <option value="verified">인증됨</option>
                   <option value="suspended">정지</option>
                 </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500">신뢰 점수</label>
-                <input type="number" value={editForm.trust_score} onChange={(e) => setEditForm({ ...editForm, trust_score: +e.target.value })}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
                 <label className="text-xs text-gray-500">소개</label>

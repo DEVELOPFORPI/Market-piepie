@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ReportModal } from '@/components/common/ReportModal';
 import { KYCBadge } from '@/components/common/KYCBadge';
-import { TrustBadge } from '@/components/common/TrustBadge';
 import { ListingCard } from '@/components/common/ListingCard';
 import { User, Product, PRODUCT_STATUS_VALUE } from '@/types';
 import { getShareCountByUserId } from '@/utils/orderStorage';
@@ -221,7 +220,6 @@ export const SellerProfile: React.FC = () => {
               <KYCBadge status={seller.kycStatus} userId={seller.id} />
             </div>
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <TrustBadge score={seller.trustScore} />
               <span className="text-sm text-gray-600">
                 ⭐ {avgRating.toFixed(1)} · {seller.tradeCount} trades · {id ? getShareCountByUserId(id) : 0} shares
                 {id && getDisputeCountByUserId(id) > 0 && (
