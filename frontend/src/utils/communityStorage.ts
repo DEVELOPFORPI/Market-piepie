@@ -2,6 +2,7 @@ import { Post, Comment } from '@/types';
 import { tryFreeSpaceForSave } from '@/utils/storageClear';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentDeleteToDB, syncPostFromDB } from '@/utils/dbSync';
+import { applyPostCommentCount } from '@/utils/postCommentCountStorage';
 
 const DISPUTE_STORAGE_KEY = 'community_dispute_posts';
 const USER_POSTS_STORAGE_KEY = 'community_user_posts';
@@ -196,21 +197,8 @@ export const buildCommentTree = (flat: Comment[]): Comment[] => {
   return withReplies(undefined);
 };
 
-export const addComment = async (postId: string, comment: Comment): Promise<boolean> => {
-  const ok = await syncCommentToDB(postId, {
-    id: comment.id,
-    authorId: comment.author?.id || '',
-    content: comment.content,
-    parentId: comment.parentId,
-  });
-  if (!ok) return false;
-
-  const all = getAllComments();
-  if (!all[postId]) all[postId] = [];
-  all[postId].push(comment);
-  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
-
-  const count = all[postId].length;
+const patchLocalPostCommentCount = (postId: string, count: number) => {
+  applyPostCommentCount(postId, count);
   const userPosts = getUserPosts();
   const userPost = userPosts.find((p) => p.id === postId);
   if (userPost) {
@@ -222,6 +210,25 @@ export const addComment = async (postId: string, comment: Comment): Promise<bool
   if (disputePost) {
     disputePost.commentCount = count;
     setItem(DISPUTE_STORAGE_KEY, JSON.stringify(disputePosts));
+  }
+};
+
+export const addComment = async (postId: string, comment: Comment): Promise<boolean> => {
+  const result = await syncCommentToDB(postId, {
+    id: comment.id,
+    authorId: comment.author?.id || '',
+    content: comment.content,
+    parentId: comment.parentId,
+  });
+  if (!result.ok) return false;
+
+  const all = getAllComments();
+  if (!all[postId]) all[postId] = [];
+  all[postId].push(comment);
+  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
+
+  if (result.count != null) {
+    patchLocalPostCommentCount(postId, result.count);
   }
 
   window.dispatchEvent(new Event('commentsChanged'));
@@ -249,23 +256,14 @@ export const deleteComment = async (postId: string, commentId: string): Promise<
   if (!all[postId]) return false;
   const toDelete = collectCommentIdsToDelete(all[postId], commentId);
   const results = await Promise.all([...toDelete].map((id) => syncCommentDeleteToDB(id)));
-  if (results.some((ok) => !ok)) return false;
+  if (results.some((r) => !r.ok)) return false;
 
   all[postId] = all[postId].filter((c) => !toDelete.has(c.id));
   setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
 
-  const count = all[postId].length;
-  const userPosts = getUserPosts();
-  const userPost = userPosts.find((p) => p.id === postId);
-  if (userPost) {
-    userPost.commentCount = count;
-    setItem(USER_POSTS_STORAGE_KEY, JSON.stringify(userPosts));
-  }
-  const disputePosts = getDisputePosts();
-  const disputePost = disputePosts.find((p) => p.id === postId);
-  if (disputePost) {
-    disputePost.commentCount = count;
-    setItem(DISPUTE_STORAGE_KEY, JSON.stringify(disputePosts));
+  const lastCount = [...results].reverse().find((r) => r.count != null)?.count;
+  if (lastCount != null) {
+    patchLocalPostCommentCount(postId, lastCount);
   }
 
   window.dispatchEvent(new Event('commentsChanged'));

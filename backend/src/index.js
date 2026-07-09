@@ -2193,7 +2193,13 @@ app.post(
           [req.params.id],
         );
       }
-      res.status(201).json(rows[0] || {});
+      const countRes = await pool.query(
+        `SELECT comment_count FROM community_posts WHERE id=$1 LIMIT 1`,
+        [req.params.id],
+      );
+      res.status(201).json({
+        count: Number(countRes.rows[0]?.comment_count || 0),
+      });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -2215,7 +2221,11 @@ app.delete("/api/comments/:id", requireDb, requireAuth, async (req, res) => {
       `UPDATE community_posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id=$1`,
       [existing[0].post_id],
     );
-    res.json({ ok: true });
+    const countRes = await pool.query(
+      `SELECT comment_count FROM community_posts WHERE id=$1 LIMIT 1`,
+      [existing[0].post_id],
+    );
+    res.json({ count: Number(countRes.rows[0]?.comment_count || 0) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2238,6 +2248,20 @@ app.get("/api/posts/:id/likes", requireDb, async (req, res) => {
       liked = likedRes.rows.length > 0;
     }
     res.json({ liked, count: countRes.rows[0].count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Post comment count */
+app.get("/api/posts/:id/comment-count", requireDb, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT comment_count FROM community_posts WHERE id=$1 LIMIT 1`,
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ count: Number(rows[0].comment_count || 0) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2323,6 +2347,86 @@ app.delete("/api/posts/:id/like", requireDb, requireAuth, async (req, res) => {
       [postId],
     );
     res.json({ liked: false, count: countRes.rows[0].count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 분쟁 게시글 Up/Down 투표 조회
+app.get("/api/posts/:id/dispute-votes", requireDb, async (req, res) => {
+  const { user_id } = req.query;
+  const postId = req.params.id;
+  try {
+    const countRes = await pool.query(
+      `SELECT
+        SUM(CASE WHEN vote = 'like' THEN 1 ELSE 0 END) AS like_count,
+        SUM(CASE WHEN vote = 'dislike' THEN 1 ELSE 0 END) AS dislike_count
+       FROM dispute_post_votes WHERE post_id=$1`,
+      [postId],
+    );
+    let vote = null;
+    if (user_id) {
+      const myRes = await pool.query(
+        `SELECT vote FROM dispute_post_votes WHERE post_id=$1 AND user_id=$2 LIMIT 1`,
+        [postId, user_id],
+      );
+      vote = myRes.rows[0]?.vote || null;
+    }
+    res.json({
+      vote,
+      likeCount: Number(countRes.rows[0]?.like_count || 0),
+      dislikeCount: Number(countRes.rows[0]?.dislike_count || 0),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 분쟁 게시글 Up/Down 투표 (같은 버튼 재클릭 시 해제, 반대 버튼은 전환)
+app.put("/api/posts/:id/dispute-vote", requireDb, requireAuth, async (req, res) => {
+  const userId = req.authUserId;
+  const postId = req.params.id;
+  const { vote } = req.body || {};
+  if (vote !== "like" && vote !== "dislike") {
+    return res.status(400).json({ error: "vote must be like or dislike" });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO users (id, nickname, kyc_status) VALUES ($1, $1, 'unverified') ON DUPLICATE KEY UPDATE id=id`,
+      [userId],
+    );
+    const existing = await pool.query(
+      `SELECT vote FROM dispute_post_votes WHERE user_id=$1 AND post_id=$2 LIMIT 1`,
+      [userId, postId],
+    );
+    if (existing.rows.length && existing.rows[0].vote === vote) {
+      await pool.query(
+        `DELETE FROM dispute_post_votes WHERE user_id=$1 AND post_id=$2`,
+        [userId, postId],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO dispute_post_votes (user_id, post_id, vote) VALUES ($1,$2,$3)
+         ON DUPLICATE KEY UPDATE vote=$3`,
+        [userId, postId, vote],
+      );
+    }
+    const countRes = await pool.query(
+      `SELECT
+        SUM(CASE WHEN vote = 'like' THEN 1 ELSE 0 END) AS like_count,
+        SUM(CASE WHEN vote = 'dislike' THEN 1 ELSE 0 END) AS dislike_count
+       FROM dispute_post_votes WHERE post_id=$1`,
+      [postId],
+    );
+    const myRes = await pool.query(
+      `SELECT vote FROM dispute_post_votes WHERE post_id=$1 AND user_id=$2 LIMIT 1`,
+      [postId, userId],
+    );
+    res.json({
+      vote: myRes.rows[0]?.vote || null,
+      likeCount: Number(countRes.rows[0]?.like_count || 0),
+      dislikeCount: Number(countRes.rows[0]?.dislike_count || 0),
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

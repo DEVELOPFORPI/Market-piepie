@@ -32,11 +32,12 @@ const KEYS_TO_CLEAR = [
   'all_notifications',
   'productLikeCounts',
   'postViewCounts',
+  'postCommentCounts',
   'postLikeCounts',
-  'disputePostVotes',
+  'disputePostVoteCounts',
 ] as const;
 
-const KEY_PREFIXES_TO_CLEAR = ['my_written_reviews_', 'myFavorites_', 'postLikedByMe_'];
+const KEY_PREFIXES_TO_CLEAR = ['my_written_reviews_', 'myFavorites_', 'postLikedByMe_', 'disputePostMyVote_'];
 
 export async function clearAppStorage(): Promise<void> {
   await clearHeavyStorage();

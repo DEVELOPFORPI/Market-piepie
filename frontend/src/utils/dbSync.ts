@@ -9,6 +9,7 @@ import { setItem, getItem } from '@/utils/heavyStorage';
 import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
 import { seedPostViewCounts } from '@/utils/postViewStorage';
+import { seedPostCommentCounts, syncPostCommentCountFromDB } from '@/utils/postCommentCountStorage';
 
 // ─── 유저 동기화 ──────────────────────────────────────────────
 
@@ -259,6 +260,9 @@ export async function syncPostsFromDB(): Promise<void> {
       seedPostViewCounts(
         dbPosts.map((p) => ({ postId: p.id, count: p.viewCount ?? 0 })),
       );
+      seedPostCommentCounts(
+        dbPosts.map((p) => ({ postId: p.id, count: p.commentCount ?? 0 })),
+      );
       setItem('community_user_posts', JSON.stringify(dbPosts));
       cleanupLocalPostLeftovers(dbPosts);
       window.dispatchEvent(new Event('postsChanged'));
@@ -313,6 +317,7 @@ export async function syncPostFromDB(postId: string): Promise<Post | undefined> 
     const favoriteIds = getFavoriteProductIds();
     const mapped = mapPostFromDB(res.data, favoriteIds);
     seedPostViewCounts([{ postId: mapped.id, count: mapped.viewCount ?? 0 }]);
+    seedPostCommentCounts([{ postId: mapped.id, count: mapped.commentCount ?? 0 }]);
     const posts: Post[] = (() => {
       try {
         const raw = getItem('community_user_posts');
@@ -1076,31 +1081,31 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
 // ─── 댓글 동기화 ──────────────────────────────────────────────
 
-/** 댓글을 DB에 저장 — 성공 여부 반환 */
+/** 댓글을 DB에 저장 — 성공 시 갱신된 댓글 수 반환 */
 export async function syncCommentToDB(
   postId: string,
   comment: { id: string; authorId: string; content: string; parentId?: string }
-): Promise<boolean> {
+): Promise<{ ok: boolean; count?: number }> {
   try {
-    const res = await api.post(`/api/posts/${postId}/comments`, {
+    const res = await api.post<{ count: number }>(`/api/posts/${postId}/comments`, {
       id: comment.id,
       author_id: comment.authorId,
       content: comment.content,
       parent_id: comment.parentId,
     });
-    return res.ok;
+    return { ok: res.ok, count: res.ok ? res.data?.count : undefined };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
-/** 댓글 삭제 */
-export async function syncCommentDeleteToDB(commentId: string): Promise<boolean> {
+/** 댓글 삭제 — 성공 시 갱신된 댓글 수 반환 */
+export async function syncCommentDeleteToDB(commentId: string): Promise<{ ok: boolean; count?: number }> {
   try {
-    const res = await api.delete(`/api/comments/${commentId}`);
-    return res.ok;
+    const res = await api.delete<{ count: number }>(`/api/comments/${commentId}`);
+    return { ok: res.ok, count: res.ok ? res.data?.count : undefined };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
@@ -1144,6 +1149,7 @@ export async function syncCommentsFromDB(postId: string): Promise<void> {
       });
       setItem('community_comments', JSON.stringify(all));
       window.dispatchEvent(new Event('commentsChanged'));
+      await syncPostCommentCountFromDB(postId);
     }
   } catch {
     // 오프라인 시 무시

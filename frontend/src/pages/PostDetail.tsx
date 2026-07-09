@@ -11,8 +11,9 @@ import { getMyUser, resolveDisplayNickname } from '@/utils/profileStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
 import { syncCommentsFromDB } from '@/utils/dbSync';
-import { getDisputeVoteCounts, getMyDisputeVote, setDisputeVote } from '@/utils/disputePostVoteStorage';
+import { getDisputeVoteCounts, getMyDisputeVote, setDisputeVote, syncDisputeVotesFromDB } from '@/utils/disputePostVoteStorage';
 import { getPostViewCount, incrementPostViewCount } from '@/utils/postViewStorage';
+import { getPostCommentCount, syncPostCommentCountFromDB } from '@/utils/postCommentCountStorage';
 import { getDisputeByOrderId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { POST_CATEGORY_VALUE } from '@/types';
@@ -87,6 +88,7 @@ export const PostDetail: React.FC = () => {
   const [disputeVoteCounts, setDisputeVoteCounts] = useState({ likeCount: 0, dislikeCount: 0 });
   const [myDisputeVote, setMyDisputeVote] = useState<'like' | 'dislike' | null>(null);
   const [viewCount, setViewCount] = useState(0);
+  const [commentCount, setCommentCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
 
@@ -129,6 +131,7 @@ export const PostDetail: React.FC = () => {
     if (id && isDisputePost) {
       setDisputeVoteCounts(getDisputeVoteCounts(id));
       setMyDisputeVote(getMyDisputeVote(id));
+      void syncDisputeVotesFromDB(id);
     }
   }, [id, isDisputePost]);
 
@@ -172,8 +175,12 @@ export const PostDetail: React.FC = () => {
     setLoading(true);
     void loadPost();
     loadComments();
-    // DB에서 최신 댓글 동기화 (다른 유저가 단 댓글 반영)
-    syncCommentsFromDB(id).then(() => loadComments());
+    // DB에서 최신 댓글·댓글 수 동기화
+    syncCommentsFromDB(id).then(() => {
+      loadComments();
+      if (id) setCommentCount(getPostCommentCount(id));
+    });
+    void syncPostCommentCountFromDB(id);
 
     const onPostsChanged = () => { void loadPost(); };
     window.addEventListener('commentsChanged', loadComments);
@@ -196,6 +203,16 @@ export const PostDetail: React.FC = () => {
     };
     window.addEventListener('postViewCountsChanged', onViewCountsChanged);
     return () => window.removeEventListener('postViewCountsChanged', onViewCountsChanged);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setCommentCount(getPostCommentCount(id));
+    const onCommentCountsChanged = () => {
+      setCommentCount(getPostCommentCount(id));
+    };
+    window.addEventListener('postCommentCountsChanged', onCommentCountsChanged);
+    return () => window.removeEventListener('postCommentCountsChanged', onCommentCountsChanged);
   }, [id]);
 
   const handleSubmitComment = () => {
@@ -383,6 +400,47 @@ export const PostDetail: React.FC = () => {
           </div>
         )}
 
+        {isDisputePost && (
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => void setDisputeVote(post.id, 'like')}
+              className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 transition-all ${
+                myDisputeVote === 'like'
+                  ? 'border-green-500 bg-green-50 text-green-600'
+                  : 'border-gray-200 bg-gray-50/80 text-gray-500 hover:border-green-300 hover:bg-green-50/50'
+              }`}
+              aria-label="Agree — dispute seems valid"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+              </svg>
+              <span className="text-sm font-semibold">Up</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${myDisputeVote === 'like' ? 'bg-green-200/60 text-green-700' : 'bg-gray-200/60 text-gray-600'}`}>
+                {disputeVoteCounts.likeCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void setDisputeVote(post.id, 'dislike')}
+              className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 transition-all ${
+                myDisputeVote === 'dislike'
+                  ? 'border-red-500 bg-red-50 text-red-600'
+                  : 'border-gray-200 bg-gray-50/80 text-gray-500 hover:border-red-300 hover:bg-red-50/50'
+              }`}
+              aria-label="Disagree — dispute seems unfair"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
+              </svg>
+              <span className="text-sm font-semibold">Down</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${myDisputeVote === 'dislike' ? 'bg-red-200/60 text-red-700' : 'bg-gray-200/60 text-gray-600'}`}>
+                {disputeVoteCounts.dislikeCount}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Images */}
         {post.images && post.images.length > 0 && (
           <div className="space-y-2">
@@ -421,105 +479,43 @@ export const PostDetail: React.FC = () => {
           </div>
         )}
 
-        {isDisputePost ? (
-          <div className="pt-4 border-t border-gray-200 space-y-4">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>{relativeTimeShort(post.createdAt)}</span>
-              <span className="text-gray-300">·</span>
-              <span>{viewCount} views</span>
-              <span className="text-gray-300">·</span>
-              <span className="flex items-center gap-1">
-                <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5 opacity-50" />
-                {comments.length} comments
-              </span>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setDisputeVote(post.id, 'like');
-                  setDisputeVoteCounts(getDisputeVoteCounts(post.id));
-                  setMyDisputeVote(getMyDisputeVote(post.id));
-                }}
-                className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 transition-all ${
-                  myDisputeVote === 'like'
-                    ? 'border-green-500 bg-green-50 text-green-600'
-                    : 'border-gray-200 bg-gray-50/80 text-gray-500 hover:border-green-300 hover:bg-green-50/50'
-                }`}
-                aria-label="Agree — dispute seems valid"
+        <div className="flex items-center justify-between pt-3 border-t border-gray-200 text-xs text-gray-400">
+          <span>{relativeTimeShort(post.createdAt)}</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                void togglePostLike(post.id);
+              }}
+              className="flex items-center gap-1.5 text-sm"
+              aria-label="Like"
+            >
+              <svg
+                className={`w-5 h-5 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+                fill={liked ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-                </svg>
-                <span className="text-sm font-semibold">Up</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${myDisputeVote === 'like' ? 'bg-green-200/60 text-green-700' : 'bg-gray-200/60 text-gray-600'}`}>
-                  {disputeVoteCounts.likeCount}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDisputeVote(post.id, 'dislike');
-                  setDisputeVoteCounts(getDisputeVoteCounts(post.id));
-                  setMyDisputeVote(getMyDisputeVote(post.id));
-                }}
-                className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 transition-all ${
-                  myDisputeVote === 'dislike'
-                    ? 'border-red-500 bg-red-50 text-red-600'
-                    : 'border-gray-200 bg-gray-50/80 text-gray-500 hover:border-red-300 hover:bg-red-50/50'
-                }`}
-                aria-label="Disagree — dispute seems unfair"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
-                </svg>
-                <span className="text-sm font-semibold">Down</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${myDisputeVote === 'dislike' ? 'bg-red-200/60 text-red-700' : 'bg-gray-200/60 text-gray-600'}`}>
-                  {disputeVoteCounts.dislikeCount}
-                </span>
-              </button>
-            </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                />
+              </svg>
+              <span className={liked ? 'text-red-500 font-medium text-xs' : 'text-gray-500 text-xs'}>{likeCount}</span>
+            </button>
+            <span className="flex items-center gap-1 text-gray-500">
+              <img src="/post/chat.svg" alt="" className="w-4 h-4" />
+              {commentCount}
+            </span>
+            <span className="text-gray-500">{viewCount} views</span>
           </div>
-        ) : (
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200 text-xs text-gray-400">
-            <span>{relativeTimeShort(post.createdAt)}</span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  void togglePostLike(post.id);
-                }}
-                className="flex items-center gap-1.5 text-sm"
-                aria-label="Like"
-              >
-                <svg
-                  className={`w-5 h-5 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
-                  fill={liked ? 'currentColor' : 'none'}
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                  />
-                </svg>
-                <span className={liked ? 'text-red-500 font-medium text-xs' : 'text-gray-500 text-xs'}>{likeCount}</span>
-              </button>
-              <span className="flex items-center gap-1 text-gray-500">
-                <img src="/post/chat.svg" alt="" className="w-4 h-4" />
-                {comments.length}
-              </span>
-              <span className="text-gray-500">{viewCount} views</span>
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Comments Section */}
         <div className={`space-y-4 ${isGeneralPost ? 'pt-2' : ''}`}>
-          <h3 className="text-lg font-semibold text-gray-900">Comments ({comments.length})</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Comments ({commentCount})</h3>
 
           {comments.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No comments yet.</p>

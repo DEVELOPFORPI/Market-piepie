@@ -1,56 +1,123 @@
-import { getCurrentUserId } from '@/utils/authStorage';
+import { userKey, getCurrentUserId } from '@/utils/authStorage';
+import { api } from '@/utils/api';
 
-const DISPUTE_POST_VOTES_KEY = 'disputePostVotes';
+const DISPUTE_POST_VOTE_COUNTS_KEY = 'disputePostVoteCounts';
+const DISPUTE_POST_MY_VOTE_KEY = 'disputePostMyVote';
 
-type Vote = 'like' | 'dislike';
+export type DisputeVote = 'like' | 'dislike';
 
-type VotesByPost = Record<string, Record<string, Vote>>;
+type VoteCounts = { likeCount: number; dislikeCount: number };
 
-const getVotes = (): VotesByPost => {
+const getVoteCountsMap = (): Record<string, VoteCounts> => {
   try {
-    const raw = localStorage.getItem(DISPUTE_POST_VOTES_KEY);
+    const raw = localStorage.getItem(DISPUTE_POST_VOTE_COUNTS_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 };
 
-const saveVotes = (votes: VotesByPost) => {
-  localStorage.setItem(DISPUTE_POST_VOTES_KEY, JSON.stringify(votes));
+const saveVoteCountsMap = (map: Record<string, VoteCounts>) => {
+  localStorage.setItem(DISPUTE_POST_VOTE_COUNTS_KEY, JSON.stringify(map));
 };
 
-export const getDisputeVoteCounts = (postId: string): { likeCount: number; dislikeCount: number } => {
-  const votes = getVotes()[postId];
-  if (!votes) return { likeCount: 0, dislikeCount: 0 };
-  let likeCount = 0;
-  let dislikeCount = 0;
-  for (const v of Object.values(votes)) {
-    if (v === 'like') likeCount++;
-    else dislikeCount++;
+const getMyVotesMap = (): Record<string, DisputeVote> => {
+  try {
+    const raw = localStorage.getItem(userKey(DISPUTE_POST_MY_VOTE_KEY));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
   }
-  return { likeCount, dislikeCount };
 };
 
-export const getMyDisputeVote = (postId: string): Vote | null => {
-  const userId = getCurrentUserId();
-  if (!userId) return null;
-  const postVotes = getVotes()[postId];
-  return postVotes?.[userId] ?? null;
+const saveMyVotesMap = (map: Record<string, DisputeVote>) => {
+  localStorage.setItem(userKey(DISPUTE_POST_MY_VOTE_KEY), JSON.stringify(map));
 };
 
-/** Vote agree/disagree; same button toggles off, opposite switches vote */
-export const setDisputeVote = (postId: string, vote: Vote): void => {
+const setLocalDisputeVote = (
+  postId: string,
+  vote: DisputeVote | null,
+  counts: VoteCounts,
+) => {
+  const countsMap = getVoteCountsMap();
+  countsMap[postId] = {
+    likeCount: Math.max(counts.likeCount, 0),
+    dislikeCount: Math.max(counts.dislikeCount, 0),
+  };
+  saveVoteCountsMap(countsMap);
+
+  const myVotes = getMyVotesMap();
+  if (vote) myVotes[postId] = vote;
+  else delete myVotes[postId];
+  saveMyVotesMap(myVotes);
+
+  window.dispatchEvent(new Event('disputePostVotesChanged'));
+};
+
+export const getDisputeVoteCounts = (postId: string): VoteCounts => {
+  return getVoteCountsMap()[postId] || { likeCount: 0, dislikeCount: 0 };
+};
+
+export const getMyDisputeVote = (postId: string): DisputeVote | null => {
+  if (!getCurrentUserId()) return null;
+  return getMyVotesMap()[postId] ?? null;
+};
+
+/** DB에서 분쟁 게시글 투표 상태/개수 로드 후 로컬 반영 */
+export const syncDisputeVotesFromDB = async (postId: string): Promise<void> => {
+  const userId = getCurrentUserId() || '';
+  try {
+    const res = await api.get<{ vote: DisputeVote | null; likeCount: number; dislikeCount: number }>(
+      `/api/posts/${postId}/dispute-votes${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`,
+    );
+    if (res.ok && res.data) {
+      setLocalDisputeVote(postId, res.data.vote, {
+        likeCount: res.data.likeCount,
+        dislikeCount: res.data.dislikeCount,
+      });
+    }
+  } catch {
+    // 오프라인 시 무시
+  }
+};
+
+/** Up/Down 투표 (DB 먼저, 로컬은 응답으로 보정) */
+export const setDisputeVote = async (postId: string, vote: DisputeVote): Promise<void> => {
   const userId = getCurrentUserId();
   if (!userId) return;
-  const all = getVotes();
-  if (!all[postId]) all[postId] = {};
-  const current = all[postId][userId];
-  if (current === vote) {
-    delete all[postId][userId];
-    if (Object.keys(all[postId]).length === 0) delete all[postId];
+
+  const prevVote = getMyDisputeVote(postId);
+  const prevCounts = getDisputeVoteCounts(postId);
+  let nextVote: DisputeVote | null = vote;
+  let nextCounts = { ...prevCounts };
+
+  if (prevVote === vote) {
+    nextVote = null;
+    if (vote === 'like') nextCounts.likeCount = Math.max(prevCounts.likeCount - 1, 0);
+    else nextCounts.dislikeCount = Math.max(prevCounts.dislikeCount - 1, 0);
   } else {
-    all[postId][userId] = vote;
+    if (prevVote === 'like') nextCounts.likeCount = Math.max(prevCounts.likeCount - 1, 0);
+    if (prevVote === 'dislike') nextCounts.dislikeCount = Math.max(prevCounts.dislikeCount - 1, 0);
+    if (vote === 'like') nextCounts.likeCount += 1;
+    else nextCounts.dislikeCount += 1;
   }
-  saveVotes(all);
-  window.dispatchEvent(new Event('disputePostVotesChanged'));
+
+  setLocalDisputeVote(postId, nextVote, nextCounts);
+
+  try {
+    const res = await api.put<{ vote: DisputeVote | null; likeCount: number; dislikeCount: number }>(
+      `/api/posts/${postId}/dispute-vote`,
+      { vote },
+    );
+    if (res.ok && res.data) {
+      setLocalDisputeVote(postId, res.data.vote, {
+        likeCount: res.data.likeCount,
+        dislikeCount: res.data.dislikeCount,
+      });
+      return;
+    }
+    setLocalDisputeVote(postId, prevVote, prevCounts);
+  } catch {
+    setLocalDisputeVote(postId, prevVote, prevCounts);
+  }
 };
