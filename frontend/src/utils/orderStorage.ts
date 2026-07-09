@@ -25,7 +25,6 @@ import {
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_TRADE_COMPLETED,
   NOTIFY_TRADE_COMPLETE_CHECK,
-  notifyTitleSellerStartedMeetup,
 } from '@/locale/enUI';
 
 /** Shared storage key: all orders */
@@ -519,11 +518,8 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
   const proposedPrice = product.price ?? 0;
   const isShare = isShareOrder(proposedPrice, product);
   const timelineDesc = isShare
-    ? 'Meetup for free share'
-    : `Seller started meetup at ${proposedPrice.toLocaleString()} Pi`;
-  const notifContent = isShare
-    ? `scheduled a meetup for the free share "${product.title}".`
-    : `scheduled a meetup for "${product.title}" at ${proposedPrice.toLocaleString()} Pi.`;
+    ? 'In-person free share'
+    : `In-person trade at ${proposedPrice.toLocaleString()} Pi`;
 
   const order: Order = {
     id: `order_${Date.now()}`,
@@ -548,15 +544,6 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
 
   const saved = await saveOrder(order);
   if (!saved) return null;
-
-  addNotification({
-    targetUserId: buyer.id,
-    type: 'order',
-    title: notifyTitleSellerStartedMeetup(seller.nickname),
-    content: `${seller.nickname} ${notifContent}`,
-    link: `/order/${order.id}`,
-  });
-  notifyOrderCounterpart(order);
   return order;
 };
 

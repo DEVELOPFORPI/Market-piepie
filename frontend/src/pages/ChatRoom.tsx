@@ -10,7 +10,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addSellerMeetupStartedToChat, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, acceptOrderMeetup, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -118,6 +118,25 @@ function resolveMeetupBannerInfo(
     }
   }
   return null;
+}
+
+function shouldShowTradeActionChips(order: Order, meetupCanceled: boolean): boolean {
+  const progressed: OrderStatus[] = [
+    ORDER_STATUS_VALUE.MEETUP_SET,
+    ORDER_STATUS_VALUE.RECEIVED,
+    ORDER_STATUS_VALUE.COMPLETE,
+    ORDER_STATUS_VALUE.DISPUTE,
+    ORDER_STATUS_VALUE.SHIPPED,
+    ORDER_STATUS_VALUE.DELIVERED,
+    ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
+  ];
+  if (progressed.includes(order.status)) return true;
+  if (order.status === ORDER_STATUS_VALUE.ACCEPTED) {
+    if (meetupCanceled) return false;
+    if (order.tradeMethod === TRADE_METHOD_VALUE.SHIPPING) return true;
+    return !!(order.meetupPlace && order.meetupDate && order.meetupTime);
+  }
+  return false;
 }
 
 function isMeetupCanceledState(order: Order | null, msgs: ChatMessage[]): boolean {
@@ -547,7 +566,6 @@ export const ChatRoom: React.FC = () => {
           return;
         }
         await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
-        await addSellerMeetupStartedToChat(order, roomId);
         navigate(`/meetup/${order.id}`);
       } catch (e) {
         if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -562,7 +580,7 @@ export const ChatRoom: React.FC = () => {
 
   const buyerChips: ChatChipAction[] = (() => {
     if (!isBuyer || !room?.product || isProductDeleted) return [];
-    if (!currentOrder) {
+    if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       return canOfferPrice
         ? [{ key: 'offer', label: 'Send offer', onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
         : [];
@@ -611,13 +629,6 @@ export const ChatRoom: React.FC = () => {
         disabled: !receiveEnabled,
       });
     }
-    if (canOfferPrice) {
-      chips.push({
-        key: 'offer',
-        label: 'Send offer',
-        onClick: () => navigate(`/offer/${room.product!.id}`),
-      });
-    }
     if (!isShareOrder) {
       chips.push({
         key: 'dispute',
@@ -631,7 +642,7 @@ export const ChatRoom: React.FC = () => {
 
   const sellerChips: ChatChipAction[] = (() => {
     if (!isSeller || !room?.product || isProductDeleted) return [];
-    if (!currentOrder) {
+    if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       return [{ key: 'meetup', label: 'Schedule meetup', onClick: handleSellerStartMeetup }];
     }
     const chips: ChatChipAction[] = [];
@@ -1056,7 +1067,7 @@ export const ChatRoom: React.FC = () => {
 
       {/* Listing + buyer/seller actions */}
       {room?.product && !mockBarterOrder && (
-        <div className="border-b border-gray-200 bg-white px-4 py-2.5 shrink-0">
+        <div className="bg-white px-4 py-2.5 shrink-0">
           {isProductDeleted ? (
             <div className="flex items-center gap-2 py-1">
               <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
