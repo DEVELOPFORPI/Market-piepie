@@ -29,6 +29,8 @@ import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
   CHAT_MSG_PRODUCT_RESERVED,
   CHAT_MSG_SELLER_MEETUP_STARTED,
+  CHAT_BANNER_TRADE_COMPLETE,
+  CHAT_BANNER_LISTING_SOLD,
   CHAT_LEAVE_ROOM,
   CHAT_LEAVE_ROOM_CONFIRM,
   CHAT_NEW_MESSAGES,
@@ -346,7 +348,10 @@ export const ChatRoom: React.FC = () => {
       checkNewMeetupFromOther(updated);
     };
 
-    const handleProductChange = () => checkProductDeleted();
+    const handleProductChange = () => {
+      checkProductDeleted();
+      setOrdersRevision((n) => n + 1);
+    };
     window.addEventListener('productsChanged', handleProductChange);
     const handleOrdersChanged = () => {
       if (!roomId) return;
@@ -497,6 +502,28 @@ export const ChatRoom: React.FC = () => {
   void ordersRevision;
   const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
   const meetupCanceled = isMeetupCanceledState(currentOrder, displayMessages);
+  const listingProduct = room?.product?.id ? getProductById(room.product.id) : null;
+  const isTradeCompleteForThisChat = !!(
+    currentOrder
+    && (
+      currentOrder.status === ORDER_STATUS_VALUE.COMPLETE
+      || (currentOrder.buyerCompleted && currentOrder.sellerCompleted)
+    )
+  );
+  const isListingSold = listingProduct?.status === PRODUCT_STATUS_VALUE.SOLD;
+  const isSoldToOtherParty = !!(isListingSold && !isTradeCompleteForThisChat);
+
+  const completedTradeReviewChips = (orderId: string): ChatChipAction[] => {
+    if (getMyReviewForOrder(orderId)) {
+      return [{ key: 'review-done', label: 'Review submitted', disabled: true }];
+    }
+    return [{
+      key: 'review',
+      label: 'Write review',
+      primary: true,
+      onClick: () => navigate(`/review/${orderId}`),
+    }];
+  };
 
   const canReceiveConfirm = (order: Order | null, msgs: ChatMessage[]): boolean => {
     if (!order) return false;
@@ -526,13 +553,26 @@ export const ChatRoom: React.FC = () => {
     return DISPUTE_ELIGIBLE.has(order.status);
   };
   const disputeEnabled = canOpenDispute(currentOrder);
+  const scheduleMeetupEnabled = (() => {
+    if (currentOrder?.status === ORDER_STATUS_VALUE.COMPLETE) return false;
+    if (currentOrder?.buyerCompleted && currentOrder?.sellerCompleted) return false;
+    const productId = room?.product?.id || currentOrder?.product?.id;
+    if (productId) {
+      const listing = getProductById(productId);
+      if (listing?.status === PRODUCT_STATUS_VALUE.SOLD) return false;
+    }
+    return true;
+  })();
   /** Listing allows offers (reflect latest product from storage) */
   const productForOffer = room?.product ? getProductById(room.product.id) || room.product : null;
   const canOfferPrice = !!(
-    productForOffer &&
-    productForOffer.allowOffer !== false &&
-    !productForOffer.isFreeShare &&
-    (productForOffer.price ?? 0) > 0
+    !isSoldToOtherParty
+    && !isTradeCompleteForThisChat
+    && productForOffer
+    && productForOffer.allowOffer !== false
+    && !productForOffer.isFreeShare
+    && (productForOffer.price ?? 0) > 0
+    && productForOffer.status !== PRODUCT_STATUS_VALUE.SOLD
   );
   // Hide dispute tab for free-share chats
   const isShareOrder = !!(
@@ -577,32 +617,14 @@ export const ChatRoom: React.FC = () => {
 
   const buyerChips: ChatChipAction[] = (() => {
     if (!isBuyer || !room?.product || isProductDeleted) return [];
+    if (isSoldToOtherParty) return [];
+    if (isTradeCompleteForThisChat && currentOrder) {
+      return completedTradeReviewChips(currentOrder.id);
+    }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       return canOfferPrice
         ? [{ key: 'offer', label: 'Send offer', onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
         : [];
-    }
-    if (currentOrder.status === ORDER_STATUS_VALUE.COMPLETE) {
-      const chips: ChatChipAction[] = [];
-      if (getMyReviewForOrder(currentOrder.id)) {
-        chips.push({ key: 'review-done', label: 'Review submitted', disabled: true });
-      } else {
-        chips.push({
-          key: 'review',
-          label: 'Write review',
-          primary: true,
-          onClick: () => navigate(`/review/${currentOrder.id}`),
-        });
-      }
-      if (!isShareOrder) {
-        chips.push({
-          key: 'dispute',
-          label: 'Open dispute',
-          onClick: () => navigate(`/dispute/${currentOrder.id}`),
-          disabled: !disputeEnabled,
-        });
-      }
-      return chips;
     }
     const chips: ChatChipAction[] = [
       {
@@ -625,8 +647,17 @@ export const ChatRoom: React.FC = () => {
 
   const sellerChips: ChatChipAction[] = (() => {
     if (!isSeller || !room?.product || isProductDeleted) return [];
+    if (isSoldToOtherParty) return [];
+    if (isTradeCompleteForThisChat && currentOrder) {
+      return completedTradeReviewChips(currentOrder.id);
+    }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
-      return [{ key: 'meetup', label: 'Schedule meetup', onClick: handleSellerStartMeetup }];
+      return [{
+        key: 'meetup',
+        label: 'Schedule meetup',
+        onClick: handleSellerStartMeetup,
+        disabled: !scheduleMeetupEnabled,
+      }];
     }
     const chips: ChatChipAction[] = [];
     if (currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted) {
@@ -648,17 +679,11 @@ export const ChatRoom: React.FC = () => {
         },
       });
     }
-    if (currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && !getMyReviewForOrder(currentOrder.id)) {
-      chips.push({
-        key: 'review',
-        label: 'Write review',
-        onClick: () => navigate(`/review/${currentOrder.id}`),
-      });
-    }
     chips.push({
       key: 'meetup',
       label: 'Schedule meetup',
       onClick: handleSellerStartMeetup,
+      disabled: !scheduleMeetupEnabled,
     });
     if (!isShareOrder) {
       chips.push({
@@ -987,7 +1012,24 @@ export const ChatRoom: React.FC = () => {
           );
         })()}
 
-        {meetupBannerInfo && (
+        {isTradeCompleteForThisChat && (
+          <div className="bg-green-50 border-t border-green-200 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-medium text-green-800 flex-1">{CHAT_BANNER_TRADE_COMPLETE}</p>
+            </div>
+          </div>
+        )}
+
+        {isSoldToOtherParty && (
+          <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-gray-600">{CHAT_BANNER_LISTING_SOLD}</p>
+          </div>
+        )}
+
+        {meetupBannerInfo && !isTradeCompleteForThisChat && !isSoldToOtherParty && (
           <div className="bg-teal-50 border-t border-teal-200 px-4 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
