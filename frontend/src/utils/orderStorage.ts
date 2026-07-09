@@ -130,6 +130,48 @@ export const getOrderById = (orderId: string): Order | undefined => {
   return getAllOrders().find((o) => o.id === orderId);
 };
 
+const ORDER_STATUS_SET = new Set<string>(Object.values(ORDER_STATUS_VALUE));
+
+/** Order statuses where the listing should show as trading (reserved), not for sale. */
+const PRODUCT_TRADING_ORDER_STATUSES = new Set<OrderStatus>([
+  ORDER_STATUS_VALUE.ACCEPTED,
+  ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
+  ORDER_STATUS_VALUE.MEETUP_SET,
+  ORDER_STATUS_VALUE.SHIPPED,
+  ORDER_STATUS_VALUE.DELIVERED,
+  ORDER_STATUS_VALUE.RECEIVED,
+  ORDER_STATUS_VALUE.DISPUTE,
+]);
+
+const syncProductStatusFromOrder = (order: Order): void => {
+  const productId = order.product?.id;
+  if (!productId) return;
+  if (order.status === ORDER_STATUS_VALUE.COMPLETE) {
+    void updateProductStatus(productId, PRODUCT_STATUS_VALUE.SOLD);
+    return;
+  }
+  if (PRODUCT_TRADING_ORDER_STATUSES.has(order.status)) {
+    void updateProductStatus(productId, PRODUCT_STATUS_VALUE.RESERVED);
+  }
+};
+
+/** Status to restore when a dispute is resolved (last non-dispute order status in timeline). */
+export const getOrderStatusBeforeDispute = (order: Order): OrderStatus => {
+  const disputeIndex = order.timeline.map((e) => e.type).lastIndexOf(ORDER_STATUS_VALUE.DISPUTE);
+  if (disputeIndex > 0) {
+    for (let j = disputeIndex - 1; j >= 0; j--) {
+      const t = order.timeline[j].type;
+      if (ORDER_STATUS_SET.has(t) && t !== ORDER_STATUS_VALUE.DISPUTE) {
+        return t as OrderStatus;
+      }
+    }
+  }
+  if (order.meetupPlace && order.meetupDate && order.meetupTime) {
+    return ORDER_STATUS_VALUE.MEETUP_SET;
+  }
+  return ORDER_STATUS_VALUE.ACCEPTED;
+};
+
 /** 로컬에 없으면 DB에서 주문 1건을 받아온 뒤 반환 */
 export const ensureOrderById = async (orderId: string): Promise<Order | undefined> => {
   const local = getOrderById(orderId);
@@ -247,9 +289,7 @@ export const updateOrderStatus = async (orderId: string, status: OrderStatus, de
       link: `/order/${order.id}`,
     });
   }
-  if (status === ORDER_STATUS_VALUE.COMPLETE) {
-    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
-  }
+  syncProductStatusFromOrder(order);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);

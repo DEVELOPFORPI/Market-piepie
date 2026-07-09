@@ -16,6 +16,7 @@ import { addNotification } from '@/utils/notificationStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
+import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
 import { labelTradeMethod } from '@/locale/enUI';
 import { Order } from '@/types';
 
@@ -74,6 +75,36 @@ export const Dispute: React.FC = () => {
       setLoading(false);
     })();
     return () => { cancelled = true; };
+  }, [orderId]);
+
+  useEffect(() => {
+    if (!orderId) return;
+    const refreshDispute = () => {
+      void (async () => {
+        const uid = getCurrentUserId();
+        if (uid) {
+          await Promise.all([syncDisputesFromDB(uid), syncOrdersFromDB(uid)]);
+        }
+        const [foundOrder, existingDispute] = await Promise.all([
+          ensureOrderById(orderId),
+          ensureDisputeByOrderId(orderId),
+        ]);
+        if (foundOrder) setOrder(foundOrder);
+        if (existingDispute) setDispute(existingDispute);
+      })();
+    };
+    refreshDispute();
+    window.addEventListener('disputesChanged', refreshDispute);
+    window.addEventListener('ordersChanged', refreshDispute);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshDispute();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('disputesChanged', refreshDispute);
+      window.removeEventListener('ordersChanged', refreshDispute);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [orderId]);
 
   useEffect(() => {

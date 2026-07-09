@@ -1,5 +1,5 @@
 import { DisputeStatus, ORDER_STATUS_VALUE } from '@/types';
-import { getOrderById, getOrdersByProductId, updateOrderStatus } from '@/utils/orderStorage';
+import { getOrderById, getOrdersByProductId, updateOrderStatus, getOrderStatusBeforeDispute } from '@/utils/orderStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 import { syncDisputeToDB, syncDisputeStatusToDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -41,10 +41,8 @@ export const getDisputeByOrderId = (orderId: string): Dispute | undefined => {
   return getDisputes().find((d) => d.orderId === orderId);
 };
 
-/** 로컬에 없으면 DB에서 분쟁 목록을 동기화한 뒤 반환 */
+/** DB와 동기화한 뒤 주문에 연결된 분쟁 반환 */
 export const ensureDisputeByOrderId = async (orderId: string): Promise<Dispute | undefined> => {
-  const local = getDisputeByOrderId(orderId);
-  if (local) return local;
   const uid = getCurrentUserId();
   if (uid) await syncDisputesFromDB(uid);
   return getDisputeByOrderId(orderId);
@@ -111,10 +109,10 @@ export const updateDisputeStatus = async (
     dispute.status = status;
     if (status === 'RESOLVED') {
       dispute.resolvedAt = new Date().toISOString();
-      // Resolved: keep the listing; move the order out of DISPUTE state
       const order = getOrderById(dispute.orderId);
       if (order && order.status === ORDER_STATUS_VALUE.DISPUTE) {
-        void updateOrderStatus(dispute.orderId, ORDER_STATUS_VALUE.COMPLETE, 'Dispute resolved.');
+        const restoreStatus = getOrderStatusBeforeDispute(order);
+        await updateOrderStatus(dispute.orderId, restoreStatus, 'Dispute resolved.');
       }
     }
     if (adminResponse) {
