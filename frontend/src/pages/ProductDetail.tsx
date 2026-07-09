@@ -151,11 +151,11 @@ export const ProductDetail: React.FC = () => {
     setProduct((prev) => ({ ...prev, status }));
   };
 
-  const sellerMeetupLocked = hasProductReservedOrder(product.id);
-  const sellerStatusLocked = hasProductActiveDispute(product.id) || sellerMeetupLocked;
-  const sellerStatusLabel = hasProductActiveDispute(product.id)
+  const productMeetupReserved = hasProductReservedOrder(product.id);
+  const sellerStatusLocked = hasProductActiveDispute(product.id) || productMeetupReserved;
+  const productHeaderStatusLabel = hasProductActiveDispute(product.id)
     ? labelInDispute()
-    : sellerMeetupLocked
+    : productMeetupReserved
       ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
       : labelProductStatus(product.status);
 
@@ -238,14 +238,24 @@ export const ProductDetail: React.FC = () => {
                 : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
             }`}
           >
-            <span>{sellerStatusLabel}</span>
+            <span>{productHeaderStatusLabel}</span>
             {!sellerStatusLocked && (
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             )}
           </button>
-        ) : undefined}
+        ) : (
+          <span
+            className={`flex items-center px-3 py-1.5 rounded-full text-sm font-medium border ${
+              sellerStatusLocked
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-gray-300 bg-white text-gray-900'
+            }`}
+          >
+            {productHeaderStatusLabel}
+          </span>
+        )}
         rightContent={!isMine ? (
           <div className="relative">
             <button

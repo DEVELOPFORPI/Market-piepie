@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
 import { Order, OrderStatus, ORDER_STATUS_VALUE } from '@/types';
-import { getOrders, getOrderById, deleteOrder, updateOrderStatus, confirmOrderCompletion, clearAllOrders } from '@/utils/orderStorage';
+import { getOrders, clearAllOrders } from '@/utils/orderStorage';
 import { syncOrdersFromDB } from '@/utils/dbSync';
-import { ensureChatRoomForOrder, addTradeCompletedToChat, addPriceOfferResultToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
-import { addNotification } from '@/utils/notificationStorage';
 import { getProductById } from '@/utils/productStorage';
-import { getReviewByOrderId } from '@/utils/reviewStorage';
-import { NOTIFY_OFFER_DECLINED, labelOrderStatus, labelTradeMethod } from '@/locale/enUI';
+import { labelOrderStatus, labelTradeMethod } from '@/locale/enUI';
 
 type OrderType = 'all' | 'buying' | 'selling';
 type FilterStatus = 'all' | OrderStatus;
@@ -52,192 +49,6 @@ export const MyOrders: React.FC = () => {
     const statusMatch = filterStatus === 'all' || order.status === filterStatus;
     return typeMatch && statusMatch;
   });
-
-  const handleAccept = (e: React.MouseEvent, order: Order) => {
-    e.stopPropagation();
-    if (!order?.product) return;
-    if (confirm(`Accept the buyer's offer for "${order.product.title}"?`)) {
-      void (async () => {
-        await updateOrderStatus(order.id, ORDER_STATUS_VALUE.ACCEPTED, 'Offer accepted');
-        const updated = getOrderById(order.id);
-        if (updated) void ensureChatRoomForOrder(updated, getCurrentUserId() ?? undefined);
-        loadOrders();
-      })();
-    }
-  };
-
-  const handleCancel = (e: React.MouseEvent, order: Order) => {
-    e.stopPropagation();
-    if (!order?.product) return;
-    if (confirm(`Cancel this trade for "${order.product.title}"?`)) {
-      void (async () => {
-        const ok = await deleteOrder(order.id);
-        if (!ok) {
-          alert('Could not cancel this trade. Check your connection and try again.');
-          return;
-        }
-        loadOrders();
-      })();
-    }
-  };
-
-  const handleReject = (e: React.MouseEvent, order: Order) => {
-    e.stopPropagation();
-    if (!order?.product || !order?.buyer?.id) return;
-    if (confirm(`Decline the offer for "${order.product.title}"?`)) {
-      addNotification({
-        targetUserId: order.buyer.id,
-        type: 'chat',
-        title: NOTIFY_OFFER_DECLINED,
-        content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
-        link: `/product/${order.product.id}`,
-      });
-      void (async () => {
-        await addPriceOfferResultToChat(order, 'rejected');
-        const ok = await deleteOrder(order.id);
-        if (!ok) {
-          alert('Could not decline this offer. Check your connection and try again.');
-          return;
-        }
-        loadOrders();
-      })();
-    }
-  };
-
-  const getQuickAction = (order: Order) => {
-    const userId = getCurrentUserId();
-    const isBuyer = order.buyer.id === userId;
-    const isSeller = order.seller.id === userId;
-
-    switch (order.status) {
-      case ORDER_STATUS_VALUE.PENDING_OFFER:
-        if (isSeller) {
-          return (
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={(e) => handleAccept(e, order)}
-                className="flex-1 px-3 py-1.5 text-xs font-medium text-white rounded-lg"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                Accept
-              </button>
-              <button
-                onClick={(e) => handleReject(e, order)}
-                className="flex-1 px-3 py-1.5 text-xs font-medium text-red-500 border border-red-300 rounded-lg"
-              >
-                Decline
-              </button>
-            </div>
-          );
-        }
-        if (isBuyer) {
-          return (
-            <button
-              onClick={(e) => handleCancel(e, order)}
-              className="mt-2 w-full px-3 py-1.5 text-xs font-medium text-red-500 border border-red-300 rounded-lg"
-            >
-              Withdraw offer
-            </button>
-          );
-        }
-        return null;
-      case ORDER_STATUS_VALUE.ACCEPTED:
-        if (isSeller) {
-          return (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                updateOrderStatus(order.id, ORDER_STATUS_VALUE.MEETUP_SET, 'Meetup confirmed');
-                loadOrders();
-              }}
-              className="mt-2 w-full px-3 py-1.5 text-xs font-medium text-white rounded-lg"
-              style={{ backgroundColor: '#00A8A3' }}
-            >
-              Confirm meetup
-            </button>
-          );
-        }
-        if (isBuyer) {
-          return <p className="mt-2 text-xs text-gray-400 text-center">Waiting for seller to confirm meetup</p>;
-        }
-        return null;
-      case ORDER_STATUS_VALUE.MEETUP_SET:
-        if (isBuyer) {
-          return (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                updateOrderStatus(order.id, ORDER_STATUS_VALUE.RECEIVED, 'Receipt confirmed');
-                loadOrders();
-              }}
-              className="mt-2 w-full px-3 py-1.5 text-xs font-medium text-white rounded-lg"
-              style={{ backgroundColor: '#00A8A3' }}
-            >
-              Confirm receipt
-            </button>
-          );
-        }
-        if (isSeller) {
-          return (
-            <p className="mt-2 text-xs text-gray-400 text-center">Waiting for receipt confirmation</p>
-          );
-        }
-        return null;
-      case ORDER_STATUS_VALUE.RECEIVED:
-        {
-          const myConfirmed = isSeller ? !!order.sellerCompleted : !!order.buyerCompleted;
-          const otherConfirmed = isSeller ? !!order.buyerCompleted : !!order.sellerCompleted;
-          if (myConfirmed) {
-            return (
-              <p className="mt-2 text-xs text-gray-400 text-center">
-                {otherConfirmed ? 'Both confirmed — trade complete.' : 'Waiting for the other party to confirm'}
-              </p>
-            );
-          }
-          return (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                void (async () => {
-                  const updated = await confirmOrderCompletion(order.id, isSeller ? 'seller' : 'buyer');
-                  if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-                    void addTradeCompletedToChat(updated);
-                    navigate(`/review/${order.id}`);
-                  }
-                  loadOrders();
-                })();
-              }}
-              className="mt-2 w-full px-3 py-1.5 text-xs font-medium text-white rounded-lg"
-              style={{ backgroundColor: '#00A8A3' }}
-            >
-              Confirm trade complete
-            </button>
-          );
-        }
-      case ORDER_STATUS_VALUE.COMPLETE: {
-        const existingReview = getReviewByOrderId(order.id);
-        if (existingReview) {
-          return (
-            <p className="mt-2 text-xs text-gray-400 text-center">Review submitted ✓</p>
-          );
-        }
-        return (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/review/${order.id}`);
-            }}
-            className="mt-2 w-full px-3 py-1.5 text-xs font-medium border rounded-lg"
-            style={{ borderColor: '#00A8A3', color: '#00A8A3' }}
-          >
-            Write review
-          </button>
-        );
-      }
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-white pb-20">
@@ -384,8 +195,6 @@ export const MyOrders: React.FC = () => {
                     {new Date(order.createdAt).toLocaleDateString('en-US')}
                   </span>
                 </div>
-
-                {getQuickAction(order)}
               </div>
             );
             })}
