@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
-import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
+import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
 import { labelProductStatus } from '@/locale/enUI';
 import { getMyProducts, deleteProduct } from '@/utils/productStorage';
-import { getOrders } from '@/utils/orderStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 
 type FilterStatus = 'all' | ProductStatus;
@@ -34,10 +33,6 @@ export const MyProducts: React.FC = () => {
   const filteredProducts = filterStatus === 'all'
     ? products
     : products.filter((p) => p.status === filterStatus);
-
-  const meetupProductIds = new Set(
-    getOrders().filter((o) => o.status === ORDER_STATUS_VALUE.MEETUP_SET).map((o) => o.product?.id).filter(Boolean)
-  );
 
   const filterTabs: { value: FilterStatus; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -107,7 +102,6 @@ export const MyProducts: React.FC = () => {
                   <ListingCard
                     product={product}
                     layout="list"
-                    meetupConfirmed={meetupProductIds.has(product.id)}
                   />
                 </div>
                 <div className="flex border-t border-gray-200">

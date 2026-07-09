@@ -27,7 +27,6 @@ import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profile
 import { API_BASE } from '@/utils/apiConfig';
 import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
-  CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
   CHAT_MSG_SELLER_MEETUP_STARTED,
   CHAT_LEAVE_ROOM,
@@ -91,6 +90,13 @@ function resolveMeetupBannerInfo(
   order: Order | null,
   msgs: ChatMessage[],
 ): { place: string; date: string; time: string; sellerId: string } | null {
+  let latestCancelTs = 0;
+  for (const m of msgs) {
+    if (m.type === 'system' && isMeetupCanceledMessage(m.content)) {
+      latestCancelTs = Math.max(latestCancelTs, new Date(m.timestamp).getTime());
+    }
+  }
+
   if (order?.meetupPlace && order?.meetupDate && order?.meetupTime) {
     return {
       place: order.meetupPlace,
@@ -102,6 +108,7 @@ function resolveMeetupBannerInfo(
   for (let i = msgs.length - 1; i >= 0; i--) {
     const msg = msgs[i];
     if (msg.type !== 'meetup_confirmed') continue;
+    if (new Date(msg.timestamp).getTime() <= latestCancelTs) continue;
     if (displayChatMessageContent(msg.content) === CHAT_MSG_SELLER_MEETUP_STARTED) continue;
     if (msg.meetupPlace && msg.meetupDate && msg.meetupTime) {
       return {
@@ -113,6 +120,13 @@ function resolveMeetupBannerInfo(
     }
   }
   return null;
+}
+
+function isMeetupCanceledState(order: Order | null, msgs: ChatMessage[]): boolean {
+  if (!order) return false;
+  if (order.status === ORDER_STATUS_VALUE.MEETUP_SET) return false;
+  if (order.meetupPlace && order.meetupDate && order.meetupTime) return false;
+  return msgs.some((m) => m.type === 'system' && isMeetupCanceledMessage(m.content));
 }
 
 export const ChatRoom: React.FC = () => {
@@ -341,9 +355,9 @@ export const ChatRoom: React.FC = () => {
                   || Boolean(row.buyer_completed) !== Boolean(local.buyerCompleted)
                   || Boolean(row.seller_completed) !== Boolean(local.sellerCompleted)
                   || Boolean(row.meetup_accepted) !== Boolean(local.meetupAccepted)
-                  || (dbMeetupPlace && dbMeetupPlace !== (local.meetupPlace || ''))
-                  || (dbMeetupDate && dbMeetupDate !== (local.meetupDate || ''))
-                  || (dbMeetupTime && dbMeetupTime !== (local.meetupTime || ''));
+                  || dbMeetupPlace !== (local.meetupPlace || '')
+                  || dbMeetupDate !== (local.meetupDate || '')
+                  || dbMeetupTime !== (local.meetupTime || '');
                 console.log('[ORDERSYNC] compare', { orderId: row.id, dbStatus, localStatus: local.status, dbMeetupPlace, localMeetupPlace: local.meetupPlace, dbBuyerCompleted: row.buyer_completed, dbSellerCompleted: row.seller_completed, changed });
                 if (changed) {
                   const updated = { ...local };
@@ -358,18 +372,24 @@ export const ChatRoom: React.FC = () => {
                     ORDER_STATUS_VALUE.COMPLETE,
                   ];
                   const dbOrderStatus = dbStatus as OrderStatus;
+                  if (row.buyer_completed) updated.buyerCompleted = true;
+                  if (row.seller_completed) updated.sellerCompleted = true;
+                  updated.meetupAccepted = Boolean(row.meetup_accepted);
+                  updated.meetupPlace = dbMeetupPlace || undefined;
+                  updated.meetupDate = dbMeetupDate || undefined;
+                  updated.meetupTime = dbMeetupTime || undefined;
                   if (
+                    dbStatus === ORDER_STATUS_VALUE.ACCEPTED
+                    && !dbMeetupPlace
+                    && local.status === ORDER_STATUS_VALUE.MEETUP_SET
+                  ) {
+                    updated.status = ORDER_STATUS_VALUE.ACCEPTED;
+                  } else if (
                     statusOrder.includes(dbOrderStatus)
                     && statusOrder.indexOf(dbOrderStatus) > statusOrder.indexOf(local.status)
                   ) {
                     updated.status = dbOrderStatus;
                   }
-                  if (row.buyer_completed) updated.buyerCompleted = true;
-                  if (row.seller_completed) updated.sellerCompleted = true;
-                  if (row.meetup_accepted) updated.meetupAccepted = true;
-                  if (dbMeetupPlace) updated.meetupPlace = dbMeetupPlace;
-                  if (dbMeetupDate) updated.meetupDate = dbMeetupDate;
-                  if (dbMeetupTime) updated.meetupTime = dbMeetupTime;
                   console.log('[ORDERSYNC] merging', { orderId: row.id, newStatus: updated.status, meetupPlace: updated.meetupPlace });
                   mergeRemoteOrder(updated);
                   ordersUpdated = true;
@@ -438,6 +458,11 @@ export const ChatRoom: React.FC = () => {
     (currentOrder && userId === currentOrder.buyer.id)
   );
 
+  const displayMessages = messages;
+  void ordersRevision;
+  const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
+  const meetupCanceled = isMeetupCanceledState(currentOrder, displayMessages);
+
   const canReceiveConfirm = (order: Order | null): boolean => {
     if (!order) return false;
     if (order.status === ORDER_STATUS_VALUE.DISPUTE) return false;
@@ -446,13 +471,8 @@ export const ChatRoom: React.FC = () => {
     if (isDirect) return DIRECT_RECEIVE_OK.has(order.status);
     return SHIPPING_RECEIVE_OK.has(order.status);
   };
-  const receiveEnabled = canReceiveConfirm(currentOrder);
+  const receiveEnabled = canReceiveConfirm(currentOrder) && !meetupCanceled;
   const needsMeetupAccept = !!(currentOrder && currentOrder.status === ORDER_STATUS_VALUE.MEETUP_SET && !currentOrder.meetupAccepted);
-
-
-  const displayMessages = messages;
-  void ordersRevision;
-  const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
 
   const canOpenDispute = (order: Order | null): boolean => {
     if (!order) return false;
@@ -1074,7 +1094,9 @@ export const ChatRoom: React.FC = () => {
                                 ))}
                               </div>
                               <div className="min-h-[44px] flex items-center justify-center">
-                                {buyerTab === BUYER_CHAT_TAB_VALUE.RECEIVE && (needsMeetupAccept ? (
+                                {buyerTab === BUYER_CHAT_TAB_VALUE.RECEIVE && (meetupCanceled ? (
+                                  <p className="text-xs text-gray-500">You can confirm receipt once the trade progresses.</p>
+                                ) : needsMeetupAccept ? (
                                   <button onClick={() => {
                                     if (confirm('Accept the scheduled meetup?')) {
                                       acceptOrderMeetup(currentOrder.id);
@@ -1091,7 +1113,9 @@ export const ChatRoom: React.FC = () => {
                             </>
                           ) : (
                             <div className="min-h-[44px] flex items-center justify-center">
-                              {needsMeetupAccept ? (
+                              {meetupCanceled ? (
+                                <p className="text-xs text-gray-500">You can confirm receipt once the trade progresses.</p>
+                              ) : needsMeetupAccept ? (
                                 <button onClick={() => {
                                   if (confirm('Accept the scheduled meetup?')) {
                                     acceptOrderMeetup(currentOrder.id);
@@ -1117,14 +1141,6 @@ export const ChatRoom: React.FC = () => {
 
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {currentOrder && !(currentOrder.meetupPlace && currentOrder.meetupDate && currentOrder.meetupTime) && messages.some((m) => m.type === 'system' && isMeetupCanceledMessage(m.content)) && (
-          <div className="flex-shrink-0 px-4 pt-4 pb-2">
-            <div className="rounded-lg px-4 py-3 border border-gray-200 bg-gray-50 text-gray-700 text-sm">
-              <p className="font-semibold">{'\u{1F6AB}'} {CHAT_MSG_MEETUP_CANCELED}</p>
-              <p className="text-gray-500 text-xs mt-1">Status reflects the cancelation. You can schedule a new meetup.</p>
-            </div>
-          </div>
-        )}
         <div
           ref={messagesContainerRef}
           onScroll={handleMessagesScroll}

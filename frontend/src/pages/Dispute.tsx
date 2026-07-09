@@ -19,15 +19,23 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { labelTradeMethod } from '@/locale/enUI';
 import { Order } from '@/types';
 
-const disputeReasons = [
+const buyerDisputeReasons = [
   'Listing mismatch',
-  'No-show',
   'Not received',
   'Damaged item',
+  'Seller no-show',
   'Other',
 ];
 
-const actions = ['Request full refund', 'Request partial refund', 'Request seller action'];
+const sellerDisputeReasons = [
+  'Buyer no-show',
+  'Buyer not responding',
+  'Payment not received',
+  'Bad-faith behavior',
+  'Other',
+];
+
+const buyerDisputeActions = ['Request full refund', 'Request partial refund', 'Request seller action'];
 
 export const Dispute: React.FC = () => {
   const navigate = useNavigate();
@@ -105,6 +113,10 @@ export const Dispute: React.FC = () => {
       alert('Could not upload images.');
       return;
     }
+    const currentUserId = getCurrentUserId();
+    const isSellerOpener = currentUserId === order.seller.id;
+    const actionToSave = isSellerOpener ? '' : action;
+
     const newDispute = await createDispute({
       orderId,
       productTitle: order.product.title,
@@ -116,7 +128,7 @@ export const Dispute: React.FC = () => {
       sellerId: order.seller.id,
       sellerNickname: order.seller.nickname || 'Seller',
       reason,
-      action,
+      action: actionToSave,
       description,
       evidence: evidenceToSave,
     });
@@ -127,7 +139,6 @@ export const Dispute: React.FC = () => {
 
     await updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, `Dispute filed: ${reason}`);
 
-    const currentUserId = getCurrentUserId();
     const otherUser = order.buyer.id === currentUserId ? order.seller : order.buyer;
     const openerNickname = order.buyer.id === currentUserId ? order.buyer.nickname : order.seller.nickname;
     addNotification({
@@ -147,7 +158,7 @@ export const Dispute: React.FC = () => {
         `Listing: ${order.product.title}`,
         `Amount: ${order.proposedPrice.toLocaleString()} Pi`,
         `Reason: ${reason}`,
-        `Requested action: ${action}`,
+        ...(actionToSave ? [`Requested action: ${actionToSave}`] : []),
         description ? `\nDetails:\n${description}` : '',
       ].join('\n'),
       category: POST_CATEGORY_VALUE.DISPUTE,
@@ -207,9 +218,12 @@ export const Dispute: React.FC = () => {
   };
 
   const currentUserId = getCurrentUserId();
+  const isSellerOpening = Boolean(order && currentUserId && order.seller.id === currentUserId);
   const isDisputeOpener = Boolean(
     dispute && currentUserId && dispute.openedByUserId === currentUserId,
   );
+  const showRequestedActionSummary = Boolean(dispute?.action?.trim());
+  const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
 
   if (loading) {
     return (
@@ -294,7 +308,7 @@ export const Dispute: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
               <div className="space-y-2">
-                {disputeReasons.map((r) => (
+                {disputeReasonOptions.map((r) => (
                   <button
                     key={r}
                     onClick={() => setReason(r)}
@@ -311,10 +325,11 @@ export const Dispute: React.FC = () => {
               </div>
             </div>
 
+            {!isSellerOpening && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Requested action</label>
               <div className="space-y-2">
-                {actions.map((a) => (
+                {buyerDisputeActions.map((a) => (
                   <button
                     key={a}
                     onClick={() => setAction(a)}
@@ -337,6 +352,7 @@ export const Dispute: React.FC = () => {
                 </p>
               </div>
             </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Details</label>
@@ -391,10 +407,12 @@ export const Dispute: React.FC = () => {
                   <span className="text-gray-500">Reason</span>
                   <span className="text-gray-900 font-medium">{dispute.reason}</span>
                 </div>
+                {showRequestedActionSummary && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Requested action</span>
                   <span className="text-gray-900 font-medium">{dispute.action}</span>
                 </div>
+                )}
               </div>
               {dispute.description && (
                 <div className="pt-3 border-t border-gray-100">
@@ -455,9 +473,9 @@ export const Dispute: React.FC = () => {
         {!dispute && order ? (
           <button
             onClick={handleSubmit}
-            disabled={!reason || !action || !description || uploadingEvidence}
+            disabled={!reason || (!isSellerOpening && !action) || !description || uploadingEvidence}
             className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-            style={reason && action && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
+            style={reason && (isSellerOpening || action) && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
           >
             {uploadingEvidence ? 'Uploading...' : 'Submit dispute'}
           </button>

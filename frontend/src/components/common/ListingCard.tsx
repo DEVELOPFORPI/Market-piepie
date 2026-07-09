@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
-import { labelProductStatus, labelProductStatusListing, relativeTimeShort } from '@/locale/enUI';
+import { labelProductStatusListing, relativeTimeShort } from '@/locale/enUI';
 import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
 import { getOrdersByProductId } from '@/utils/orderStorage';
@@ -15,8 +15,6 @@ interface ListingCardProps {
   product: Product;
   layout?: 'grid' | 'list';
   onClick?: () => void;
-  /** For-sale listing with a meetup-confirmed order for current user */
-  meetupConfirmed?: boolean;
 }
 
 /** Dispute on product: none | open | resolved */
@@ -32,7 +30,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   product,
   layout = 'grid',
   onClick,
-  meetupConfirmed = false,
 }) => {
   const statusVariant: Record<ProductStatus, 'success' | 'warning' | 'default'> = {
     [PRODUCT_STATUS_VALUE.FOR_SALE]: 'success',
@@ -41,7 +38,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   };
 
   const statusLabel = labelProductStatusListing(product.status);
-  const showMeetupBadge = product.status === PRODUCT_STATUS_VALUE.FOR_SALE && meetupConfirmed;
   const disputeDisplay = getProductDisputeDisplay(product.id);
 
   const [liked, setLiked] = useState(() => isFavorite(product.id));
@@ -115,9 +111,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
                   <Badge variant={statusVariant[product.status]} size="sm">
                     {statusLabel}
                   </Badge>
-                )}
-                {showMeetupBadge && !isSold && !isTrading && (
-                  <Badge variant="info" size="sm">{labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)}</Badge>
                 )}
               </>
             )}
@@ -214,9 +207,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
                 <Badge variant={statusVariant[product.status]} size="sm">
                   {statusLabel}
                 </Badge>
-              )}
-              {showMeetupBadge && !isSold && !isTrading && (
-                <Badge variant="info" size="sm">{labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)}</Badge>
               )}
             </>
           )}

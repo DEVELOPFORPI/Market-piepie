@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
-import { Product, ORDER_STATUS_VALUE } from '@/types';
+import { Product } from '@/types';
 import { getFavorites, removeFavorite } from '@/utils/favoriteStorage';
-import { getOrders } from '@/utils/orderStorage';
 import { getProductById } from '@/utils/productStorage';
 
 export const MyFavorites: React.FC = () => {
@@ -27,10 +26,6 @@ export const MyFavorites: React.FC = () => {
       loadFavorites();
     }
   };
-
-  const meetupProductIds = new Set(
-    getOrders().filter((o) => o.status === ORDER_STATUS_VALUE.MEETUP_SET).map((o) => o.product?.id).filter(Boolean)
-  );
 
   return (
     <div className="min-h-screen bg-white pb-20">
@@ -104,7 +99,6 @@ export const MyFavorites: React.FC = () => {
                     product={stillExists}
                     layout="list"
                     onClick={() => navigate(`/product/${product.id}`)}
-                    meetupConfirmed={meetupProductIds.has(product.id)}
                   />
                   <button
                     onClick={(e) => {

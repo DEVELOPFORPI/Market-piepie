@@ -5,8 +5,8 @@ import { ReportModal } from '@/components/common/ReportModal';
 import { KYCBadge } from '@/components/common/KYCBadge';
 import { TrustBadge } from '@/components/common/TrustBadge';
 import { ListingCard } from '@/components/common/ListingCard';
-import { User, Product, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
-import { getOrders, getShareCountByUserId } from '@/utils/orderStorage';
+import { User, Product, PRODUCT_STATUS_VALUE } from '@/types';
+import { getShareCountByUserId } from '@/utils/orderStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { profileAvatarObjectClass, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -51,10 +51,6 @@ export const SellerProfile: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [reviews, setReviews] = useState<ReviewFromDB[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const meetupProductIds = new Set(
-    getOrders().filter((o) => o.status === ORDER_STATUS_VALUE.MEETUP_SET).map((o) => o.product?.id).filter(Boolean)
-  );
 
   useEffect(() => {
     if (!id) return;
@@ -271,7 +267,6 @@ export const SellerProfile: React.FC = () => {
                     product={product}
                     layout="grid"
                     onClick={() => navigate(`/product/${product.id}`)}
-                    meetupConfirmed={meetupProductIds.has(product.id)}
                   />
                 ))}
               </div>

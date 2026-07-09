@@ -8,6 +8,7 @@ import {
   CHAT_MSG_BUYER_PRICE_OFFER,
   CHAT_MSG_BUYER_SHARE_REQUEST,
   CHAT_MSG_MEETUP_UPDATED,
+  CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
   CHAT_MSG_REJECT_SHARE,
   CHAT_MSG_SELLER_MEETUP_STARTED,
@@ -544,9 +545,31 @@ export const addMeetupUpdatedToChat = async (order: Order) => {
   await addMessage(room.id, msg);
 };
 
-/** Meetup canceled: notification only (no chat system message) */
-export const addMeetupCancelledToChat = (_order: Order) => {
-  // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
+/** Meetup canceled: system message + clear linked order meetup on room */
+export const addMeetupCancelledToChat = async (order: Order) => {
+  const room = await ensureChatRoomForOrder(order);
+  const rooms = getAllChatRooms();
+  const r = rooms.find((x) => x.id === room.id);
+  if (r) {
+    r.order = {
+      ...order,
+      meetupPlace: undefined,
+      meetupDate: undefined,
+      meetupTime: undefined,
+      meetupAccepted: false,
+      status: ORDER_STATUS_VALUE.ACCEPTED,
+    };
+    saveAllChatRooms(rooms, room.id);
+    persistRoomOrderLink(room.id, r.order);
+  }
+  const msg: ChatMessage = {
+    id: `meetup_cancel_${Date.now()}`,
+    senderId: getCurrentUserId() || order.seller.id,
+    content: CHAT_MSG_MEETUP_CANCELED,
+    timestamp: new Date().toISOString(),
+    type: 'system',
+  };
+  await addMessage(room.id, msg);
 };
 
 /** Seller started meetup from chat: gradient card + buyer unread badge */

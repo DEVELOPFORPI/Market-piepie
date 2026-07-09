@@ -14,7 +14,7 @@ import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { syncOrderToDB, syncOrderStatusToDB, syncOrderFromDB, syncOrderDeleteToDB } from '@/utils/dbSync';
 import { addNotification } from '@/utils/notificationStorage';
-import { updateProductStatus } from '@/utils/productStorage';
+import { getProductById, updateProductStatus } from '@/utils/productStorage';
 import { addPriceOfferToChat, addPriceOfferResultToChat, clearOrderFromRoom } from '@/utils/chatStorage';
 import { broadcastOrderUpdate } from '@/utils/chatSocket';
 import {
@@ -384,7 +384,6 @@ export const updateOrderMeetup = async (
   order.meetupAccepted = false;
   order.status = ORDER_STATUS_VALUE.MEETUP_SET;
   order.timeline.push(timelineEvent);
-  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
@@ -440,6 +439,10 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
   order.meetupAccepted = false;
   order.status = ORDER_STATUS_VALUE.ACCEPTED;
   order.timeline.push(timelineEvent);
+  const product = getProductById(order.product.id);
+  if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
+    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
+  }
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   return order;
@@ -545,7 +548,6 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
 
   const saved = await saveOrder(order);
   if (!saved) return null;
-  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
 
   addNotification({
     targetUserId: buyer.id,

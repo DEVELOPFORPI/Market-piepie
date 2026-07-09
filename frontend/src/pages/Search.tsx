@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
-import { Product, ORDER_STATUS_VALUE } from '@/types';
-import { getOrders } from '@/utils/orderStorage';
+import { Product } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 
 export const Search: React.FC = () => {
@@ -26,9 +25,6 @@ export const Search: React.FC = () => {
 
   const recentSearches = ['iPhone', 'laptop', 'chair'];
   const recommendedSearches = ['furniture', 'clothes', 'electronics', 'books'];
-  const meetupProductIds = new Set(
-    getOrders().filter((o) => o.status === ORDER_STATUS_VALUE.MEETUP_SET).map((o) => o.product?.id).filter(Boolean)
-  );
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -132,7 +128,6 @@ export const Search: React.FC = () => {
                   product={product}
                   layout="list"
                   onClick={() => navigate(`/product/${product.id}`)}
-                  meetupConfirmed={meetupProductIds.has(product.id)}
                 />
               ))}
             </div>

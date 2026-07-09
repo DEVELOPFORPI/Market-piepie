@@ -3,10 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
-import { TabType, Product, TAB_TYPE_VALUE, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
+import { TabType, Product, TAB_TYPE_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { getOrders } from '@/utils/orderStorage';
 import { labelTabType, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { getHomePopupConfig, shouldShowHomePopup, dismissHomePopupForSession } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
@@ -166,13 +165,6 @@ export const Home: React.FC = () => {
     return filtered;
   }, [allProducts, searchQuery, minPrice, maxPrice, kycOnly, activeTab]);
 
-  const meetupProductIds = new Set(
-    getOrders()
-      .filter((o) => o.status === ORDER_STATUS_VALUE.MEETUP_SET)
-      .map((o) => o.product?.id)
-      .filter(Boolean)
-  );
-
   return (
     <div className="min-h-screen bg-white pb-20">
       {location.pathname === '/' && homePromoReady && homePromo.show && homePromo.config.enabled ? (
@@ -266,7 +258,6 @@ export const Home: React.FC = () => {
               product={product}
               layout="grid"
               onClick={() => navigate(`/product/${product.id}`)}
-              meetupConfirmed={meetupProductIds.has(product.id)}
             />
           ))}
         </div>

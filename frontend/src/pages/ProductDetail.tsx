@@ -10,7 +10,7 @@ import { getAllProducts, deleteProduct, updateProductStatus } from '@/utils/prod
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
+import { getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatus, labelProductStatusListing, labelInDispute, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
@@ -374,9 +374,6 @@ export const ProductDetail: React.FC = () => {
               <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
                 {labelProductStatusListing(product.status)}
               </Badge>
-              {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductReservedOrder(product.id) && (
-                <Badge variant="info" size="sm">Reserved</Badge>
-              )}
               {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductActiveDispute(product.id) && (
                 <Badge variant="danger" size="sm">Dispute</Badge>
               )}
@@ -465,7 +462,7 @@ export const ProductDetail: React.FC = () => {
           )
         ) : product.status === PRODUCT_STATUS_VALUE.SOLD ? (
           <p className="text-sm text-gray-500 py-2">This listing is sold.</p>
-        ) : hasProductReservedOrder(product.id) ? (
+        ) : product.status === PRODUCT_STATUS_VALUE.RESERVED ? (
           <p className="text-sm text-gray-500 py-2">This item is reserved.</p>
         ) : hasProductActiveDispute(product.id) ? (
           <p className="text-sm text-gray-500 py-2">This listing has an open dispute.</p>

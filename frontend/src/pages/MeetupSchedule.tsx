@@ -173,7 +173,7 @@ export const MeetupSchedule: React.FC = () => {
     if (!confirm('Cancel this meetup? The other person will be notified.')) return;
     const cancelled = await cancelOrderMeetup(orderId);
     if (cancelled) {
-      addMeetupCancelledToChat(orderBefore);
+      await addMeetupCancelledToChat(cancelled);
       const currentUserId = getCurrentUserId();
       const otherUser = currentUserId === orderBefore.seller.id ? orderBefore.buyer : orderBefore.seller;
       void addNotification({
