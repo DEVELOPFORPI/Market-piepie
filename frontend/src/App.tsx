@@ -184,14 +184,10 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       }
     });
 
+    // 로그인 세션이 이 시점에 아직 없어도 폴링·구독은 등록한다.
+    // (uid는 매 tick마다 조회하므로 이후 로그인되면 자동으로 동작)
     const userId = getCurrentUserId() || undefined;
     console.log('[APP] socket/poll useEffect', { heavyReady, userId: userId ? userId.slice(-6) : 'NONE' });
-    if (!userId) {
-      return () => {
-        clearInterval(productPollInterval);
-        unsubProduct();
-      };
-    }
 
     // 방이 로컬에 없으면 DB에서 방 목록을 먼저 받아온 뒤 반영 (메시지 유실 방지)
     const withRoomSynced = (roomId: string, apply: () => void) => {
@@ -226,6 +222,22 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       if (uid) syncNotificationsFromDB(uid);
     }, 10000);
 
+    // 채팅 미읽음 배지: Realtime 누락 시 DB 방 목록 주기 동기화
+    // connectChatSocket은 같은 유저로 연결돼 있으면 no-op — 늦은 로그인도 실시간 연결 보장
+    const chatPollInterval = setInterval(() => {
+      const uid = getCurrentUserId();
+      if (!uid) return;
+      connectChatSocket();
+      void syncChatRoomsFromDB(uid);
+    }, 8000);
+
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const uid = getCurrentUserId();
+      if (uid) void syncChatRoomsFromDB(uid);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       disconnectChatSocket();
       unsubMsg();
@@ -234,7 +246,10 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       unsubOrder();
       unsubProduct();
       unsubNotif();
+      clearInterval(productPollInterval);
       clearInterval(notifPollInterval);
+      clearInterval(chatPollInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [heavyReady]);
   const [myOpenDisputes, setMyOpenDisputes] = useState(getMyOpenDisputes());

@@ -2004,9 +2004,34 @@ app.post(
         [id],
         { emptyOnNoChange: true },
       );
+      // 메시지 저장과 함께 read_state 갱신: 수신자는 안 읽음, 발신자는 읽음.
+      // (클라이언트 PATCH에 의존하면 폴링이 stale read_state를 덮어써 배지가 안 뜸)
+      const { rows: roomRows } = await pool.query(
+        "SELECT buyer_id, seller_id, read_state FROM chat_rooms WHERE id=$1",
+        [req.params.id],
+      );
+      const room = roomRows[0];
+      const readState =
+        room && room.read_state && typeof room.read_state === "object"
+          ? { ...room.read_state }
+          : {};
+      if (room) {
+        [room.buyer_id, room.seller_id].forEach((uid) => {
+          if (uid && uid !== sender_id) {
+            readState[uid] = { ...(readState[uid] || {}), read: false };
+          }
+        });
+        if (sender_id) {
+          readState[sender_id] = {
+            ...(readState[sender_id] || {}),
+            read: true,
+            lastReadAt: new Date().toISOString(),
+          };
+        }
+      }
       await pool.query(
-        `UPDATE chat_rooms SET last_message=$2, last_message_time=NOW() WHERE id=$1`,
-        [req.params.id, content],
+        `UPDATE chat_rooms SET last_message=$2, last_message_time=NOW(), read_state=$3 WHERE id=$1`,
+        [req.params.id, content, JSON.stringify(readState)],
       );
       res.status(201).json(rows[0]);
     } catch (e) {

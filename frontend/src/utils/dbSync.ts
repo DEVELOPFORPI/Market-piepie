@@ -801,11 +801,18 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
     ? []
     : (dbRoom.messages?.length ? dbRoom.messages : local.messages);
 
+  const dbRs = dbRoom.readStatus || {};
+  const localRs = local.readStatus || {};
+  const readStatus = Object.keys(dbRs).length ? { ...localRs, ...dbRs } : localRs;
+  const dbLra = dbRoom.lastReadAt || {};
+  const localLra = local.lastReadAt || {};
+  const lastReadAt = Object.keys(dbLra).length ? { ...localLra, ...dbLra } : localLra;
+
   return {
     ...dbRoom,
     messages: messages || [],
-    readStatus: Object.keys(dbRoom.readStatus || {}).length ? dbRoom.readStatus : local.readStatus,
-    lastReadAt: Object.keys(dbRoom.lastReadAt || {}).length ? dbRoom.lastReadAt : local.lastReadAt,
+    readStatus,
+    lastReadAt,
     leftUserIds: dbRoom.leftUserIds?.length ? dbRoom.leftUserIds : local.leftUserIds,
     order: dbRoom.order ?? local.order,
     otherUser: freshOther?.nickname
@@ -814,6 +821,36 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
     buyerInfo,
     sellerInfo,
   };
+}
+
+function isViewingChatRoom(roomId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return path === `/chat/${roomId}` || path.startsWith(`/chat/${roomId}/`);
+}
+
+function applyUnreadFromMessages(room: ChatRoom, userId: string): void {
+  if (!userId || isViewingChatRoom(room.id)) return;
+  const lastRead = room.lastReadAt?.[userId] || '';
+  const hasUnread = (room.messages || []).some(
+    (m) => m.senderId !== userId && m.timestamp > lastRead,
+  );
+  if (!hasUnread) return;
+  if (!room.readStatus) room.readStatus = {};
+  room.readStatus[userId] = false;
+  room.unreadCount = Math.max(room.unreadCount || 0, 1);
+}
+
+function markUnreadForNewLastMessage(
+  room: ChatRoom,
+  userId: string,
+  dbReadStatus: Record<string, boolean> | undefined,
+): void {
+  if (!userId || isViewingChatRoom(room.id)) return;
+  if (!room.readStatus) room.readStatus = {};
+  if (dbReadStatus?.[userId] === true) return;
+  room.readStatus[userId] = false;
+  room.unreadCount = Math.max(room.unreadCount || 0, 1);
 }
 
 /** DB에서 내 채팅방 목록을 로드해 localStorage 갱신 (DB-first) */
@@ -834,11 +871,13 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
         const id = String(row.id);
         const local = existingMap.get(id);
         const dbRoom = mapChatRoomFromDB(row);
-        mergedMap.set(id, mergeRoomDbPreferred(dbRoom, local));
+        const merged = mergeRoomDbPreferred(dbRoom, local);
         const dbLast = String(row.last_message || '');
         if (local && dbLast && local.lastMessage !== dbLast) {
           messageResyncIds.push(id);
+          markUnreadForNewLastMessage(merged, userId, dbRoom.readStatus);
         }
+        mergedMap.set(id, merged);
       });
       // 생성 직후라 DB에 아직 없는 방만 잠시 유지 — DB에서 삭제된 방은 로컬에서도 제거
       existing.forEach((room) => {
@@ -943,6 +982,9 @@ export async function syncRoomMessagesFromDB(roomId: string, userId?: string): P
       room.lastMessage = last.images && last.images.length > 0 ? (last.content || 'Photo') : last.content;
       room.lastMessageTime = last.timestamp;
     }
+
+    const uid = userId || getCurrentUserId();
+    if (uid) applyUnreadFromMessages(room, uid);
 
     setItem('all_chatrooms', JSON.stringify(rooms));
     window.dispatchEvent(new Event('chatRoomsChanged'));
