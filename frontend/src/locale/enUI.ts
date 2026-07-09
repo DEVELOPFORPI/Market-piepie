@@ -34,6 +34,10 @@ export function labelProductStatusListing(s: ProductStatus): string {
   return s === PRODUCT_STATUS_VALUE.SOLD ? pick('Trade complete', '\uAC70\uB798\uC644\uB8CC') : labelProductStatus(s);
 }
 
+export function labelInDispute(): string {
+  return pick('In dispute', '\uBD84\uC7C1\uC911');
+}
+
 export function labelOrderStatus(s: OrderStatus): string {
   const map: Record<OrderStatus, string> = {
     [ORDER_STATUS_VALUE.PENDING_OFFER]: pick('Offer pending', '제안중'),

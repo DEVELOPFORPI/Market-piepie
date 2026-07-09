@@ -2305,7 +2305,7 @@ app.delete("/api/posts/:id/like", requireDb, requireAuth, async (req, res) => {
 
 // ????????? ?? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/reviews", requireDb, async (req, res) => {
-  const { reviewee_id, reviewer_id } = req.query;
+  const { reviewee_id, reviewer_id, order_id } = req.query;
   try {
     let query = `SELECT r.*, ${jsonObjectSql("u", "users")} AS reviewer FROM reviews r
                  LEFT JOIN users u ON r.reviewer_id = u.id WHERE 1=1`;
@@ -2317,6 +2317,10 @@ app.get("/api/reviews", requireDb, async (req, res) => {
     if (reviewer_id) {
       params.push(reviewer_id);
       query += ` AND r.reviewer_id=$${params.length}`;
+    }
+    if (order_id) {
+      params.push(order_id);
+      query += ` AND r.order_id=$${params.length}`;
     }
     query += " ORDER BY r.created_at DESC LIMIT 200";
     const { rows } = await pool.query(query, params);
@@ -2369,10 +2373,16 @@ app.post("/api/reviews", requireDb, requireAuth, async (req, res) => {
        ON DUPLICATE KEY UPDATE id=id`,
       [reviewee_id],
     );
+    const dup = await pool.query(
+      `SELECT id FROM reviews WHERE order_id=$1 AND reviewer_id=$2 LIMIT 1`,
+      [order_id, reviewer_id],
+    );
+    if (dup.rows.length) {
+      return res.status(409).json({ error: "You already reviewed this order" });
+    }
     const { rows } = await queryReturning(
       `INSERT INTO reviews (id, reviewer_id, reviewee_id, order_id, rating, tags, comment, product_title, product_image)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON DUPLICATE KEY UPDATE rating=VALUES(rating), comment=VALUES(comment)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         id,
         reviewer_id,

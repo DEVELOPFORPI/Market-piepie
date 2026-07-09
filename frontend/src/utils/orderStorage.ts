@@ -97,6 +97,13 @@ export const getCompletedTradeCountForUser = (userId: string): number => {
   ).length;
 };
 
+/** Whether product has any in-progress order (not completed) */
+export const hasProductActiveTrade = (productId: string): boolean => {
+  return getAllOrders().some(
+    (o) => o.product?.id === productId && o.status !== ORDER_STATUS_VALUE.COMPLETE,
+  );
+};
+
 /** Whether product has a reserved order (meetup set). Canceled meetup (accepted but no meetup) does not count. */
 export const hasProductReservedOrder = (productId: string): boolean => {
   return getAllOrders().some((o) => {

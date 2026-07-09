@@ -18,7 +18,7 @@ import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, on
 import { addNotification } from '@/utils/notificationStorage';
 import { getProductById } from '@/utils/productStorage';
 import { getDisputeByOrderId } from '@/utils/disputeStorage';
-import { getReviewByOrderId } from '@/utils/reviewStorage';
+import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
@@ -1008,7 +1008,7 @@ export const ChatRoom: React.FC = () => {
                           </button>
                         )}
                         {/* Write review (after complete) — hidden if review already submitted */}
-                        {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && !getReviewByOrderId(currentOrder.id) && (
+                        {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE && !getMyReviewForOrder(currentOrder.id) && (
                           <button
                             type="button"
                             onClick={() => navigate(`/review/${currentOrder.id}`)}
@@ -1043,7 +1043,7 @@ export const ChatRoom: React.FC = () => {
                     <div className="w-full space-y-3">
                       {currentOrder.status === ORDER_STATUS_VALUE.COMPLETE ? (
                         <div className="flex gap-2">
-                          {getReviewByOrderId(currentOrder.id) ? (
+                          {getMyReviewForOrder(currentOrder.id) ? (
                             <div className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-center text-gray-400 border border-gray-200">
                               Review submitted ✓
                             </div>

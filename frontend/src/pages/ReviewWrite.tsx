@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Review, Order } from '@/types';
-import { saveReview, getReviewByOrderId, addReceivedReviewForUser } from '@/utils/reviewStorage';
+import { saveReview, ensureMyReviewForOrder, addReceivedReviewForUser } from '@/utils/reviewStorage';
 import { ensureOrderById } from '@/utils/orderStorage';
 import { addReviewToChat } from '@/utils/chatStorage';
 import { getMyUser } from '@/utils/profileStorage';
@@ -33,10 +33,10 @@ export const ReviewWrite: React.FC = () => {
       if (cancelled) return;
       if (found) setOrder(found);
 
-      const existing = getReviewByOrderId(orderId);
+      const existing = await ensureMyReviewForOrder(orderId);
       if (existing) {
-        alert('Reviews cannot be edited after they are submitted.');
-        navigate('/my/reviews', { replace: true });
+        alert('You already submitted a review for this trade.');
+        navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
         return;
       }
       setLoading(false);

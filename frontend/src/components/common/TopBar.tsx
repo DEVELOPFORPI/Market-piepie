@@ -3,6 +3,7 @@ import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 
 interface TopBarProps {
   title?: string;
+  centerContent?: React.ReactNode;
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
   onRegionClick?: () => void;
@@ -13,6 +14,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   title,
+  centerContent,
   leftContent,
   rightContent,
   onRegionClick,
@@ -35,14 +37,18 @@ export const TopBar: React.FC<TopBarProps> = ({
           )}
         </div>
 
-        {title && (
+        {centerContent ? (
+          <div className="pointer-events-auto absolute left-1/2 top-1/2 z-[2] -translate-x-1/2 -translate-y-1/2">
+            {centerContent}
+          </div>
+        ) : title ? (
           <h1
             className="pointer-events-none absolute left-1/2 top-1/2 z-[1] max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 text-center text-base font-semibold leading-none text-gray-900 whitespace-nowrap sm:text-lg"
             title={title}
           >
             {title}
           </h1>
-        )}
+        ) : null}
 
         {/* Right */}
         <div className="relative z-10 flex flex-1 items-center justify-end gap-3">

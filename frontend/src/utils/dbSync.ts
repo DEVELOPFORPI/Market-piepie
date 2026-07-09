@@ -4,7 +4,7 @@
  * - 데이터 저장 시 localStorage + API 동시에 저장
  */
 import { api } from '@/utils/api';
-import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE } from '@/types';
+import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE, Review } from '@/types';
 import { setItem, getItem } from '@/utils/heavyStorage';
 import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
@@ -1142,39 +1142,49 @@ export async function syncReviewToDB(review: {
   }
 }
 
-/** DB에서 받은 리뷰 로드 (DB-first) */
+function mapReviewRowFromDB(row: Record<string, unknown>): Review {
+  const reviewer = (row.reviewer as Record<string, unknown>) || {};
+  return {
+    id: String(row.id),
+    orderId: String(row.order_id || ''),
+    rating: Number(row.rating || 0),
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    comment: String(row.comment || ''),
+    productTitle: String(row.product_title || ''),
+    productImage: String(row.product_image || ''),
+    createdAt: String(row.created_at || new Date().toISOString()),
+    reviewer: {
+      id: String(reviewer.id || row.reviewer_id || ''),
+      nickname: String(reviewer.nickname || ''),
+      profileImage: reviewer.profile_image as string | undefined,
+      kycStatus: 'verified',
+      trustScore: 0,
+      rating: 0,
+      tradeCount: 0,
+    },
+  };
+}
+
+/** DB에서 받은·쓴 리뷰 로드 (DB-first) */
 export async function syncReviewsFromDB(userId: string): Promise<void> {
   if (!userId) return;
   try {
-    const res = await api.get<Record<string, unknown>[]>(`/api/reviews?reviewee_id=${userId}`);
-    if (!res.ok || !Array.isArray(res.data)) return;
-    const reviews = res.data.map((row) => {
-      const reviewer = (row.reviewer as Record<string, unknown>) || {};
-      return {
-        id: String(row.id),
-        orderId: String(row.order_id || ''),
-        rating: Number(row.rating || 0),
-        tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
-        comment: String(row.comment || ''),
-        productTitle: String(row.product_title || ''),
-        productImage: String(row.product_image || ''),
-        createdAt: String(row.created_at || new Date().toISOString()),
-        reviewer: {
-          id: String(reviewer.id || row.reviewer_id || ''),
-          nickname: String(reviewer.nickname || ''),
-          profileImage: reviewer.profile_image as string | undefined,
-          kycStatus: 'verified' as const,
-          trustScore: 0,
-          rating: 0,
-          tradeCount: 0,
-        },
-      };
-    });
-    const map: Record<string, unknown[]> = (() => {
-      try { return JSON.parse(getItem('all_received_reviews') || '{}'); } catch { return {}; }
-    })();
-    map[userId] = reviews;
-    setItem('all_received_reviews', JSON.stringify(map));
+    const [receivedRes, writtenRes] = await Promise.all([
+      api.get<Record<string, unknown>[]>(`/api/reviews?reviewee_id=${userId}`),
+      api.get<Record<string, unknown>[]>(`/api/reviews?reviewer_id=${userId}`),
+    ]);
+    if (receivedRes.ok && Array.isArray(receivedRes.data)) {
+      const reviews = receivedRes.data.map(mapReviewRowFromDB);
+      const map: Record<string, unknown[]> = (() => {
+        try { return JSON.parse(getItem('all_received_reviews') || '{}'); } catch { return {}; }
+      })();
+      map[userId] = reviews;
+      setItem('all_received_reviews', JSON.stringify(map));
+    }
+    if (writtenRes.ok && Array.isArray(writtenRes.data)) {
+      const written = writtenRes.data.map(mapReviewRowFromDB);
+      setItem(`my_written_reviews_${userId}`, JSON.stringify(written));
+    }
     window.dispatchEvent(new Event('reviewsChanged'));
   } catch {
     // ignore

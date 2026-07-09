@@ -4,15 +4,16 @@ import { TopBar } from '@/components/common/TopBar';
 import { ReportModal } from '@/components/common/ReportModal';
 import { Badge } from '@/components/common/Badge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
-import { Product } from '@/types';
-import { getAllProducts, deleteProduct } from '@/utils/productStorage';
+import { BottomSheet } from '@/components/common/BottomSheet';
+import { Product, ProductStatus } from '@/types';
+import { getAllProducts, deleteProduct, updateProductStatus } from '@/utils/productStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
-import { labelProductStatusListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
+import { labelProductStatus, labelProductStatusListing, labelInDispute, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 
@@ -45,6 +46,7 @@ export const ProductDetail: React.FC = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [showProductMenu, setShowProductMenu] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
   const [product, setProduct] = useState<Product>(fallbackProduct);
@@ -139,6 +141,27 @@ export const ProductDetail: React.FC = () => {
     }
   };
 
+  const handleStatusChange = async (status: ProductStatus) => {
+    setShowStatusMenu(false);
+    const ok = await updateProductStatus(product.id, status);
+    if (!ok) {
+      alert('Could not update status. Check your connection and try again.');
+      return;
+    }
+    setProduct((prev) => ({ ...prev, status }));
+  };
+
+  const sellerStatusLocked = hasProductActiveDispute(product.id);
+  const sellerStatusLabel = sellerStatusLocked
+    ? labelInDispute()
+    : labelProductStatus(product.status);
+
+  const sellerStatusOptions: ProductStatus[] = [
+    PRODUCT_STATUS_VALUE.FOR_SALE,
+    PRODUCT_STATUS_VALUE.RESERVED,
+    PRODUCT_STATUS_VALUE.SOLD,
+  ];
+
   const chatCount = getChatRoomCountByProductId(product.id);
   const sellerDisputeCount = product.seller?.id ? getDisputeCountByUserId(product.seller.id) : 0;
   const uid = getCurrentUserId();
@@ -201,6 +224,25 @@ export const ProductDetail: React.FC = () => {
             </svg>
           </button>
         }
+        centerContent={isMine ? (
+          <button
+            type="button"
+            disabled={sellerStatusLocked}
+            onClick={() => setShowStatusMenu(true)}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium border ${
+              sellerStatusLocked
+                ? 'border-red-200 bg-red-50 text-red-700 cursor-not-allowed'
+                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <span>{sellerStatusLabel}</span>
+            {!sellerStatusLocked && (
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </button>
+        ) : undefined}
         rightContent={!isMine ? (
           <div className="relative">
             <button
@@ -225,6 +267,33 @@ export const ProductDetail: React.FC = () => {
           </div>
         ) : undefined}
       />
+      <BottomSheet
+        isOpen={showStatusMenu}
+        onClose={() => setShowStatusMenu(false)}
+        height="auto"
+      >
+        <div className="py-2">
+          {sellerStatusOptions.map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => void handleStatusChange(status)}
+              className={`w-full px-4 py-4 text-center text-base border-b border-gray-100 last:border-b-0 ${
+                product.status === status ? 'font-semibold text-gray-900' : 'text-gray-700'
+              }`}
+            >
+              {labelProductStatus(status)}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowStatusMenu(false)}
+            className="w-full px-4 py-4 text-center text-base text-gray-500 border-t border-gray-100"
+          >
+            Cancel
+          </button>
+        </div>
+      </BottomSheet>
       <ReportModal
         open={showReport}
         onClose={() => setShowReport(false)}
@@ -300,17 +369,19 @@ export const ProductDetail: React.FC = () => {
       <div className="px-4 pt-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-gray-900 flex-1">{product.title}</h1>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
-              {labelProductStatusListing(product.status)}
-            </Badge>
-            {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductReservedOrder(product.id) && (
-              <Badge variant="info" size="sm">Reserved</Badge>
-            )}
-            {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductActiveDispute(product.id) && (
-              <Badge variant="danger" size="sm">Dispute</Badge>
-            )}
-          </div>
+          {!isMine && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
+                {labelProductStatusListing(product.status)}
+              </Badge>
+              {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductReservedOrder(product.id) && (
+                <Badge variant="info" size="sm">Reserved</Badge>
+              )}
+              {product.status === PRODUCT_STATUS_VALUE.FOR_SALE && hasProductActiveDispute(product.id) && (
+                <Badge variant="danger" size="sm">Dispute</Badge>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500 mt-1.5">
           <span>{product.region} · {relativeTimeShort(product.createdAt)}</span>
@@ -393,124 +464,28 @@ export const ProductDetail: React.FC = () => {
             </div>
           )
         ) : product.status === PRODUCT_STATUS_VALUE.SOLD ? (
-          <div className="flex items-center gap-2">
-            <p className="flex-1 text-sm text-gray-500">This listing is sold.</p>
-            <button
-              onClick={() => {
-                void toggleFavorite(product).then(setLiked);
-              }}
-              className={`p-3 rounded-lg shrink-0 ${
-                liked ? 'text-red-500' : 'text-gray-600'
-              } hover:bg-gray-100`}
-            >
-              <svg
-                className={`w-6 h-6 ${liked ? 'fill-current' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                />
-              </svg>
-            </button>
-          </div>
+          <p className="text-sm text-gray-500 py-2">This listing is sold.</p>
         ) : hasProductReservedOrder(product.id) ? (
-          <div className="flex items-center gap-2">
-            <p className="flex-1 text-sm text-gray-500">This item is reserved.</p>
-            <button
-              onClick={() => {
-                void toggleFavorite(product).then(setLiked);
-              }}
-              className={`p-3 rounded-lg shrink-0 ${
-                liked ? 'text-red-500' : 'text-gray-600'
-              } hover:bg-gray-100`}
-            >
-              <svg
-                className={`w-6 h-6 ${liked ? 'fill-current' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                />
-              </svg>
-            </button>
-          </div>
+          <p className="text-sm text-gray-500 py-2">This item is reserved.</p>
         ) : hasProductActiveDispute(product.id) ? (
-          <div className="flex items-center gap-2">
-            <p className="flex-1 text-sm text-gray-500">This listing has an open dispute.</p>
+          <p className="text-sm text-gray-500 py-2">This listing has an open dispute.</p>
+        ) : (
+          <div className="flex gap-3">
             <button
               onClick={() => {
-                void toggleFavorite(product).then(setLiked);
+                if (guestGuard('chat')) return;
+                void createOrGetChatRoom(product).then((room) => {
+                  navigate(`/chat/${room.id}`);
+                });
               }}
-              className={`p-3 rounded-lg shrink-0 ${
-                liked ? 'text-red-500' : 'text-gray-600'
-              } hover:bg-gray-100`}
+              className="flex-1 px-4 py-3 text-white rounded-lg font-medium text-sm"
+              style={{ backgroundColor: '#00A8A3' }}
             >
-              <svg
-                className={`w-6 h-6 ${liked ? 'fill-current' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                />
-              </svg>
+              Chat
             </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (guestGuard('chat')) return;
-                  void createOrGetChatRoom(product).then((room) => {
-                    navigate(`/chat/${room.id}`);
-                  });
-                }}
-                className="flex-1 px-4 py-3 text-white rounded-lg font-medium"
-                style={{ backgroundColor: '#00A8A3' }}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => {
-                  void toggleFavorite(product).then(setLiked);
-                }}
-                className={`p-3 rounded-lg shrink-0 ${
-                  liked ? 'text-red-500' : 'text-gray-600'
-                } hover:bg-gray-100`}
-              >
-                <svg
-                  className={`w-6 h-6 ${liked ? 'fill-current' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                  />
-                </svg>
-              </button>
-            </div>
             {product.allowOffer !== false && !product.isFreeShare && product.price > 0 && (
               hasPendingOffer ? (
-                <div className="w-full px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm flex items-center justify-center gap-2">
+                <div className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm flex items-center justify-center gap-2">
                   <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
@@ -519,7 +494,7 @@ export const ProductDetail: React.FC = () => {
               ) : (
                 <button
                   onClick={() => { if (guestGuard('offer')) return; navigate(`/offer/${product.id}`); }}
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
+                  className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
                 >
                   Make offer
                 </button>
@@ -528,9 +503,9 @@ export const ProductDetail: React.FC = () => {
             {(product.isFreeShare || product.price === 0) && (
               <button
                 onClick={() => { if (guestGuard('share')) return; navigate(`/share/${product.id}`); }}
-                className="w-full px-4 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 text-sm"
+                className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 text-sm"
               >
-                🎁 Request free share
+                Request free share
               </button>
             )}
           </div>

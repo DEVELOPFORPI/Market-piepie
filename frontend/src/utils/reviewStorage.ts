@@ -2,6 +2,7 @@ import { Review } from '@/types';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 import { syncReviewToDB } from '@/utils/dbSync';
+import { api } from '@/utils/api';
 
 const BASE_WRITTEN = 'my_written_reviews';
 /** Map userId → reviews others wrote about them */
@@ -62,8 +63,56 @@ export const deleteReview = (reviewId: string) => {
   saveWrittenReviews(updated);
 };
 
+export const getMyReviewForOrder = (orderId: string, userId?: string | null): Review | undefined => {
+  const uid = userId ?? getCurrentUserId();
+  if (!uid) return undefined;
+  return getMyWrittenReviews().find(
+    (r) => r.orderId === orderId && r.reviewer?.id === uid,
+  );
+};
+
+/** @deprecated use getMyReviewForOrder */
 export const getReviewByOrderId = (orderId: string): Review | undefined => {
-  return getMyWrittenReviews().find((r) => r.orderId === orderId);
+  return getMyReviewForOrder(orderId);
+};
+
+/** DB에서 내가 이 주문에 썼는지 확인 (다른 기기·상대 작성과 무관) */
+export const ensureMyReviewForOrder = async (orderId: string): Promise<Review | undefined> => {
+  const local = getMyReviewForOrder(orderId);
+  if (local) return local;
+  const uid = getCurrentUserId();
+  if (!uid || !orderId) return undefined;
+  try {
+    const res = await api.get<Record<string, unknown>[]>(
+      `/api/reviews?reviewer_id=${encodeURIComponent(uid)}&order_id=${encodeURIComponent(orderId)}`,
+    );
+    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) return undefined;
+    const row = res.data[0];
+    const reviewer = (row.reviewer as Record<string, unknown>) || {};
+    const mapped: Review = {
+      id: String(row.id),
+      orderId: String(row.order_id || orderId),
+      rating: Number(row.rating || 0),
+      tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+      comment: String(row.comment || ''),
+      productTitle: String(row.product_title || ''),
+      productImage: String(row.product_image || ''),
+      createdAt: String(row.created_at || new Date().toISOString()),
+      reviewer: {
+        id: String(reviewer.id || row.reviewer_id || uid),
+        nickname: String(reviewer.nickname || ''),
+        profileImage: reviewer.profile_image as string | undefined,
+        kycStatus: 'verified',
+        trustScore: 0,
+        rating: 0,
+        tradeCount: 0,
+      },
+    };
+    saveReview(mapped);
+    return mapped;
+  } catch {
+    return undefined;
+  }
 };
 
 // --- Received reviews (global map, keyed by reviewee) ---
