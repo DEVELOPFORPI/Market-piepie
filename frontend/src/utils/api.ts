@@ -19,14 +19,15 @@ interface ApiResponse<T = unknown> {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  baseUrl = API_BASE,
 ): Promise<ApiResponse<T>> {
   try {
     const authHeaders: Record<string, string> = {};
     const token = getSessionToken();
     if (token) authHeaders['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${baseUrl}${path}`, {
       // Spread options first so caller-provided body/method/etc. apply,
       // then overwrite headers with the merged set (otherwise spreading
       // options after would clobber Content-Type when caller passes headers).
@@ -83,7 +84,11 @@ export const api = {
   delete: <T>(path: string, options?: RequestInit) =>
     request<T>(path, { ...options, method: 'DELETE' }),
 
-  /** 서버 연결 상태 확인 */
+  /** 서버 연결 상태 확인 (캐시 우회 — 모바일에서 옛 실패 응답 붙잡는 것 방지) */
   health: () =>
-    request<{ ok: boolean; service: string; db: string }>('/api/health'),
+    request<{ ok: boolean; service: string; db: string }>(
+      `/api/health?_=${Date.now()}`,
+      { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } },
+      '', // Vercel /api rewrite 사용: 직접 백엔드 호출의 IP rate-limit(429) 방지
+    ),
 };

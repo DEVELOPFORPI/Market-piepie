@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { SplashScreen } from './components/SplashScreen';
 import { BottomTab } from './components/navigation/BottomTab';
@@ -478,27 +478,58 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [heavyReady, setHeavyReady] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const healthCheckSeq = useRef(0);
+  const backendStatusRef = useRef<'checking' | 'online' | 'offline'>('checking');
 
   useEffect(() => {
     preloadHeavyStorage().finally(() => setHeavyReady(true));
   }, []);
 
-  const checkBackendHealth = async (showChecking = false) => {
+  const checkBackendHealth = async (showChecking = false, attempts = 1) => {
+    const seq = ++healthCheckSeq.current;
     if (showChecking) setBackendStatus('checking');
-    const res = await api.health();
-    const dbConnected = res.ok && res.data?.ok === true && res.data.db === 'connected';
-    setBackendStatus(dbConnected ? 'online' : 'offline');
+
+    let online = false;
+    for (let i = 0; i < attempts; i++) {
+      if (seq !== healthCheckSeq.current) return;
+      const res = await api.health();
+      online = !!(res.ok && res.data?.ok === true && res.data.db === 'connected');
+      if (online) break;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    }
+
+    // 더 최신 체크가 있으면 이 결과는 버림 (Retry/폴링 경합으로 성공이 실패에 덮이는 것 방지)
+    if (seq !== healthCheckSeq.current) return;
+    const nextStatus = online ? 'online' : 'offline';
+    backendStatusRef.current = nextStatus;
+    setBackendStatus(nextStatus);
   };
 
   useEffect(() => {
-    checkBackendHealth(true);
-    const timer = window.setInterval(() => checkBackendHealth(), 15000);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const run = async (initial = false) => {
+      await checkBackendHealth(initial, initial ? 3 : (backendStatusRef.current === 'offline' ? 2 : 1));
+      if (cancelled) return;
+      timer = window.setTimeout(
+        () => void run(false),
+        backendStatusRef.current === 'offline' ? 4000 : 15000,
+      );
+    };
+
+    void run(true);
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
   }, []);
 
-  const handleSplashComplete = () => {
+  const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
-  };
+  }, []);
 
   const shouldBlockApp = backendStatus !== 'online';
 
@@ -506,7 +537,7 @@ function App() {
     <>
       {showSplash && <SplashScreen onComplete={handleSplashComplete} duration={2000} />}
       {shouldBlockApp ? (
-        <BackendUnavailable status={backendStatus} onRetry={() => checkBackendHealth(true)} />
+        <BackendUnavailable status={backendStatus} onRetry={() => void checkBackendHealth(true, 3)} />
       ) : (
         <BrowserRouter
           future={{
