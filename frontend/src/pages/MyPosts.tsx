@@ -38,11 +38,6 @@ export const MyPosts: React.FC = () => {
           </button>
         }
         title="My posts"
-        rightContent={
-          posts.length > 0 ? (
-            <span className="text-sm text-gray-500">{posts.length}</span>
-          ) : undefined
-        }
       />
 
       <div className="px-4 py-4">

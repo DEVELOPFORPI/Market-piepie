@@ -17,6 +17,53 @@ interface ListingCardProps {
   onClick?: () => void;
 }
 
+function ListingCardMeta({
+  product,
+  likeCount,
+  chatCount,
+  productDisputeCount,
+}: {
+  product: Product;
+  likeCount: number;
+  chatCount: number;
+  productDisputeCount: number;
+}) {
+  const hasStats = likeCount > 0 || chatCount > 0 || productDisputeCount > 0;
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 text-xs text-gray-400 mb-1">
+        <span className="truncate min-w-0">{product.region}</span>
+        <span className="flex-shrink-0">{relativeTimeShort(product.createdAt)}</span>
+      </div>
+      {hasStats && (
+        <div className="flex items-center gap-3 text-xs text-gray-400">
+          {likeCount > 0 && (
+            <span className="flex items-center gap-1 text-red-400">
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden>
+                <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              {likeCount}
+            </span>
+          )}
+          {chatCount > 0 && (
+            <span className="flex items-center gap-1">
+              <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5" />
+              {chatCount}
+            </span>
+          )}
+          {productDisputeCount > 0 && (
+            <span className="flex items-center gap-1 text-amber-500">
+              <img src="/3 ICON/warning.svg" alt="" className="w-3.5 h-3.5" />
+              {productDisputeCount}
+            </span>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Dispute on product: none | open | resolved */
 const getProductDisputeDisplay = (productId: string): null | 'open' | 'resolved' => {
   const orders = getOrdersByProductId(productId);
@@ -48,7 +95,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   }, [product.id, product.liked]);
 
   useEffect(() => {
-    const refresh = () => setLiked(isFavorite(product.id));
+    const refresh = () => {
+      setLiked(isFavorite(product.id));
+      setLikeCount(getLikeCount(product.id));
+    };
     window.addEventListener('favoritesChanged', refresh);
     window.addEventListener('productsChanged', refresh);
     return () => {
@@ -130,19 +180,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               {product.price.toLocaleString()} Pi
             </p>
           )}
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>{product.region} · {relativeTimeShort(product.createdAt)}</span>
-            {chatCount > 0 && <span>Chats {chatCount}</span>}
-            {productDisputeCount > 0 && <span>Disputes {productDisputeCount}</span>}
-            {likeCount > 0 && (
-              <span className="flex items-center gap-0.5 text-red-400">
-                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                  <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                {likeCount}
-              </span>
-            )}
-          </div>
+          <ListingCardMeta
+            product={product}
+            likeCount={likeCount}
+            chatCount={chatCount}
+            productDisputeCount={productDisputeCount}
+          />
           {seller?.id && (
             <div className="flex items-center gap-2 mt-2">
               <AvatarWithBadgeOverlay userId={seller.id} sizePx={28}>
@@ -227,27 +270,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           {product.price.toLocaleString()} PI
         </p>
       )}
-      <div className="flex items-center gap-2 text-xs text-gray-500">
-        <span>{product.region} · {relativeTimeShort(product.createdAt)}</span>
-        {chatCount > 0 && <span>Chats {chatCount}</span>}
-        {productDisputeCount > 0 && <span>Disputes {productDisputeCount}</span>}
-        {likeCount > 0 && (
-          <span className="flex items-center gap-0.5 text-red-400">
-            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-            {likeCount}
-          </span>
-        )}
-      </div>
-      {seller?.id && (
-        <div className="flex items-center gap-2 mt-2">
-          <AvatarWithBadgeOverlay userId={seller.id} sizePx={28}>
-            <UserAvatarImage src={sellerAvatarSrc} />
-          </AvatarWithBadgeOverlay>
-          <span className="text-xs text-gray-600 truncate">{resolveDisplayNickname(seller.id, seller.nickname)}</span>
-        </div>
-      )}
+      <ListingCardMeta
+        product={product}
+        likeCount={likeCount}
+        chatCount={chatCount}
+        productDisputeCount={productDisputeCount}
+      />
     </div>
   );
 };

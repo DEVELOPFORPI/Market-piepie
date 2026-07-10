@@ -172,9 +172,6 @@ export const ActiveTrades: React.FC = () => {
           </button>
         }
         title="Active trades"
-        rightContent={
-          <span className="text-sm text-gray-500">{orders.length}</span>
-        }
       />
 
       <div className="px-4 py-4">
