@@ -49,8 +49,10 @@ function sanitize(val) {
 
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
-// Vercel ???? ???? X-Forwarded-For ??? ?? ????? IP ??
-app.set("trust proxy", 1);
+// Browser -> Vercel rewrite -> Nginx -> Express.
+// Trust both proxy hops so req.ip resolves to the actual client instead of
+// Vercel's shared egress IP (which made unrelated users share one rate limit).
+app.set("trust proxy", 2);
 
 const R2_MAX_UPLOAD_MB = Number(process.env.R2_MAX_UPLOAD_MB || 8);
 const R2_MAX_UPLOAD_BYTES = Math.max(1, R2_MAX_UPLOAD_MB) * 1024 * 1024;
@@ -428,6 +430,9 @@ const generalLimiter = rateLimit({
   max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
+  // Health checks must remain available to distinguish DB outages from
+  // ordinary API rate limiting.
+  skip: (req) => req.path === "/health",
 });
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
