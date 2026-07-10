@@ -4,7 +4,7 @@ import { Post, PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
 import { getPostViewCount, syncPostViewFromDB } from '@/utils/postViewStorage';
-import { getDisputeByOrderId } from '@/utils/disputeStorage';
+import { getDisputeByPostId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 
 interface PostCardProps {
@@ -92,7 +92,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
           <h3 className="text-[15px] font-bold text-gray-900 mb-1 line-clamp-2 leading-snug">
             {post.title}
           </h3>
-          {post.category === POST_CATEGORY_VALUE.DISPUTE && post.orderId && getDisputeByOrderId(post.orderId)?.status === 'RESOLVED' && (
+          {post.category === POST_CATEGORY_VALUE.DISPUTE && getDisputeByPostId(post.id)?.status === 'RESOLVED' && (
             <p className="text-xs text-green-600 font-medium mb-1">This dispute post is resolved</p>
           )}
           <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">

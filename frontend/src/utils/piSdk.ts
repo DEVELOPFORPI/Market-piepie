@@ -16,7 +16,7 @@ type PiInitConfig = { version: string; sandbox?: boolean };
 declare global {
   interface Window {
     Pi?: {
-      init: (config: PiInitConfig) => void;
+      init: (config: PiInitConfig) => unknown;
       [key: string]: unknown;
     };
   }
@@ -41,7 +41,12 @@ export function initPiSdk(): void {
   }
   const sandbox = resolveSandbox();
   try {
-    window.Pi.init({ version: '2.0', sandbox });
+    const initResult = window.Pi.init({ version: '2.0', sandbox });
+    if (initResult && typeof (initResult as PromiseLike<unknown>).then === 'function') {
+      void Promise.resolve(initResult).catch((error) => {
+        console.warn('[Pi SDK] asynchronous init error:', error);
+      });
+    }
     initDone = true;
     console.info(`[Pi SDK] initialized (sandbox=${sandbox})`);
   } catch (e) {

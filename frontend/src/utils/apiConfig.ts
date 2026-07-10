@@ -20,9 +20,6 @@ function resolveApiBase(): string {
       );
     }
     console.log('API BASE : (same-origin /api)');
-    // #region agent log
-    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H1',location:'apiConfig.ts:resolveApiBase',message:'api base resolved',data:{mode:'same-origin',host:window.location.hostname,hadViteApiUrl:!!configuredBase?.trim()},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return '';
   }
 
@@ -32,9 +29,6 @@ function resolveApiBase(): string {
   if (configuredBase?.trim()) {
     const base = normalizeBaseUrl(configuredBase);
     console.log(`API BASE : ${base}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H1',location:'apiConfig.ts:resolveApiBase',message:'api base resolved',data:{mode:'direct',base},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return base;
   }
 

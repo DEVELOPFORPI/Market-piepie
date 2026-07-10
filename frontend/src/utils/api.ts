@@ -33,6 +33,8 @@ async function request<T>(
     return { ok: false, error: 'Rate limited (cooldown)', status: 429 };
   }
 
+  const timeoutController = new AbortController();
+  const timeout = window.setTimeout(() => timeoutController.abort(), 20_000);
   try {
     const authHeaders: Record<string, string> = {};
     const token = getSessionToken();
@@ -40,6 +42,7 @@ async function request<T>(
 
     const res = await fetch(`${baseUrl}${path}`, {
       ...options,
+      signal: options.signal ?? timeoutController.signal,
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders,
@@ -49,9 +52,6 @@ async function request<T>(
 
     if (res.status === 429) {
       rateLimitedUntil = Date.now() + 30_000;
-      // #region agent log
-      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H2',location:'api.ts:request',message:'429 rate limited',data:{path,baseUrl:baseUrl||'(same-origin)'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     }
 
     const data = await res.json().catch(() => null);
@@ -68,6 +68,8 @@ async function request<T>(
       error: err instanceof Error ? err.message : 'Network error',
       status: 0,
     };
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 

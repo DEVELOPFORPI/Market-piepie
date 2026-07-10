@@ -19,6 +19,24 @@ export interface PiAuthResult {
   accessToken: string;
 }
 
+const PI_AUTH_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function postJson(path: string, body: unknown): Promise<boolean> {
   try {
     const res = await fetch(API_BASE + path, {
@@ -42,7 +60,11 @@ export async function piAuthenticate(): Promise<PiAuthResult> {
     throw new Error('Pi SDK not available. Please open in Pi Browser.');
   }
   const scopes = ['username', 'payments'];
-  const auth = await Pi.authenticate(scopes, handleIncompletePayment);
+  const auth = await withTimeout(
+    Pi.authenticate(scopes, handleIncompletePayment),
+    PI_AUTH_TIMEOUT_MS,
+    'Pi login timed out. Please close and reopen Pi Browser, then try again.',
+  );
   return {
     uid: auth.user.uid,
     username: auth.user.username,
@@ -115,14 +137,18 @@ export async function verifyPiAuth(
   piVerified?: boolean;
   sessionToken?: string;
 }> {
-  const res = await fetch(API_BASE + '/api/auth/pi/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      accessToken,
-      guestId: guestId && guestId.startsWith('guest_') ? guestId : undefined,
+  const res = await withTimeout(
+    fetch(API_BASE + '/api/auth/pi/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessToken,
+        guestId: guestId && guestId.startsWith('guest_') ? guestId : undefined,
+      }),
     }),
-  });
+    PI_AUTH_TIMEOUT_MS,
+    'Server verification timed out. Please try again.',
+  );
   if (!res.ok) throw new Error('Pi auth verification failed');
   return res.json();
 }

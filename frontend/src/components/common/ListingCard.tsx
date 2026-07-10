@@ -5,7 +5,7 @@ import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
 import { getOrdersByProductId } from '@/utils/orderStorage';
 import { getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { getDisputeByOrderId, getDisputeCountByProductId } from '@/utils/disputeStorage';
+import { getDisputesByOrderId, getDisputeCountByProductId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -69,8 +69,10 @@ const getProductDisputeDisplay = (productId: string): null | 'open' | 'resolved'
   const orders = getOrdersByProductId(productId);
   const disputeOrder = orders.find((o) => o.status === ORDER_STATUS_VALUE.DISPUTE);
   if (!disputeOrder) return null;
-  const dispute = getDisputeByOrderId(disputeOrder.id);
-  return dispute?.status === 'RESOLVED' ? 'resolved' : 'open';
+  const disputes = getDisputesByOrderId(disputeOrder.id);
+  return disputes.length > 0 && disputes.every((dispute) => dispute.status === 'RESOLVED')
+    ? 'resolved'
+    : 'open';
 };
 
 export const ListingCard: React.FC<ListingCardProps> = ({

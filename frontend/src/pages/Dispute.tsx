@@ -61,7 +61,7 @@ export const Dispute: React.FC = () => {
       setLoading(true);
       const [foundOrder, existingDispute] = await Promise.all([
         ensureOrderById(orderId),
-        ensureDisputeByOrderId(orderId),
+        ensureDisputeByOrderId(orderId, getCurrentUserId()),
       ]);
       if (cancelled) return;
       setOrder(foundOrder);
@@ -87,10 +87,10 @@ export const Dispute: React.FC = () => {
         }
         const [foundOrder, existingDispute] = await Promise.all([
           ensureOrderById(orderId),
-          ensureDisputeByOrderId(orderId),
+          ensureDisputeByOrderId(orderId, getCurrentUserId()),
         ]);
         if (foundOrder) setOrder(foundOrder);
-        if (existingDispute) setDispute(existingDispute);
+        setDispute(existingDispute ?? null);
       })();
     };
     refreshDispute();

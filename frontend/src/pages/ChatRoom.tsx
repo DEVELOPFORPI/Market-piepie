@@ -17,7 +17,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
 import { getProductById } from '@/utils/productStorage';
-import { getDisputeByOrderId } from '@/utils/disputeStorage';
+import { getDisputesByOrderId } from '@/utils/disputeStorage';
 import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
@@ -975,8 +975,9 @@ export const ChatRoom: React.FC = () => {
         </div>
 
         {currentOrder && currentOrder.status === ORDER_STATUS_VALUE.DISPUTE && (() => {
-          const dispute = getDisputeByOrderId(currentOrder.id);
-          const isResolved = dispute?.status === 'RESOLVED';
+          const disputes = getDisputesByOrderId(currentOrder.id);
+          const isResolved =
+            disputes.length > 0 && disputes.every((dispute) => dispute.status === 'RESOLVED');
           if (isResolved) {
             return (
               <div className="bg-green-50 border-t border-green-200 px-4 py-2.5">

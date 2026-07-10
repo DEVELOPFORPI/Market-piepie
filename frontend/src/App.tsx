@@ -495,9 +495,6 @@ function App() {
       // 429 = rate limit, not DB down — 앱 전체 차단하지 않음
       if (res.status === 429) {
         online = true;
-        // #region agent log
-        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H3',location:'App.tsx:checkBackendHealth',message:'health 429 treated as online',data:{attempt:i+1},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         break;
       }
       online = !!(res.ok && res.data?.ok === true && res.data.db === 'connected');

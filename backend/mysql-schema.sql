@@ -229,7 +229,8 @@ CREATE TABLE IF NOT EXISTS disputes (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_disputes_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
   CONSTRAINT fk_disputes_buyer FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL,
-  CONSTRAINT fk_disputes_seller FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_disputes_seller FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE KEY uq_disputes_order_opener (order_id, opened_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS favorites (

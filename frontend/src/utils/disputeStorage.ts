@@ -37,15 +37,32 @@ export const getDisputeById = (disputeId: string): Dispute | undefined => {
   return getDisputes().find((d) => d.id === disputeId);
 };
 
-export const getDisputeByOrderId = (orderId: string): Dispute | undefined => {
-  return getDisputes().find((d) => d.orderId === orderId);
+export const getDisputesByOrderId = (orderId: string): Dispute[] => {
+  return getDisputes().filter((d) => d.orderId === orderId);
 };
 
-/** DB와 동기화한 뒤 주문에 연결된 분쟁 반환 */
-export const ensureDisputeByOrderId = async (orderId: string): Promise<Dispute | undefined> => {
+export const getDisputeByPostId = (postId: string): Dispute | undefined => {
+  const prefix = 'dispute_post_';
+  return postId.startsWith(prefix) ? getDisputeById(postId.slice(prefix.length)) : undefined;
+};
+
+export const getDisputeByOrderId = (
+  orderId: string,
+  openedByUserId?: string | null,
+): Dispute | undefined => {
+  return getDisputes().find(
+    (d) => d.orderId === orderId && (!openedByUserId || d.openedByUserId === openedByUserId),
+  );
+};
+
+/** DB와 동기화한 뒤 주문·작성자에 연결된 분쟁 반환 */
+export const ensureDisputeByOrderId = async (
+  orderId: string,
+  openedByUserId?: string | null,
+): Promise<Dispute | undefined> => {
   const uid = getCurrentUserId();
   if (uid) await syncDisputesFromDB(uid);
-  return getDisputeByOrderId(orderId);
+  return getDisputeByOrderId(orderId, openedByUserId);
 };
 
 /** True if product has an open dispute order (RESOLVED disputes excluded) */
@@ -53,8 +70,8 @@ export const hasProductActiveDispute = (productId: string): boolean => {
   const orders = getOrdersByProductId(productId);
   const disputeOrders = orders.filter((o) => o.status === ORDER_STATUS_VALUE.DISPUTE);
   return disputeOrders.some((o) => {
-    const d = getDisputeByOrderId(o.id);
-    return !d || d.status !== 'RESOLVED';
+    const disputes = getDisputesByOrderId(o.id);
+    return disputes.length === 0 || disputes.some((d) => d.status !== 'RESOLVED');
   });
 };
 

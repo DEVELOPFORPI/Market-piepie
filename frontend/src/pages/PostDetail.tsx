@@ -14,7 +14,7 @@ import { syncCommentsFromDB } from '@/utils/dbSync';
 import { getDisputeVoteCounts, getMyDisputeVote, setDisputeVote, syncDisputeVotesFromDB } from '@/utils/disputePostVoteStorage';
 import { getPostViewCount, incrementPostViewCount } from '@/utils/postViewStorage';
 import { getPostCommentCount, syncPostCommentCountFromDB } from '@/utils/postCommentCountStorage';
-import { getDisputeByOrderId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
+import { getDisputeByOrderId, getDisputeByPostId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
@@ -96,13 +96,16 @@ export const PostDetail: React.FC = () => {
   const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
   const isDisputePost = post?.category === POST_CATEGORY_VALUE.DISPUTE;
   const isGeneralPost = !isDisputePost;
+  const linkedDispute = post
+    ? getDisputeByPostId(post.id) ?? (post.orderId ? getDisputeByOrderId(post.orderId) : undefined)
+    : undefined;
   /** Seller cannot edit/delete dispute post while dispute is open */
   const isSellerBlockedFromEdit =
     isDisputePost &&
     !!post?.orderId &&
     linkedDisputeStatus !== undefined &&
     linkedDisputeStatus !== 'RESOLVED' &&
-    getDisputeByOrderId(post.orderId)?.sellerId === getCurrentUserId();
+    linkedDispute?.sellerId === getCurrentUserId();
   /** Auto-created dispute posts (dispute + orderId) cannot be edited or deleted */
   const isAutoCreatedDisputePost = isDisputePost && !!post?.orderId;
   const canEditOrDeletePost = isMine && !isSellerBlockedFromEdit && !isAutoCreatedDisputePost;
@@ -152,7 +155,8 @@ export const PostDetail: React.FC = () => {
     if (found) {
       setPost(found);
       if (found.orderId) {
-        const dispute = await ensureDisputeByOrderId(found.orderId);
+        await ensureDisputeByOrderId(found.orderId);
+        const dispute = getDisputeByPostId(found.id) ?? getDisputeByOrderId(found.orderId);
         setLinkedDisputeStatus(dispute?.status);
       } else {
         setLinkedDisputeStatus(undefined);
@@ -385,15 +389,15 @@ export const PostDetail: React.FC = () => {
         </div>
 
         {post.category === POST_CATEGORY_VALUE.DISPUTE && post.orderId && (
-          <div className={`p-4 rounded-lg border ${getDisputeByOrderId(post.orderId)?.status === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
-            {getDisputeByOrderId(post.orderId)?.status === 'RESOLVED' ? (
+          <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+            {linkedDisputeStatus === 'RESOLVED' ? (
               <p className="text-sm font-medium text-green-800 mb-2">This dispute is resolved.</p>
             ) : (
               <p className="text-sm text-gray-700 mb-2">This post was created when a dispute was filed. Share your view in the comments.</p>
             )}
             <button
               onClick={() => navigate(`/dispute/${post.orderId}`)}
-              className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${getDisputeByOrderId(post.orderId)?.status === 'RESOLVED' ? 'border border-green-300 text-green-700 hover:bg-green-50' : 'border border-red-300 text-red-700 hover:bg-red-50'}`}
+              className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${linkedDisputeStatus === 'RESOLVED' ? 'border border-green-300 text-green-700 hover:bg-green-50' : 'border border-red-300 text-red-700 hover:bg-red-50'}`}
             >
               Open dispute
             </button>
