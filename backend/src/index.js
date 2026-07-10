@@ -425,11 +425,24 @@ app.use((req, _res, next) => {
 });
 app.use(optionalAuth);
 
+// Mobile carriers put many users behind one shared IP (CGNAT), so keying the
+// rate limit purely by IP throttles innocent users. Prefer the authenticated
+// user id and fall back to the IP for anonymous traffic.
+const perUserKey = (req) =>
+  req.authUserId ? `u:${req.authUserId}` : rateLimit.ipKeyGenerator(req.ip);
+const logRateLimited = (req, res) => {
+  console.log(
+    `[rate-limit] 429 key=${perUserKey(req)} ip=${req.ip} path=${req.path} xff=${req.headers["x-forwarded-for"] || "-"}`,
+  );
+  res.status(429).json({ error: "Too many requests" });
+};
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3000,
+  max: 6000,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: perUserKey,
+  handler: logRateLimited,
   // Health checks must remain available to distinguish DB outages from
   // ordinary API rate limiting.
   skip: (req) => req.path === "/health",
@@ -612,6 +625,17 @@ async function queryReturning(
 }
 
 // ????????? ???????? ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+// #region agent log — temporary diagnostics: confirms which client IP the
+// rate limiter sees behind Vercel/Nginx. Remove once 429 issue is verified fixed.
+app.get("/api/debug/ip", (req, res) => {
+  res.json({
+    ip: req.ip,
+    key: req.authUserId ? `u:${req.authUserId}` : req.ip,
+    xff: req.headers["x-forwarded-for"] || null,
+  });
+});
+// #endregion
+
 app.get("/api/health", async (_req, res) => {
   const out = { ok: true, service: "marketpiepie-backend v1", db: "skipped" };
   if (!pool) return res.json(out);
