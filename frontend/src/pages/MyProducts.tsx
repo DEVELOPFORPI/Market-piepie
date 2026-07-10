@@ -52,15 +52,6 @@ export const MyProducts: React.FC = () => {
           </button>
         }
         title="My listings"
-        rightContent={
-          <button
-            onClick={() => navigate('/register')}
-            className="px-3 py-1.5 text-sm font-medium"
-            style={{ color: '#00A8A3' }}
-          >
-            Add
-          </button>
-        }
       />
 
       {/* Filter Tabs */}
@@ -140,6 +131,24 @@ export const MyProducts: React.FC = () => {
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => navigate('/register')}
+        className="fixed bottom-24 right-4 w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity z-40"
+        style={{ backgroundColor: '#00A8A3' }}
+        aria-label="Create listing"
+      >
+        <span className="relative flex h-full w-full items-center justify-center">
+          <img src="/main.svg" alt="" className="h-7 w-7 object-contain" />
+          <span
+            className="absolute -left-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full p-0.5"
+            style={{ backgroundColor: '#00A8A3', border: '2px solid #E2E2E2' }}
+          >
+            <img src="/plus.svg" alt="" className="w-full h-full object-contain" />
+          </span>
+        </span>
+      </button>
     </div>
   );
 };

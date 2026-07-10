@@ -13,7 +13,7 @@ interface TabItem {
 
 const tabs: TabItem[] = [
   { id: 'home', label: 'home', iconSrc: '/icon_1.svg', path: '/' },
-  { id: 'community', label: 'share', iconSrc: '/icon_2.svg', path: '/community' },
+  { id: 'community', label: 'Community', iconSrc: '/icon_2.svg', path: '/community' },
   { id: 'register', label: 'Sell', iconSrc: null, path: '/register' },
   { id: 'chat', label: 'chat', iconSrc: '/icon_3.svg', path: '/chat' },
   { id: 'my', label: 'profile', iconSrc: '/icon_4.svg', path: '/my' },
