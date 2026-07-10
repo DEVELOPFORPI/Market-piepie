@@ -7,7 +7,8 @@ import { ChatRoom } from '@/types';
 import { displayChatMessageContent, relativeTimeShort, CHAT_ROOM_ENDED_BADGE, CHAT_LEAVE_ROOM_CONFIRM } from '@/locale/enUI';
 import { connectChatSocket, onNewMessage, onRoomUpdated, onNewRoom } from '@/utils/chatSocket';
 import { isGuest } from '@/utils/guestGate';
-import { resolveDisplayNickname } from '@/utils/profileStorage';
+import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
+import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { syncChatRoomsFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
 
@@ -275,13 +276,32 @@ export const ChatList: React.FC = () => {
                     )}
                   </button>
                 )}
-                {room.product && (
-                  <div className={`w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 ${muted ? 'opacity-40 grayscale' : ''}`}>
-                    <img
-                      src={room.product.images[0] || '/placeholder.jpg'}
-                      alt={room.product.title}
-                      className="w-full h-full object-cover"
-                      draggable={false}
+                {room.product ? (
+                  <div className={`relative w-14 h-14 flex-shrink-0 ${muted ? 'opacity-60' : ''}`}>
+                    <div className={`w-14 h-14 rounded-xl overflow-hidden bg-gray-100 ${muted ? 'grayscale' : ''}`}>
+                      <img
+                        src={room.product.images[0] || '/placeholder.jpg'}
+                        alt={room.product.title}
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm">
+                      <UserAvatarImage
+                        src={resolveProfileAvatarUrl(other.id, other.profileImage)}
+                        alt={resolveDisplayNickname(other.id, other.nickname)}
+                        imgClassName="w-full h-full object-cover"
+                        iconClassName="w-3.5 h-3.5 text-gray-400"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`relative w-14 h-14 flex-shrink-0 rounded-full overflow-hidden bg-gray-200 ${muted ? 'opacity-60 grayscale' : ''}`}>
+                    <UserAvatarImage
+                      src={resolveProfileAvatarUrl(other.id, other.profileImage)}
+                      alt={resolveDisplayNickname(other.id, other.nickname)}
+                      imgClassName="w-full h-full object-cover"
+                      iconClassName="w-7 h-7 text-gray-400"
                     />
                   </div>
                 )}
