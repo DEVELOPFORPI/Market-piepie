@@ -6,9 +6,6 @@ import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } fro
 import { getPostViewCount, syncPostViewFromDB } from '@/utils/postViewStorage';
 import { getDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
-import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
-import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 
 interface PostCardProps {
   post: Post;
@@ -72,26 +69,19 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
   const color = categoryColor[post.category] || '#6b7280';
   const hasImage = post.images && post.images.length > 0;
-  const authorAvatarSrc =
-    post.author.id != null
-      ? resolveProfileAvatarUrl(post.author.id, post.author.profileImage)
-      : post.author.profileImage || '/default-avatar.jpg';
 
   return (
     <div
       onClick={handleClick}
       className="px-4 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
     >
-      {/* Top Row: Category Badge + Region/Time */}
-      <div className="flex items-center justify-between mb-2">
+      {/* Top Row: Category Badge */}
+      <div className="flex items-center mb-2">
         <span
           className="px-2.5 py-1 text-xs font-semibold rounded"
           style={{ color, border: `1.5px solid ${color}`, backgroundColor: `${color}10` }}
         >
           {labelPostCategory(post.category)}
-        </span>
-        <span className="text-xs text-gray-400">
-          {post.region && <>{post.region}&nbsp;&nbsp;</>}{relativeTimeShort(post.createdAt)}
         </span>
       </div>
 
@@ -122,40 +112,38 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
         )}
       </div>
 
-      <div className="flex items-center gap-2 mt-3">
-        <AvatarWithBadgeOverlay userId={post.author.id} sizePx={28}>
-          <UserAvatarImage src={authorAvatarSrc} />
-        </AvatarWithBadgeOverlay>
-        <span className="text-xs font-medium text-gray-700 truncate">{resolveDisplayNickname(post.author.id, post.author.nickname)}</span>
-      </div>
-
-      {/* Bottom: views, likes, comments */}
-      <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
-        <span className="flex items-center gap-1 text-gray-400">Views {viewCount}</span>
-        <button
-          type="button"
-          onClick={handleLikeClick}
-          className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-          aria-label="Like"
-        >
-          <svg
-            className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
-            fill={liked ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {/* Bottom: views, likes, comments + region/time */}
+      <div className="flex items-center justify-between gap-3 mt-3 text-xs text-gray-400">
+        <div className="flex items-center gap-4 min-w-0">
+          <span className="flex items-center gap-1 text-gray-400">Views {viewCount}</span>
+          <button
+            type="button"
+            onClick={handleLikeClick}
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+            aria-label="Like"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
-          </svg>
-          <span className={liked ? 'text-red-500' : ''}>{likeCount}</span>
-        </button>
-        <span className="flex items-center gap-1">
-          <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5 text-gray-400" />
-          {post.commentCount || 0}
+            <svg
+              className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+              fill={liked ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+            <span className={liked ? 'text-red-500' : ''}>{likeCount}</span>
+          </button>
+          <span className="flex items-center gap-1">
+            <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5 text-gray-400" />
+            {post.commentCount || 0}
+          </span>
+        </div>
+        <span className="flex-shrink-0 text-right">
+          {post.region && <>{post.region}&nbsp;&nbsp;</>}{relativeTimeShort(post.createdAt)}
         </span>
       </div>
 

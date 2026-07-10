@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
 import { Order, OrderStatus, ORDER_STATUS_VALUE } from '@/types';
-import { getOrders, clearAllOrders } from '@/utils/orderStorage';
+import { getOrders } from '@/utils/orderStorage';
 import { syncOrdersFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
@@ -61,25 +61,6 @@ export const MyOrders: React.FC = () => {
           </button>
         }
         title="Orders"
-        rightContent={
-          orders.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">{orders.length}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('Delete all orders? (testing only)')) {
-                    clearAllOrders();
-                    loadOrders();
-                  }
-                }}
-                className="text-xs text-gray-400 underline"
-              >
-                Clear all
-              </button>
-            </div>
-          ) : undefined
-        }
       />
 
       <div className="flex gap-2 px-4 py-3 border-b border-gray-200">
