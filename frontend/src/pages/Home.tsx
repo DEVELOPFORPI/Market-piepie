@@ -3,10 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
-import { TabType, Product, TAB_TYPE_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
+import { HomeFeedChip, Product, HOME_FEED_CHIP_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
+import { getLikeCount } from '@/utils/favoriteStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { labelTabType, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { labelHomeFeedChip, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { getHomePopupConfig, shouldShowHomePopup, dismissHomePopupForSession } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
 import { usePiPrice } from '@/utils/piPrice';
@@ -16,12 +17,57 @@ import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicat
 
 const defaultMockProducts: Product[] = [];
 
-const tabs: TabType[] = [TAB_TYPE_VALUE.LATEST, TAB_TYPE_VALUE.FREE];
+const feedChips: HomeFeedChip[] = [
+  HOME_FEED_CHIP_VALUE.ALL,
+  HOME_FEED_CHIP_VALUE.LATEST,
+  HOME_FEED_CHIP_VALUE.FREE,
+  HOME_FEED_CHIP_VALUE.POPULAR,
+  HOME_FEED_CHIP_VALUE.PRICE_LOW,
+  HOME_FEED_CHIP_VALUE.PRICE_HIGH,
+  HOME_FEED_CHIP_VALUE.OLDEST,
+];
+
+function productListPrice(p: Product): number {
+  return p.isFreeShare || p.price === 0 ? 0 : p.price;
+}
+
+function sortHomeProducts(products: Product[], chip: HomeFeedChip): Product[] {
+  const sorted = [...products];
+  const byNewest = (a: Product, b: Product) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  const byOldest = (a: Product, b: Product) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+
+  switch (chip) {
+    case HOME_FEED_CHIP_VALUE.OLDEST:
+      return sorted.sort(byOldest);
+    case HOME_FEED_CHIP_VALUE.PRICE_LOW:
+      return sorted.sort((a, b) => {
+        const diff = productListPrice(a) - productListPrice(b);
+        return diff !== 0 ? diff : byNewest(a, b);
+      });
+    case HOME_FEED_CHIP_VALUE.PRICE_HIGH:
+      return sorted.sort((a, b) => {
+        const diff = productListPrice(b) - productListPrice(a);
+        return diff !== 0 ? diff : byNewest(a, b);
+      });
+    case HOME_FEED_CHIP_VALUE.POPULAR:
+      return sorted.sort((a, b) => {
+        const diff = getLikeCount(b.id) - getLikeCount(a.id);
+        return diff !== 0 ? diff : byNewest(a, b);
+      });
+    case HOME_FEED_CHIP_VALUE.ALL:
+    case HOME_FEED_CHIP_VALUE.LATEST:
+    case HOME_FEED_CHIP_VALUE.FREE:
+    default:
+      return sorted.sort(byNewest);
+  }
+}
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<TabType>(TAB_TYPE_VALUE.LATEST);
+  const [activeChip, setActiveChip] = useState<HomeFeedChip>(HOME_FEED_CHIP_VALUE.ALL);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
   const [minPrice, setMinPrice] = useState('');
@@ -36,6 +82,7 @@ export const Home: React.FC = () => {
     config: getHomePopupConfig(),
   }));
   const [homePromoReady, setHomePromoReady] = useState(false);
+  const [favoritesVersion, setFavoritesVersion] = useState(0);
 
   const refreshHomePromo = useCallback(() => {
     const show = shouldShowHomePopup();
@@ -103,12 +150,15 @@ export const Home: React.FC = () => {
     window.addEventListener('productRegistered', handleStorageChange);
     window.addEventListener('productsChanged', handleStorageChange);
     window.addEventListener('regionChanged', handleRegionChange);
+    const onFavoritesChanged = () => setFavoritesVersion((v) => v + 1);
+    window.addEventListener('favoritesChanged', onFavoritesChanged);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('productRegistered', handleStorageChange);
       window.removeEventListener('productsChanged', handleStorageChange);
       window.removeEventListener('regionChanged', handleRegionChange);
+      window.removeEventListener('favoritesChanged', onFavoritesChanged);
     };
   }, []);
 
@@ -157,16 +207,14 @@ export const Home: React.FC = () => {
       filtered = filtered.filter((p) => p.seller.kycStatus === 'verified');
     }
 
-    // Tab filter + sort (newest first)
-    if (activeTab === TAB_TYPE_VALUE.FREE) {
+    // Chip filter + sort
+    if (activeChip === HOME_FEED_CHIP_VALUE.FREE) {
       filtered = filtered.filter((p) => p.isFreeShare || p.price === 0);
     }
-    filtered = [...filtered].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    filtered = sortHomeProducts(filtered, activeChip);
 
     return filtered;
-  }, [allProducts, searchQuery, minPrice, maxPrice, kycOnly, activeTab]);
+  }, [allProducts, searchQuery, minPrice, maxPrice, kycOnly, activeChip, favoritesVersion]);
 
   const handlePullRefresh = useCallback(async () => {
     await syncProductsFromDB();
@@ -236,23 +284,22 @@ export const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex w-full px-2 py-3 border-b border-gray-200 items-center">
-        {tabs.map((tab) => (
+      {/* Feed chips */}
+      <div className="flex gap-2 px-4 py-3 border-b border-gray-200 overflow-x-auto">
+        {feedChips.map((chip) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 flex justify-center items-center text-sm font-semibold whitespace-nowrap transition-colors min-w-0 py-2.5 rounded-full outline-none focus:outline-none focus-visible:ring-0 ${
-              activeTab === tab
-                ? 'rounded-full text-white'
-                : 'text-[#CFCFCF] hover:text-gray-500 bg-transparent'
-            }`}
-            style={{
-              ...(activeTab === tab ? { backgroundColor: '#00A8A3' } : {}),
-              WebkitTapHighlightColor: 'transparent',
+            key={chip}
+            onClick={() => {
+              setActiveChip((current) => (current === chip ? HOME_FEED_CHIP_VALUE.ALL : chip));
             }}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+              activeChip === chip
+                ? 'text-white'
+                : 'bg-gray-100 text-gray-700'
+            }`}
+            style={activeChip === chip ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {labelTabType(tab)}
+            {labelHomeFeedChip(chip)}
           </button>
         ))}
       </div>

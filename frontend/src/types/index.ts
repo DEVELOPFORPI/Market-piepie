@@ -49,11 +49,23 @@ export const TRADE_METHOD_VALUE = {
 } as const;
 export type TradeMethod = (typeof TRADE_METHOD_VALUE)[keyof typeof TRADE_METHOD_VALUE];
 
-export const TAB_TYPE_VALUE = {
-  LATEST: '최신',
-  FREE: '나눔',
+export const HOME_FEED_CHIP_VALUE = {
+  ALL: 'all',
+  LATEST: 'latest',
+  FREE: 'free',
+  POPULAR: 'popular',
+  PRICE_LOW: 'price_low',
+  PRICE_HIGH: 'price_high',
+  OLDEST: 'oldest',
 } as const;
-export type TabType = (typeof TAB_TYPE_VALUE)[keyof typeof TAB_TYPE_VALUE];
+export type HomeFeedChip = (typeof HOME_FEED_CHIP_VALUE)[keyof typeof HOME_FEED_CHIP_VALUE];
+
+/** @deprecated Use HOME_FEED_CHIP_VALUE */
+export const TAB_TYPE_VALUE = {
+  LATEST: HOME_FEED_CHIP_VALUE.LATEST,
+  FREE: HOME_FEED_CHIP_VALUE.FREE,
+} as const;
+export type TabType = HomeFeedChip;
 
 export const POST_CATEGORY_VALUE = {
   QUESTION: '질문',

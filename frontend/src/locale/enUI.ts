@@ -5,6 +5,7 @@ import type {
   ProductStatus,
   SellerType,
   TabType,
+  HomeFeedChip,
   TradeMethod,
 } from '@/types';
 import {
@@ -13,7 +14,7 @@ import {
   POST_CATEGORY_VALUE,
   PRODUCT_STATUS_VALUE,
   SELLER_TYPE_VALUE,
-  TAB_TYPE_VALUE,
+  HOME_FEED_CHIP_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
 
@@ -62,11 +63,20 @@ export function labelTradeMethod(t: TradeMethod): string {
 }
 
 export function labelTabType(t: TabType): string {
-  const map: Record<TabType, string> = {
-    [TAB_TYPE_VALUE.LATEST]: pick('Latest', '최신'),
-    [TAB_TYPE_VALUE.FREE]: pick('Free', '나눔'),
+  return labelHomeFeedChip(t);
+}
+
+export function labelHomeFeedChip(chip: HomeFeedChip): string {
+  const map: Record<HomeFeedChip, string> = {
+    [HOME_FEED_CHIP_VALUE.ALL]: pick('All', '전체'),
+    [HOME_FEED_CHIP_VALUE.LATEST]: pick('Latest', '최신순'),
+    [HOME_FEED_CHIP_VALUE.FREE]: pick('Free', '나눔'),
+    [HOME_FEED_CHIP_VALUE.POPULAR]: pick('Popular', '인기순'),
+    [HOME_FEED_CHIP_VALUE.PRICE_LOW]: pick('Price low', '가격 낮은순'),
+    [HOME_FEED_CHIP_VALUE.PRICE_HIGH]: pick('Price high', '가격 높은순'),
+    [HOME_FEED_CHIP_VALUE.OLDEST]: pick('Oldest', '오래된순'),
   };
-  return map[t];
+  return map[chip];
 }
 
 export function labelSellerType(t: SellerType): string {
