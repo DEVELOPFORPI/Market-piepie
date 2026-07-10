@@ -58,6 +58,7 @@ import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser }
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
 import { initDBSync, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
+import { isApiRateLimited } from './utils/api';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
 import { addRemoteMessage, addRemoteRoom, updateRoomFromRemote, getChatRoom } from './utils/chatStorage';
 import { mergeRemoteOrder } from './utils/orderStorage';
@@ -173,8 +174,8 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     if (!heavyReady) return;
 
     const productPollInterval = setInterval(() => {
-      syncProductsFromDB();
-    }, 30000);
+      if (!isApiRateLimited()) syncProductsFromDB();
+    }, 60000);
 
     const unsubProduct = onProductFeedChange((data) => {
       if (data.action === 'deleted') {
@@ -218,18 +219,16 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     // Fallback 알림 폴링 (10초마다) - Supabase Realtime이 실패해도 알림 받을 수 있게
     const notifPollInterval = setInterval(() => {
       const uid = getCurrentUserId();
-      console.log('[APP] notif poll tick', { uid: uid ? uid.slice(-6) : 'NONE' });
-      if (uid) syncNotificationsFromDB(uid);
-    }, 10000);
+      if (!uid || isApiRateLimited()) return;
+      void syncNotificationsFromDB(uid);
+    }, 30000);
 
-    // 채팅 미읽음 배지: Realtime 누락 시 DB 방 목록 주기 동기화
-    // connectChatSocket은 같은 유저로 연결돼 있으면 no-op — 늦은 로그인도 실시간 연결 보장
     const chatPollInterval = setInterval(() => {
       const uid = getCurrentUserId();
-      if (!uid) return;
+      if (!uid || isApiRateLimited()) return;
       connectChatSocket();
       void syncChatRoomsFromDB(uid);
-    }, 8000);
+    }, 20000);
 
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
@@ -493,6 +492,14 @@ function App() {
     for (let i = 0; i < attempts; i++) {
       if (seq !== healthCheckSeq.current) return;
       const res = await api.health();
+      // 429 = rate limit, not DB down — 앱 전체 차단하지 않음
+      if (res.status === 429) {
+        online = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H3',location:'App.tsx:checkBackendHealth',message:'health 429 treated as online',data:{attempt:i+1},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        break;
+      }
       online = !!(res.ok && res.data?.ok === true && res.data.db === 'connected');
       if (online) break;
       if (i < attempts - 1) {
@@ -516,7 +523,7 @@ function App() {
       if (cancelled) return;
       timer = window.setTimeout(
         () => void run(false),
-        backendStatusRef.current === 'offline' ? 4000 : 15000,
+        backendStatusRef.current === 'offline' ? 12000 : 30000,
       );
     };
 

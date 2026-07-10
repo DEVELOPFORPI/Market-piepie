@@ -53,6 +53,7 @@ export const HOME_FEED_CHIP_VALUE = {
   ALL: 'all',
   LATEST: 'latest',
   FREE: 'free',
+  FOR_SALE: 'for_sale',
   POPULAR: 'popular',
   PRICE_LOW: 'price_low',
   PRICE_HIGH: 'price_high',

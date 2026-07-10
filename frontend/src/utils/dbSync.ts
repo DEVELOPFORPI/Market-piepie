@@ -1559,24 +1559,16 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
 }
 
 export async function initDBSync(userId?: string): Promise<void> {
+  // 목록 먼저(홈/커뮤니티), 나머지는 순차 — 동시 다발 요청으로 429 나는 것 완화
+  await syncProductsFromDB();
+  await syncPostsFromDB();
   if (userId) {
-    await Promise.all([
-      syncMyProfileFromDB(userId),
-      syncFavoritesFromDB(userId),
-    ]);
+    await syncMyProfileFromDB(userId);
+    await syncFavoritesFromDB(userId);
     await syncOrdersFromDB(userId);
+    await syncChatRoomsFromDB(userId);
+    await syncNotificationsFromDB(userId);
+    await syncReviewsFromDB(userId);
+    await syncDisputesFromDB(userId);
   }
-  const tasks: Promise<void>[] = [
-    syncProductsFromDB(),
-    syncPostsFromDB(),
-  ];
-  if (userId) {
-    tasks.push(
-      syncChatRoomsFromDB(userId),
-      syncNotificationsFromDB(userId),
-      syncReviewsFromDB(userId),
-      syncDisputesFromDB(userId),
-    );
-  }
-  await Promise.all(tasks);
 }

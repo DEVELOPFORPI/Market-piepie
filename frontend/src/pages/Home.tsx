@@ -21,6 +21,7 @@ const feedChips: HomeFeedChip[] = [
   HOME_FEED_CHIP_VALUE.ALL,
   HOME_FEED_CHIP_VALUE.LATEST,
   HOME_FEED_CHIP_VALUE.FREE,
+  HOME_FEED_CHIP_VALUE.FOR_SALE,
   HOME_FEED_CHIP_VALUE.POPULAR,
   HOME_FEED_CHIP_VALUE.PRICE_LOW,
   HOME_FEED_CHIP_VALUE.PRICE_HIGH,
@@ -59,6 +60,7 @@ function sortHomeProducts(products: Product[], chip: HomeFeedChip): Product[] {
     case HOME_FEED_CHIP_VALUE.ALL:
     case HOME_FEED_CHIP_VALUE.LATEST:
     case HOME_FEED_CHIP_VALUE.FREE:
+    case HOME_FEED_CHIP_VALUE.FOR_SALE:
     default:
       return sorted.sort(byNewest);
   }
@@ -210,6 +212,9 @@ export const Home: React.FC = () => {
     // Chip filter + sort
     if (activeChip === HOME_FEED_CHIP_VALUE.FREE) {
       filtered = filtered.filter((p) => p.isFreeShare || p.price === 0);
+    }
+    if (activeChip === HOME_FEED_CHIP_VALUE.FOR_SALE) {
+      filtered = filtered.filter((p) => p.status === PRODUCT_STATUS_VALUE.FOR_SALE);
     }
     filtered = sortHomeProducts(filtered, activeChip);
 

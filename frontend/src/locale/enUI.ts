@@ -71,6 +71,7 @@ export function labelHomeFeedChip(chip: HomeFeedChip): string {
     [HOME_FEED_CHIP_VALUE.ALL]: pick('All', '전체'),
     [HOME_FEED_CHIP_VALUE.LATEST]: pick('Latest', '최신순'),
     [HOME_FEED_CHIP_VALUE.FREE]: pick('Free', '나눔'),
+    [HOME_FEED_CHIP_VALUE.FOR_SALE]: pick('For sale', '판매중'),
     [HOME_FEED_CHIP_VALUE.POPULAR]: pick('Popular', '인기순'),
     [HOME_FEED_CHIP_VALUE.PRICE_LOW]: pick('Price low', '가격 낮은순'),
     [HOME_FEED_CHIP_VALUE.PRICE_HIGH]: pick('Price high', '가격 높은순'),

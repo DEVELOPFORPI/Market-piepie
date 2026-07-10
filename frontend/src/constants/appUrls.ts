@@ -19,5 +19,9 @@ export function isMainnetAppHost(hostname?: string): boolean {
 }
 
 export function isKnownAppHost(hostname?: string): boolean {
-  return isTestnetAppHost(hostname) || isMainnetAppHost(hostname);
+  const host =
+    hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '');
+  if (isTestnetAppHost(host) || isMainnetAppHost(host)) return true;
+  // Vercel preview / custom *.vercel.app — vercel.json /api rewrite 동일 적용
+  return host.endsWith('.vercel.app');
 }

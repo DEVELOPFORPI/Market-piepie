@@ -17,20 +17,28 @@ interface ApiResponse<T = unknown> {
   status: number;
 }
 
+/** 429 수신 후 잠시 요청 자제 — 폴링/재시도 폭주 방지 */
+let rateLimitedUntil = 0;
+
+export function isApiRateLimited(): boolean {
+  return Date.now() < rateLimitedUntil;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
   baseUrl = API_BASE,
 ): Promise<ApiResponse<T>> {
+  if (Date.now() < rateLimitedUntil) {
+    return { ok: false, error: 'Rate limited (cooldown)', status: 429 };
+  }
+
   try {
     const authHeaders: Record<string, string> = {};
     const token = getSessionToken();
     if (token) authHeaders['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${baseUrl}${path}`, {
-      // Spread options first so caller-provided body/method/etc. apply,
-      // then overwrite headers with the merged set (otherwise spreading
-      // options after would clobber Content-Type when caller passes headers).
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -38,6 +46,13 @@ async function request<T>(
         ...options.headers,
       },
     });
+
+    if (res.status === 429) {
+      rateLimitedUntil = Date.now() + 30_000;
+      // #region agent log
+      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',hypothesisId:'H2',location:'api.ts:request',message:'429 rate limited',data:{path,baseUrl:baseUrl||'(same-origin)'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
 
     const data = await res.json().catch(() => null);
 
