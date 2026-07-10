@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Badge } from '@/components/common/Badge';
 import { ORDER_STATUS_VALUE, POST_CATEGORY_VALUE } from '@/types';
-import { ensureOrderById, updateOrderStatus } from '@/utils/orderStorage';
+import { ensureOrderById, getOrderById, updateOrderStatus } from '@/utils/orderStorage';
 import {
   createDispute,
   ensureDisputeByOrderId,
+  getDisputeByOrderId,
   updateDisputeStatus,
   Dispute as DisputeType,
 } from '@/utils/disputeStorage';
@@ -79,30 +80,33 @@ export const Dispute: React.FC = () => {
 
   useEffect(() => {
     if (!orderId) return;
-    const refreshDispute = () => {
+    // sync*FromDB는 완료 시 disputesChanged/ordersChanged 이벤트를 다시 발생시키므로,
+    // 이벤트 핸들러에서 sync를 또 부르면 무한 요청 루프가 된다(429/ERR_INSUFFICIENT_RESOURCES).
+    // 이벤트 핸들러는 로컬 저장소만 다시 읽는다.
+    const readLocal = () => {
+      const foundOrder = getOrderById(orderId);
+      if (foundOrder) setOrder(foundOrder);
+      setDispute(getDisputeByOrderId(orderId, getCurrentUserId()) ?? null);
+    };
+    const syncThenRead = () => {
       void (async () => {
         const uid = getCurrentUserId();
         if (uid) {
           await Promise.all([syncDisputesFromDB(uid), syncOrdersFromDB(uid)]);
         }
-        const [foundOrder, existingDispute] = await Promise.all([
-          ensureOrderById(orderId),
-          ensureDisputeByOrderId(orderId, getCurrentUserId()),
-        ]);
-        if (foundOrder) setOrder(foundOrder);
-        setDispute(existingDispute ?? null);
+        readLocal();
       })();
     };
-    refreshDispute();
-    window.addEventListener('disputesChanged', refreshDispute);
-    window.addEventListener('ordersChanged', refreshDispute);
+    syncThenRead();
+    window.addEventListener('disputesChanged', readLocal);
+    window.addEventListener('ordersChanged', readLocal);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') refreshDispute();
+      if (document.visibilityState === 'visible') syncThenRead();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
-      window.removeEventListener('disputesChanged', refreshDispute);
-      window.removeEventListener('ordersChanged', refreshDispute);
+      window.removeEventListener('disputesChanged', readLocal);
+      window.removeEventListener('ordersChanged', readLocal);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [orderId]);
