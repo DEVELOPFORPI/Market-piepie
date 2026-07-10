@@ -452,18 +452,21 @@ const authLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  handler: logRateLimited,
 });
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  handler: logRateLimited,
 });
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
+  handler: logRateLimited,
 });
 app.use("/api/", generalLimiter);
 app.use("/api/auth/", authLimiter);
