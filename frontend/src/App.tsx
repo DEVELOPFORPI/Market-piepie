@@ -479,6 +479,7 @@ function App() {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const healthCheckSeq = useRef(0);
   const backendStatusRef = useRef<'checking' | 'online' | 'offline'>('checking');
+  const healthFailStreak = useRef(0);
 
   useEffect(() => {
     preloadHeavyStorage().finally(() => setHeavyReady(true));
@@ -489,9 +490,13 @@ function App() {
     if (showChecking) setBackendStatus('checking');
 
     let online = false;
+    let lastStatus = 0;
+    let lastError: string | undefined;
     for (let i = 0; i < attempts; i++) {
       if (seq !== healthCheckSeq.current) return;
       const res = await api.health();
+      lastStatus = res.status;
+      lastError = res.error;
       // 429 = rate limit, not DB down — 앱 전체 차단하지 않음
       if (res.status === 429) {
         online = true;
@@ -506,6 +511,28 @@ function App() {
 
     // 더 최신 체크가 있으면 이 결과는 버림 (Retry/폴링 경합으로 성공이 실패에 덮이는 것 방지)
     if (seq !== healthCheckSeq.current) return;
+
+    if (online) {
+      // #region agent log — 직전에 실패가 있었다면 복구 사실도 서버 로그로 보고 (session 0a2150)
+      if (healthFailStreak.current > 0) {
+        fetch(`/api/health?clientrecovered=${healthFailStreak.current}`, { cache: 'no-store' }).catch(() => {});
+      }
+      // #endregion
+      healthFailStreak.current = 0;
+    } else {
+      healthFailStreak.current += 1;
+      console.warn(
+        `[health] check failed (streak=${healthFailStreak.current}, appStatus=${backendStatusRef.current}, httpStatus=${lastStatus}, error=${lastError ?? '-'})`,
+      );
+      // #region agent log — Pi Browser에는 콘솔이 없어 서버 로그로 실패를 보고한다.
+      // 429 원인 검증 완료 후 제거 예정 (session 0a2150)
+      fetch(`/api/health?clientfail=${lastStatus}&streak=${healthFailStreak.current}`, { cache: 'no-store' }).catch(() => {});
+      // #endregion
+      // 모바일 와이파이는 단발성 요청 실패가 흔하다. 이미 정상 사용 중이면
+      // 2회 연속 실패가 확인될 때까지 앱을 차단하지 않는다.
+      if (backendStatusRef.current === 'online' && healthFailStreak.current < 2) return;
+    }
+
     const nextStatus = online ? 'online' : 'offline';
     backendStatusRef.current = nextStatus;
     setBackendStatus(nextStatus);
