@@ -112,14 +112,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
         )}
       </div>
 
-      {/* Bottom: views, likes, comments + region/time */}
+      {/* Bottom: likes · comments · views (left) · region/time (right) */}
       <div className="flex items-center justify-between gap-3 mt-3 text-xs text-gray-400">
         <div className="flex items-center gap-4 min-w-0">
-          <span className="flex items-center gap-1 text-gray-400">Views {viewCount}</span>
           <button
             type="button"
             onClick={handleLikeClick}
-            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity shrink-0"
             aria-label="Like"
           >
             <svg
@@ -137,12 +136,19 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
             </svg>
             <span className={liked ? 'text-red-500' : ''}>{likeCount}</span>
           </button>
-          <span className="flex items-center gap-1">
-            <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5 text-gray-400" />
+          <span className="flex items-center gap-1 shrink-0">
+            <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5" />
             {post.commentCount || 0}
           </span>
+          <span className="flex items-center gap-1 shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {viewCount}
+          </span>
         </div>
-        <span className="flex-shrink-0 text-right">
+        <span className="flex-shrink-0 text-right whitespace-nowrap">
           {post.region && <>{post.region}&nbsp;&nbsp;</>}{relativeTimeShort(post.createdAt)}
         </span>
       </div>
