@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getChatRooms, getOtherUser, leaveChatRoom, addRemoteMessage, addRemoteRoom, updateRoomFromRemote } from '@/utils/chatStorage';
+import { getChatRooms, getOtherUser, leaveChatRoom, addRemoteMessage, addRemoteRoom, updateRoomFromRemote, isChatRoomEnded } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
 import { ChatRoom } from '@/types';
-import { displayChatMessageContent, relativeTimeShort } from '@/locale/enUI';
+import { displayChatMessageContent, relativeTimeShort, CHAT_ROOM_ENDED_BADGE, CHAT_LEAVE_ROOM_CONFIRM } from '@/locale/enUI';
 import { connectChatSocket, onNewMessage, onRoomUpdated, onNewRoom } from '@/utils/chatSocket';
 import { isGuest } from '@/utils/guestGate';
 import { resolveDisplayNickname } from '@/utils/profileStorage';
@@ -159,9 +159,8 @@ export const ChatList: React.FC = () => {
 
   const handleLeaveRoom = (roomId: string) => {
     setContextMenu(null);
-    if (confirm('Leave this chat?\nThe other person will see that you left.')) {
-      leaveChatRoom(roomId);
-      loadRooms();
+    if (confirm(CHAT_LEAVE_ROOM_CONFIRM)) {
+      void leaveChatRoom(roomId).then(() => loadRooms());
     }
   };
 
@@ -218,6 +217,8 @@ export const ChatList: React.FC = () => {
           const other = getOtherUser(room);
           const isRead = room.readStatus ? room.readStatus[userId || ''] !== false : (room.isRead ?? true);
           const productDeleted = room.product?.id ? !getProductById(room.product.id) : false;
+          const roomEnded = isChatRoomEnded(room);
+          const muted = productDeleted || roomEnded;
           const selected = selectedIds.has(room.id);
 
           return (
@@ -239,7 +240,9 @@ export const ChatList: React.FC = () => {
               onTouchStart={(e) => handleTouchStart(room.id, e)}
               onTouchEnd={handleTouchEnd}
               onTouchMove={handleTouchMove}
-              className={`border-b border-gray-100 cursor-pointer select-none transition-colors ${productDeleted ? 'bg-gray-50' : selected ? 'bg-gray-100' : 'hover:bg-gray-50 active:bg-gray-100'}`}
+              className={`border-b border-gray-100 cursor-pointer select-none transition-colors ${
+                muted ? 'bg-gray-50 opacity-70' : selected ? 'bg-gray-100' : 'hover:bg-gray-50 active:bg-gray-100'
+              }`}
             >
               {productDeleted && (
                 <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
@@ -247,6 +250,11 @@ export const ChatList: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
                   </svg>
                   <span className="text-xs text-red-400 font-medium">Listing no longer available</span>
+                </div>
+              )}
+              {roomEnded && !productDeleted && (
+                <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
+                  <span className="text-xs text-gray-400 font-medium">{CHAT_ROOM_ENDED_BADGE}</span>
                 </div>
               )}
 
@@ -268,7 +276,7 @@ export const ChatList: React.FC = () => {
                   </button>
                 )}
                 {room.product && (
-                  <div className={`w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 ${productDeleted ? 'opacity-40' : ''}`}>
+                  <div className={`w-14 h-14 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 ${muted ? 'opacity-40 grayscale' : ''}`}>
                     <img
                       src={room.product.images[0] || '/placeholder.jpg'}
                       alt={room.product.title}
@@ -280,19 +288,19 @@ export const ChatList: React.FC = () => {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`text-sm font-bold truncate ${productDeleted ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <span className={`text-sm font-bold truncate ${muted ? 'text-gray-400' : 'text-gray-900'}`}>
                       {resolveDisplayNickname(other.id, other.nickname)}
                     </span>
                     <span className="text-xs text-gray-400 flex-shrink-0">
                       {room.product?.region} · {relativeTimeShort(room.lastMessageTime)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 truncate">
+                  <p className={`text-sm truncate ${muted ? 'text-gray-400' : 'text-gray-500'}`}>
                     {room.lastMessage ? displayChatMessageContent(room.lastMessage) : 'Say hello'}
                   </p>
                 </div>
 
-                {!deleteMode && !isRead && (
+                {!deleteMode && !isRead && !roomEnded && (
                   <span
                     className="min-w-[20px] h-[20px] rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: '#00A8A3' }}

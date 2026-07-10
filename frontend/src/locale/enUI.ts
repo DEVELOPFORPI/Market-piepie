@@ -142,9 +142,18 @@ export const chatMsgRejectOffer = (amount: string) => pick(`The offer of ${amoun
 export const chatMsgUserLeft = (nickname: string) => pick(`${nickname} left the chat.`, `${nickname} 님이 채팅방을 나갔습니다.`);
 export const CHAT_LEAVE_ROOM = pick('Leave chat', '채팅방 나가기');
 export const CHAT_LEAVE_ROOM_CONFIRM = pick(
-  'Leave this chat?\nThe other person will see that you left.',
-  '채팅방을 나가시겠습니까?\n상대방에게 나간 것이 표시됩니다.',
+  'Leave this chat?\nThe chat will end for both of you. You can start a new chat from the listing.',
+  '채팅방을 나가시겠습니까?\n채팅이 양쪽 모두 종료됩니다. 상품에서 다시 새 채팅을 시작할 수 있습니다.',
 );
+export const CHAT_ROOM_ENDED = pick(
+  'This chat has ended. Start a new chat from the listing.',
+  '이 채팅은 종료되었습니다. 상품에서 새 채팅을 시작해 주세요.',
+);
+export const CHAT_ROOM_ENDED_INPUT = pick(
+  'This chat has ended; you cannot send messages.',
+  '종료된 채팅방에서는 메시지를 보낼 수 없습니다.',
+);
+export const CHAT_ROOM_ENDED_BADGE = pick('Ended', '종료됨');
 export const CHAT_LASTMSG_PHOTO = pick('Sent a photo', '사진을 보냈습니다');
 export const CHAT_NEW_MESSAGES = pick('New messages', '새 메시지');
 export const CHAT_UNREAD_FROM_HERE = pick('Unread from here', '여기부터 안 읽음');

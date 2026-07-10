@@ -22,8 +22,8 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { getOrderById, getOrders } from '@/utils/orderStorage';
-import { getProductById } from '@/utils/productStorage';
+import { getOrderById, getOrders, cancelOrderMeetup } from '@/utils/orderStorage';
+import { getProductById, updateProductStatus } from '@/utils/productStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 
 /** Shared storage: all chat rooms */
@@ -48,7 +48,7 @@ const trackRoomSync = (room: ChatRoom): Promise<boolean> => {
 export const addRemoteMessage = (roomId: string, message: ChatMessage): void => {
   const rooms = getAllChatRooms();
   const room = rooms.find((r) => r.id === roomId);
-  if (!room) return;
+  if (!room || isChatRoomEnded(room)) return;
   if (!room.messages) room.messages = [];
   if (room.messages.some((m) => m.id === message.id)) return;
   room.messages.push(message);
@@ -144,7 +144,7 @@ export function trimOldestChatRooms(maxToRemove: number): void {
   saveAllChatRooms(remaining);
 }
 
-/** Chat rooms I participate in (excludes rooms I left) */
+/** Chat rooms I participate in (hides rooms I left; ended rooms stay for the other party) */
 export const getChatRooms = (): ChatRoom[] => {
   const userId = getCurrentUserId();
   return getAllChatRooms().filter(
@@ -158,7 +158,9 @@ export const getChatRooms = (): ChatRoom[] => {
 export const getUnreadChatCount = (): number => {
   const userId = getCurrentUserId();
   if (!userId) return 0;
-  return getChatRooms().filter((room) => room.readStatus?.[userId] === false).length;
+  return getChatRooms().filter(
+    (room) => !isChatRoomEnded(room) && room.readStatus?.[userId] === false,
+  ).length;
 };
 
 /** Get chat room by id */
@@ -171,11 +173,14 @@ export const getChatRoomCountByProductId = (productId: string): number => {
   return getAllChatRooms().filter((r) => r.product?.id === productId).length;
 };
 
-/** Find my chat room for a product (as buyer) */
+/** Find my reusable chat room for a product (as buyer); skip ended rooms */
 export const getChatRoomByProduct = (productId: string): ChatRoom | null => {
   const userId = getCurrentUserId();
   return getAllChatRooms().find(
-    (r) => r.product?.id === productId && r.buyerId === userId
+    (r) =>
+      r.product?.id === productId &&
+      r.buyerId === userId &&
+      !(r.leftUserIds || []).length
   ) || null;
 };
 
@@ -197,6 +202,11 @@ const isCompletedChatRoom = (room: ChatRoom): boolean => {
   return !!(order.buyerCompleted && order.sellerCompleted);
 };
 
+/** Anyone left → room is closed for both parties */
+export const isChatRoomEnded = (room: ChatRoom | null | undefined): boolean => {
+  return !!room && (room.leftUserIds || []).length > 0;
+};
+
 const isListingForSale = (product: Product): boolean => {
   const latest = getProductById(product.id) || product;
   return latest.status === PRODUCT_STATUS_VALUE.FOR_SALE;
@@ -215,7 +225,10 @@ export const getOtherUser = (room: ChatRoom) => {
   return room.buyerInfo || room.otherUser;
 };
 
-/** In-progress order only (never bind a finished trade into a fresh chat) */
+/**
+ * In-progress order for an existing open chat only.
+ * Brand-new rooms after leave start without the old trade attached.
+ */
 const findOrderForChat = (productId: string, buyerId: string, sellerId: string): Order | undefined => {
   const active = getOrders().filter(
     (o) =>
@@ -231,31 +244,17 @@ const findOrderForChat = (productId: string, buyerId: string, sellerId: string):
   return active[0];
 };
 
-/** Create or return existing room; attach in-progress order if any */
+/** Create or return existing room; never reuse ended or completed-for-sale rooms */
 export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> => {
   const existing = getChatRoomByProduct(product.id);
   // Listing reopened for sale: past completed chat must not be reused (Chat / Offer / share)
   const shouldReuseExisting =
-    !!existing && !(isListingForSale(product) && isCompletedChatRoom(existing));
+    !!existing &&
+    !isChatRoomEnded(existing) &&
+    !(isListingForSale(product) && isCompletedChatRoom(existing));
 
   if (shouldReuseExisting && existing) {
-    const userId = getCurrentUserId();
     let room: ChatRoom = existing;
-    let rejoinedAfterLeave = false;
-
-    // User previously left this room; opening Chat again should rejoin, not bounce via ChatRoom redirect
-    if (userId && (existing.leftUserIds || []).includes(userId)) {
-      const rooms = getAllChatRooms();
-      const idx = rooms.findIndex((r) => r.id === existing.id);
-      if (idx >= 0) {
-        const leftUserIds = (existing.leftUserIds || []).filter((id) => id !== userId);
-        room = { ...existing, leftUserIds };
-        rooms[idx] = room;
-        saveAllChatRooms(rooms, existing.id);
-        await syncChatRoomToDB(room, { rejoin: true });
-        rejoinedAfterLeave = true;
-      }
-    }
 
     if (!room.order && room.buyerId && room.sellerId) {
       const order = findOrderForChat(product.id, room.buyerId, room.sellerId);
@@ -266,23 +265,18 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
         if (idx >= 0) {
           rooms[idx] = room;
           saveAllChatRooms(rooms, room.id);
-          if (order) persistRoomOrderLink(room.id, order);
+          persistRoomOrderLink(room.id, order);
         }
       }
     }
 
-    // Seller (or other device) may have no local room row; room_updated alone does nothing then — broadcast full room
-    if (rejoinedAfterLeave) {
-      notifyNewRoom(room);
-    }
     return room;
   }
 
   const myUser = getMyUser();
   const region = getRegion() || product.region || '';
 
-  const orderForRoom = findOrderForChat(product.id, myUser.id, product.seller.id);
-
+  // New room after leave / completed trade: start clean (no old order)
   const room: ChatRoom = {
     id: `chat_${Date.now()}`,
     buyerId: myUser.id,
@@ -297,7 +291,6 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
     isRead: true,
     messages: [],
     readStatus: { [myUser.id]: true, [product.seller.id]: false },
-    ...(orderForRoom && { order: orderForRoom }),
   };
 
   const rooms = getAllChatRooms();
@@ -322,6 +315,9 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
   const rooms = getAllChatRooms();
   const room = rooms.find((r) => r.id === roomId);
   if (!room) {
+    return false;
+  }
+  if (isChatRoomEnded(room)) {
     return false;
   }
 
@@ -447,17 +443,18 @@ export const getMessages = (roomId: string): ChatMessage[] => {
   return room?.messages || [];
 };
 
-/** Find room for this order (exact order id first; never attach a new trade onto a completed chat) */
+/** Find room for this order (exact order id first; never attach a new trade onto a completed/ended chat) */
 export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
   const rooms = getAllChatRooms();
-  const byOrderId = rooms.find((r) => r.order?.id === order.id);
+  const byOrderId = rooms.find((r) => r.order?.id === order.id && !isChatRoomEnded(r));
   if (byOrderId) return byOrderId;
 
   const samePair = rooms.filter(
     (r) =>
       r.product?.id === order.product.id &&
       r.buyerId === order.buyer.id &&
-      r.sellerId === order.seller.id
+      r.sellerId === order.seller.id &&
+      !isChatRoomEnded(r)
   );
   if (samePair.length === 0) return null;
 
@@ -470,7 +467,7 @@ export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
     return samePair.find((r) => isCompletedChatRoom(r)) || samePair[0];
   }
 
-  // New / in-progress order: reuse only a non-completed room for this pair
+  // New / in-progress order: reuse only a non-completed open room for this pair
   return samePair.find((r) => !isCompletedChatRoom(r)) || null;
 };
 
@@ -724,11 +721,12 @@ export const clearOrderFromRoom = (orderId: string) => {
   if (updated.some((r, i) => r !== rooms[i])) saveAllChatRooms(updated);
 };
 
-/** Leave room: system message, hide only for current user */
+/** Leave room: end for both parties, unlock listing, cancel meetup if needed */
 export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const allRooms = getAllChatRooms();
   const room = allRooms.find((r) => r.id === roomId);
   if (!room) return false;
+  if (isChatRoomEnded(room)) return true;
 
   const userId = getCurrentUserId();
   const myUser = getMyUser();
@@ -744,16 +742,46 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const messageSaved = await addMessage(roomId, msg);
   if (!messageSaved) return false;
 
-  const leftUserIds = [...(room.leftUserIds || []), userId].filter((id): id is string => id != null);
+  // Only the leaver is removed from their list; room stays for the other party (read-only / gray)
+  const leftUserIds = Array.from(
+    new Set(
+      [...(room.leftUserIds || []), userId].filter((id): id is string => !!id),
+    ),
+  );
+
   const roomsAfterMessage = getAllChatRooms();
   const idx = roomsAfterMessage.findIndex((r) => r.id === roomId);
-  if (idx >= 0) {
-    roomsAfterMessage[idx] = { ...roomsAfterMessage[idx], leftUserIds };
-    const saved = saveAllChatRooms(roomsAfterMessage, roomId);
-    void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
-    return saved;
+  if (idx < 0) return false;
+  roomsAfterMessage[idx] = { ...roomsAfterMessage[idx], leftUserIds };
+  const saved = saveAllChatRooms(roomsAfterMessage, roomId);
+  void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+
+  // Unlock trade/listing: cancel meetup if set, set product back to for sale when reserved
+  const linked = getRoomLinkedOrder(roomsAfterMessage[idx]);
+  if (linked?.id) {
+    const hasMeetup =
+      linked.status === ORDER_STATUS_VALUE.MEETUP_SET ||
+      !!(linked.meetupPlace && linked.meetupDate && linked.meetupTime);
+    if (hasMeetup && linked.status !== ORDER_STATUS_VALUE.COMPLETE && linked.status !== ORDER_STATUS_VALUE.DISPUTE) {
+      await cancelOrderMeetup(linked.id);
+    } else {
+      const productId = linked.product?.id || room.product?.id;
+      if (productId) {
+        const product = getProductById(productId);
+        if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
+          void updateProductStatus(productId, PRODUCT_STATUS_VALUE.FOR_SALE);
+        }
+      }
+    }
+  } else if (room.product?.id) {
+    const product = getProductById(room.product.id);
+    if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
+      void updateProductStatus(room.product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
+    }
   }
-  return false;
+
+  window.dispatchEvent(new Event('chatRoomsChanged'));
+  return saved;
 };
 
 /** Delete room entirely for both parties */

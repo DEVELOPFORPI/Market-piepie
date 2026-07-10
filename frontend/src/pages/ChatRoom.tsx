@@ -11,7 +11,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -33,6 +33,8 @@ import {
   CHAT_BANNER_LISTING_SOLD,
   CHAT_LEAVE_ROOM,
   CHAT_LEAVE_ROOM_CONFIRM,
+  CHAT_ROOM_ENDED,
+  CHAT_ROOM_ENDED_INPUT,
   CHAT_NEW_MESSAGES,
   CHAT_UNREAD_FROM_HERE,
   displayChatMessageContent,
@@ -267,17 +269,18 @@ export const ChatRoom: React.FC = () => {
     navigate('/chat', { replace: true });
   }, [isProductDeleted, roomId, navigate]);
 
-  // On enter: load messages, check listing exists (read when user actually views messages)
+  // On enter / room updates: load messages; ended rooms stay read-only (no rejoin)
   useEffect(() => {
-    if (roomId) {
+    if (!roomId) return;
+    const refresh = () => {
       const r = getChatRoom(roomId);
-      if (r && (r.leftUserIds || []).includes(getCurrentUserId() || '')) {
-        navigate('/chat', { replace: true });
-        return;
-      }
-      setMessages(getMessages(roomId));
+      setRoom(r);
+      if (r) setMessages(getMessages(roomId));
       checkProductDeleted();
-    }
+    };
+    refresh();
+    window.addEventListener('chatRoomsChanged', refresh);
+    return () => window.removeEventListener('chatRoomsChanged', refresh);
   }, [roomId, navigate]);
 
   // Sync orders linked to price-offer messages so seller accept/decline buttons render
@@ -520,6 +523,7 @@ export const ChatRoom: React.FC = () => {
   );
   const isListingSold = listingProduct?.status === PRODUCT_STATUS_VALUE.SOLD;
   const isSoldToOtherParty = !!(isListingSold && !isTradeCompleteForThisChat);
+  const roomEnded = isChatRoomEnded(room);
 
   const completedTradeReviewChips = (orderId: string): ChatChipAction[] => {
     if (getMyReviewForOrder(orderId)) {
@@ -624,7 +628,7 @@ export const ChatRoom: React.FC = () => {
   };
 
   const buyerChips: ChatChipAction[] = (() => {
-    if (!isBuyer || !room?.product || isProductDeleted) return [];
+    if (!isBuyer || !room?.product || isProductDeleted || roomEnded) return [];
     if (isSoldToOtherParty) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
       return completedTradeReviewChips(currentOrder.id);
@@ -654,7 +658,7 @@ export const ChatRoom: React.FC = () => {
   })();
 
   const sellerChips: ChatChipAction[] = (() => {
-    if (!isSeller || !room?.product || isProductDeleted) return [];
+    if (!isSeller || !room?.product || isProductDeleted || roomEnded) return [];
     if (isSoldToOtherParty) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
       return completedTradeReviewChips(currentOrder.id);
@@ -853,6 +857,7 @@ export const ChatRoom: React.FC = () => {
 
   const handleSend = async () => {
     if (uploadingImages) return;
+    if (roomEnded) return;
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
 
@@ -949,7 +954,7 @@ export const ChatRoom: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
-            {showMenu && (
+            {showMenu && !roomEnded && (
               <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
                 <button
                   onClick={() => {
@@ -1028,6 +1033,12 @@ export const ChatRoom: React.FC = () => {
               </svg>
               <p className="text-sm font-medium text-green-800 flex-1">{CHAT_BANNER_TRADE_COMPLETE}</p>
             </div>
+          </div>
+        )}
+
+        {roomEnded && (
+          <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-gray-600">{CHAT_ROOM_ENDED}</p>
           </div>
         )}
 
@@ -1470,6 +1481,12 @@ export const ChatRoom: React.FC = () => {
         <div className="shrink-0 border-t border-gray-200 bg-gray-50 pb-[env(safe-area-inset-bottom,0px)]">
           <div className="flex items-center justify-center px-4 py-4">
             <p className="text-sm text-gray-400">This listing was removed; you cannot send messages.</p>
+          </div>
+        </div>
+      ) : roomEnded ? (
+        <div className="shrink-0 border-t border-gray-200 bg-gray-50 pb-[env(safe-area-inset-bottom,0px)]">
+          <div className="flex items-center justify-center px-4 py-4">
+            <p className="text-sm text-gray-400">{CHAT_ROOM_ENDED_INPUT}</p>
           </div>
         </div>
       ) : (

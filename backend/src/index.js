@@ -1824,6 +1824,7 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
     const params = [];
     if (user_id) {
       params.push(user_id);
+      // Hide only for users who left; the other party still sees the ended room
       query += ` AND (cr.buyer_id=$${params.length} OR cr.seller_id=$${params.length}) AND NOT JSON_CONTAINS(COALESCE(cr.left_user_ids, JSON_ARRAY()), JSON_QUOTE(CAST($${params.length} AS CHAR)))`;
     }
     query += " ORDER BY cr.last_message_time DESC";
