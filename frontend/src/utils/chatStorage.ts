@@ -1,4 +1,4 @@
-import { ChatRoom, ChatMessage, Product, Order, ORDER_STATUS_VALUE } from '@/types';
+import { ChatRoom, ChatMessage, Product, Order, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { syncChatRoomToDB, syncMessageToDB, syncChatRoomMetaToDB } from '@/utils/dbSync';
 import { sendMessageViaSocket, notifyNewRoom } from '@/utils/chatSocket';
 import {
@@ -22,7 +22,8 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { getOrders } from '@/utils/orderStorage';
+import { getOrderById, getOrders } from '@/utils/orderStorage';
+import { getProductById } from '@/utils/productStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 
 /** Shared storage: all chat rooms */
@@ -178,6 +179,29 @@ export const getChatRoomByProduct = (productId: string): ChatRoom | null => {
   ) || null;
 };
 
+/** Resolve live order row for a room (prefer storage over stale room.order snapshot) */
+const getRoomLinkedOrder = (room: ChatRoom): Order | undefined => {
+  if (room.order?.id) {
+    return getOrderById(room.order.id) || room.order;
+  }
+  return room.order;
+};
+
+/** Room whose linked trade is finished (complete / dispute / mutual complete flags) */
+const isCompletedChatRoom = (room: ChatRoom): boolean => {
+  const order = getRoomLinkedOrder(room);
+  if (!order) return false;
+  if (order.status === ORDER_STATUS_VALUE.COMPLETE || order.status === ORDER_STATUS_VALUE.DISPUTE) {
+    return true;
+  }
+  return !!(order.buyerCompleted && order.sellerCompleted);
+};
+
+const isListingForSale = (product: Product): boolean => {
+  const latest = getProductById(product.id) || product;
+  return latest.status === PRODUCT_STATUS_VALUE.FOR_SALE;
+};
+
 /** Other participant for current user */
 export const getOtherUser = (room: ChatRoom) => {
   const userId = getCurrentUserId();
@@ -191,26 +215,30 @@ export const getOtherUser = (room: ChatRoom) => {
   return room.buyerInfo || room.otherUser;
 };
 
-/** Active order for same product, buyer, seller (for chat binding) */
+/** In-progress order only (never bind a finished trade into a fresh chat) */
 const findOrderForChat = (productId: string, buyerId: string, sellerId: string): Order | undefined => {
-  const list = getOrders().filter(
+  const active = getOrders().filter(
     (o) =>
       o.product.id === productId &&
       o.buyer.id === buyerId &&
-      o.seller.id === sellerId
+      o.seller.id === sellerId &&
+      o.status !== ORDER_STATUS_VALUE.COMPLETE &&
+      o.status !== ORDER_STATUS_VALUE.DISPUTE &&
+      !(o.buyerCompleted && o.sellerCompleted)
   );
-  const active = list.filter(
-    (o) => o.status !== ORDER_STATUS_VALUE.COMPLETE && o.status !== ORDER_STATUS_VALUE.DISPUTE
-  );
-  const target = active.length > 0 ? active : list;
-  target.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return target[0];
+  if (active.length === 0) return undefined;
+  active.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return active[0];
 };
 
 /** Create or return existing room; attach in-progress order if any */
 export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> => {
   const existing = getChatRoomByProduct(product.id);
-  if (existing) {
+  // Listing reopened for sale: past completed chat must not be reused (Chat / Offer / share)
+  const shouldReuseExisting =
+    !!existing && !(isListingForSale(product) && isCompletedChatRoom(existing));
+
+  if (shouldReuseExisting && existing) {
     const userId = getCurrentUserId();
     let room: ChatRoom = existing;
     let rejoinedAfterLeave = false;
@@ -419,14 +447,31 @@ export const getMessages = (roomId: string): ChatMessage[] => {
   return room?.messages || [];
 };
 
-/** Find room by order parties and product */
+/** Find room for this order (exact order id first; never attach a new trade onto a completed chat) */
 export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
-  return getAllChatRooms().find(
+  const rooms = getAllChatRooms();
+  const byOrderId = rooms.find((r) => r.order?.id === order.id);
+  if (byOrderId) return byOrderId;
+
+  const samePair = rooms.filter(
     (r) =>
       r.product?.id === order.product.id &&
       r.buyerId === order.buyer.id &&
       r.sellerId === order.seller.id
-  ) || null;
+  );
+  if (samePair.length === 0) return null;
+
+  const orderIsTerminal =
+    order.status === ORDER_STATUS_VALUE.COMPLETE ||
+    order.status === ORDER_STATUS_VALUE.DISPUTE ||
+    !!(order.buyerCompleted && order.sellerCompleted);
+
+  if (orderIsTerminal) {
+    return samePair.find((r) => isCompletedChatRoom(r)) || samePair[0];
+  }
+
+  // New / in-progress order: reuse only a non-completed room for this pair
+  return samePair.find((r) => !isCompletedChatRoom(r)) || null;
 };
 
 /** Ensure room for order; create if missing. Optional creator marks other party unread + notification */

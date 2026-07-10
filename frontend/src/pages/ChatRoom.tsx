@@ -454,7 +454,7 @@ export const ChatRoom: React.FC = () => {
     };
   }, [roomId]);
 
-  // Resolve order: query param -> room.order id -> pair+product
+  // Resolve order: query param -> room.order id -> active pair+product order (never orphan COMPLETE onto fresh chat)
   const currentOrder = (() => {
     if (orderIdFromQuery) {
       const o = getOrderById(orderIdFromQuery);
@@ -467,25 +467,33 @@ export const ChatRoom: React.FC = () => {
     if (room?.order) return room.order;
     if (!room?.product?.id) return null;
     const myOrders = getOrders().filter((o) => o.product.id === room.product!.id);
+    const isActiveOrder = (o: import('@/types').Order) =>
+      o.status !== ORDER_STATUS_VALUE.COMPLETE &&
+      o.status !== ORDER_STATUS_VALUE.DISPUTE &&
+      !(o.buyerCompleted && o.sellerCompleted);
+
     if (room.buyerId && room.sellerId) {
       const forPair = myOrders.filter(
         (o) => o.buyer.id === room.buyerId && o.seller.id === room.sellerId
       );
-      const withMeetup = forPair.find(
-        (o) =>
-          o.status === ORDER_STATUS_VALUE.MEETUP_SET ||
-          o.status === ORDER_STATUS_VALUE.RECEIVED ||
-          o.status === ORDER_STATUS_VALUE.COMPLETE
-      );
-      if (withMeetup) return withMeetup;
-      if (forPair.length > 0) return forPair.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      const activeForPair = forPair.filter(isActiveOrder);
+      if (activeForPair.length > 0) {
+        const withMeetup = activeForPair.find(
+          (o) =>
+            o.status === ORDER_STATUS_VALUE.MEETUP_SET ||
+            o.status === ORDER_STATUS_VALUE.RECEIVED
+        );
+        if (withMeetup) return withMeetup;
+        return activeForPair.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+      }
+      return null;
     }
-    const active = myOrders.filter(
-      (o) => o.status !== ORDER_STATUS_VALUE.COMPLETE && o.status !== ORDER_STATUS_VALUE.DISPUTE
-    );
-    const list = active.length > 0 ? active : myOrders;
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return list[0] ?? null;
+    const active = myOrders.filter(isActiveOrder);
+    if (active.length === 0) return null;
+    active.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return active[0] ?? null;
   })();
 
   const userId = getCurrentUserId();
