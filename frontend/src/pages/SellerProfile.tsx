@@ -1,15 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { ReportModal } from '@/components/common/ReportModal';
 import { KYCBadge } from '@/components/common/KYCBadge';
+import { Badge } from '@/components/common/Badge';
 import { ListingCard } from '@/components/common/ListingCard';
-import { User, Product, PRODUCT_STATUS_VALUE } from '@/types';
-import { getShareCountByUserId } from '@/utils/orderStorage';
-import { getDisputeCountByUserId } from '@/utils/disputeStorage';
+import { PostCard } from '@/components/common/PostCard';
+import { User, Product, PRODUCT_STATUS_VALUE, ProductStatus, Post, PostCategory, DisputeStatus, POST_CATEGORY_VALUE } from '@/types';
+import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
-import { profileAvatarObjectClass, resolveDisplayNickname } from '@/utils/profileStorage';
+import { UserAvatarImage } from '@/components/common/UserAvatarImage';
+import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
+import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
+import { mapPostFromDB } from '@/utils/dbSync';
 import { API_BASE } from '@/utils/apiConfig';
+import {
+  DISPUTE_LIST_RECEIVED,
+  DISPUTE_LIST_SENT,
+  DISPUTE_STATUS_ACTIVE,
+  DISPUTE_STATUS_RESOLVED,
+  labelPostCategory,
+  isFreeShareListing,
+  labelFreeShareMenu,
+  labelProductStatus,
+} from '@/locale/enUI';
 
 interface ReviewFromDB {
   id: string;
@@ -32,23 +45,127 @@ interface ReviewFromDB {
   };
 }
 
-type TabKey = 'listings' | 'reviews' | 'about';
+interface PublicDispute {
+  id: string;
+  order_id: string;
+  product_title: string;
+  product_image: string;
+  proposed_price: number;
+  reason: string;
+  status: DisputeStatus;
+  created_at: string;
+  resolved_at?: string;
+  opened_by_user_id?: string;
+}
+
+type TabKey = 'listings' | 'posts' | 'reviews' | 'disputes';
+type DisputeDirectionFilter = 'all' | 'sent' | 'received';
+type PostCategoryFilter = PostCategory | 'all';
+type ListingFilter = 'all' | 'free' | ProductStatus;
+
+const POST_CATEGORY_TABS: PostCategoryFilter[] = [
+  'all',
+  POST_CATEGORY_VALUE.QUESTION,
+  POST_CATEGORY_VALUE.INFO,
+  POST_CATEGORY_VALUE.LOOKING_FOR,
+  POST_CATEGORY_VALUE.DISPUTE,
+  POST_CATEGORY_VALUE.SWAP,
+];
+
+function postCategoryTabLabel(category: PostCategoryFilter): string {
+  if (category === 'all') return 'All';
+  return labelPostCategory(category);
+}
 
 const TAB_LABELS: Record<TabKey, string> = {
   listings: 'Listings',
+  posts: 'Posts',
   reviews: 'Reviews',
-  about: 'About',
+  disputes: 'Disputes',
 };
+
+const TAB_ORDER: TabKey[] = ['listings', 'posts', 'reviews', 'disputes'];
+
+function disputeStatusLabel(status: DisputeStatus): string {
+  return status === 'RESOLVED' ? DISPUTE_STATUS_RESOLVED : DISPUTE_STATUS_ACTIVE;
+}
+
+function disputeStatusVariant(status: DisputeStatus): 'warning' | 'success' {
+  return status === 'RESOLVED' ? 'success' : 'warning';
+}
+
+function reviewCountLabel(count: number): string {
+  return count === 1 ? '1 review' : `${count} reviews`;
+}
+
+function buildStarDistribution(reviews: ReviewFromDB[]): Record<1 | 2 | 3 | 4 | 5, number> {
+  const counts: Record<1 | 2 | 3 | 4 | 5, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  for (const review of reviews) {
+    const star = Math.min(5, Math.max(1, Math.round(review.rating))) as 1 | 2 | 3 | 4 | 5;
+    counts[star] += 1;
+  }
+  return counts;
+}
+
+function ReviewSummary({
+  avgRating,
+  reviews,
+}: {
+  avgRating: number;
+  reviews: ReviewFromDB[];
+}) {
+  const distribution = buildStarDistribution(reviews);
+  const total = reviews.length;
+
+  return (
+    <div className="mb-5 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="flex items-stretch gap-0">
+        <div className="flex flex-col items-center justify-center shrink-0 w-[88px] pr-4 border-r border-gray-100">
+          <span className="text-4xl font-bold text-gray-900 tracking-tight leading-none">
+            {avgRating.toFixed(1)}
+          </span>
+          <p className="mt-2.5 text-xs font-medium text-gray-500">{reviewCountLabel(total)}</p>
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-2 pl-4">
+          {([5, 4, 3, 2, 1] as const).map((star) => {
+            const count = distribution[star];
+            const widthPct = total > 0 ? (count / total) * 100 : 0;
+            const barWidth = count > 0 ? Math.max(widthPct, 6) : 0;
+            return (
+              <div key={star} className="flex items-center gap-2.5">
+                <span className="w-3 text-xs font-semibold text-gray-500 tabular-nums text-right">
+                  {star}
+                </span>
+                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-400 transition-all duration-300"
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+                <span className="w-5 text-[11px] text-gray-400 tabular-nums text-right">
+                  {count}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export const SellerProfile: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState<TabKey>('listings');
   const [seller, setSeller] = useState<User | null>(null);
-  const [showSellerMenu, setShowSellerMenu] = useState(false);
-  const [showReport, setShowReport] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [listingFilter, setListingFilter] = useState<ListingFilter>('all');
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [postCategoryFilter, setPostCategoryFilter] = useState<PostCategoryFilter>('all');
   const [reviews, setReviews] = useState<ReviewFromDB[]>([]);
+  const [disputes, setDisputes] = useState<PublicDispute[]>([]);
+  const [disputeFilter, setDisputeFilter] = useState<DisputeDirectionFilter>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,10 +174,12 @@ export const SellerProfile: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [userRes, productsRes, reviewsRes] = await Promise.all([
+        const [userRes, productsRes, reviewsRes, postsRes, disputesRes] = await Promise.all([
           fetch(`${API_BASE}/api/users/${id}`),
           fetch(`${API_BASE}/api/products?seller_id=${id}`),
           fetch(`${API_BASE}/api/reviews?reviewee_id=${id}`),
+          fetch(`${API_BASE}/api/posts?author_id=${encodeURIComponent(id)}`),
+          fetch(`${API_BASE}/api/users/${id}/disputes`),
         ]);
 
         if (userRes.ok) {
@@ -77,6 +196,8 @@ export const SellerProfile: React.FC = () => {
             activityRegion: u.activity_region,
             sellerType: u.seller_type,
           });
+        } else {
+          setSeller(null);
         }
 
         if (productsRes.ok) {
@@ -108,11 +229,27 @@ export const SellerProfile: React.FC = () => {
               liked: false,
             }))
           );
+        } else {
+          setProducts([]);
         }
 
         if (reviewsRes.ok) {
-          const revs = await reviewsRes.json();
-          setReviews(revs as ReviewFromDB[]);
+          setReviews((await reviewsRes.json()) as ReviewFromDB[]);
+        } else {
+          setReviews([]);
+        }
+
+        if (postsRes.ok) {
+          const rows = (await postsRes.json()) as Record<string, unknown>[];
+          setPosts(rows.map((row) => mapPostFromDB(row)));
+        } else {
+          setPosts([]);
+        }
+
+        if (disputesRes.ok) {
+          setDisputes((await disputesRes.json()) as PublicDispute[]);
+        } else {
+          setDisputes([]);
         }
       } catch (e) {
         console.error('[SellerProfile] load error:', e);
@@ -149,10 +286,41 @@ export const SellerProfile: React.FC = () => {
     );
   }
 
-  const headerImage = seller.profileImage || '/default-avatar.jpg';
+  const headerImage = resolveProfileAvatarUrl(seller.id, seller.profileImage);
   const avgRating = reviews.length > 0
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : seller.rating || 0;
+
+  const filteredDisputes = disputes.filter((dispute) => {
+    if (disputeFilter === 'all') return true;
+    const isSent = dispute.opened_by_user_id === id;
+    return disputeFilter === 'sent' ? isSent : !isSent;
+  });
+
+  const filteredPosts =
+    postCategoryFilter === 'all'
+      ? posts
+      : posts.filter((post) => post.category === postCategoryFilter);
+
+  const filteredProducts = (() => {
+    if (listingFilter === 'all') return products;
+    if (listingFilter === 'free') return products.filter((p) => isFreeShareListing(p));
+    return products.filter((p) => p.status === listingFilter);
+  })();
+
+  const listingFilterTabs: { value: ListingFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'free', label: labelFreeShareMenu() },
+    { value: PRODUCT_STATUS_VALUE.FOR_SALE, label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
+    { value: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
+    { value: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatus(PRODUCT_STATUS_VALUE.SOLD) },
+  ];
+
+  const disputeFilterOptions: { value: DisputeDirectionFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'sent', label: DISPUTE_LIST_SENT },
+    { value: 'received', label: DISPUTE_LIST_RECEIVED },
+  ];
 
   return (
     <div className="min-h-screen bg-white pb-6">
@@ -164,80 +332,53 @@ export const SellerProfile: React.FC = () => {
             </svg>
           </button>
         }
-        rightContent={
-          <div className="flex gap-2 relative">
-            <button
-              onClick={() => navigate(`/chat?seller=${id}`)}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => setShowSellerMenu((v) => !v)}
-              className="p-2 text-gray-600"
-              aria-label="More options"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
-            {showSellerMenu && (
-              <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
-                <button
-                  onClick={() => { setShowSellerMenu(false); setShowReport(true); }}
-                  className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 rounded-lg"
-                >
-                  Report
-                </button>
-              </div>
-            )}
-          </div>
-        }
       />
-      {seller && id && (
-        <ReportModal
-          open={showReport}
-          onClose={() => setShowReport(false)}
-          targetType="user"
-          targetId={id}
-          targetLabel={seller.nickname}
-        />
-      )}
 
-      {/* Header */}
-      <div className="px-4 py-6 border-b border-gray-200">
-        <div className="flex items-start gap-4">
-          <AvatarWithBadgeOverlay userId={id} sizePx={80}>
-            <img
+      <div className="bg-white px-5 py-5 border-b border-gray-200">
+        <div className="flex items-center gap-4">
+          <AvatarWithBadgeOverlay userId={id} sizePx={64}>
+            <UserAvatarImage
               src={headerImage}
               alt={seller.nickname}
-              className={profileAvatarObjectClass(headerImage)}
+              iconClassName="w-9 h-9 text-gray-500"
             />
           </AvatarWithBadgeOverlay>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-xl font-bold text-gray-900">{resolveDisplayNickname(seller.id, seller.nickname)}</h1>
-              <KYCBadge status={seller.kycStatus} userId={seller.id} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-lg font-bold text-gray-900 truncate">
+                {resolveDisplayNickname(seller.id, seller.nickname)}
+              </h1>
             </div>
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <span className="text-sm text-gray-600">
-                ⭐ {avgRating.toFixed(1)} · {seller.tradeCount} trades · {id ? getShareCountByUserId(id) : 0} shares
-                {id && getDisputeCountByUserId(id) > 0 && (
-                  <> · {getDisputeCountByUserId(id)} disputes</>
-                )}
-              </span>
-            </div>
+            <ProfileStatsRow
+              variant="ownProfile"
+              rating={avgRating}
+              tradeCount={id ? getPaidTradeCountByUserId(id) : seller.tradeCount}
+              shareCount={id ? getShareCountByUserId(id) : 0}
+              disputeCount={disputes.length}
+              showDisputes
+              ratingAccessory={<KYCBadge status={seller.kycStatus} userId={seller.id} />}
+            />
           </div>
         </div>
+        {(seller.bio || seller.activityRegion) && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+            {seller.bio && (
+              <p className="text-sm text-gray-600 leading-relaxed">{seller.bio}</p>
+            )}
+            {seller.activityRegion && (
+              <p className="text-xs text-gray-500">{seller.activityRegion}</p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        {(['listings', 'reviews', 'about'] as TabKey[]).map((tab) => (
+      <div className="flex border-b border-gray-200 overflow-x-auto">
+        {TAB_ORDER.map((tab) => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-medium ${
+            className={`flex-shrink-0 px-4 py-3 text-sm font-medium whitespace-nowrap ${
               activeTab === tab
                 ? 'border-b-2'
                 : 'text-gray-500'
@@ -249,45 +390,103 @@ export const SellerProfile: React.FC = () => {
         ))}
       </div>
 
-      {/* Tab Content */}
       <div className="px-4 py-4">
         {activeTab === 'listings' && (
           <div>
             {products.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                No active listings.
+                No listings.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {products.map((product) => (
-                  <ListingCard
-                    key={product.id}
-                    product={product}
-                    layout="grid"
-                    onClick={() => navigate(`/product/${product.id}`)}
-                  />
-                ))}
+              <>
+                <div className="flex gap-2 mb-4 overflow-x-auto -mx-1 px-1">
+                  {listingFilterTabs.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setListingFilter(value)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+                        listingFilter === value
+                          ? 'text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                      style={listingFilter === value ? { backgroundColor: '#00A8A3' } : undefined}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    No listings in this category.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {filteredProducts.map((product) => (
+                      <ListingCard
+                        key={product.id}
+                        product={product}
+                        layout="grid"
+                        onClick={() => navigate(`/product/${product.id}`)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'posts' && (
+          <div>
+            {posts.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                No posts yet.
               </div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-4 overflow-x-auto -mx-1 px-1">
+                  {POST_CATEGORY_TABS.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => setPostCategoryFilter(category)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+                        postCategoryFilter === category
+                          ? 'text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                      style={postCategoryFilter === category ? { backgroundColor: '#00A8A3' } : undefined}
+                    >
+                      {postCategoryTabLabel(category)}
+                    </button>
+                  ))}
+                </div>
+                {filteredPosts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    No posts in this category.
+                  </div>
+                ) : (
+                  <div className="-mx-4">
+                    {filteredPosts.map((post) => (
+                      <PostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
         {activeTab === 'reviews' && (
           <div>
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-2xl font-bold text-gray-900">
-                  {avgRating.toFixed(1)}
-                </span>
-                <span className="text-lg text-gray-500">/ 5.0</span>
-              </div>
-              <p className="text-sm text-gray-500">{reviews.length} reviews</p>
-            </div>
             {reviews.length === 0 ? (
               <div className="text-center py-8 text-gray-400">No reviews yet.</div>
             ) : (
-              <div className="space-y-4">
-                {reviews.map((review) => (
+              <>
+                <ReviewSummary avgRating={avgRating} reviews={reviews} />
+                <div className="space-y-4">
+                  {reviews.map((review) => (
                   <div key={review.id} className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-sm font-medium text-gray-900">
@@ -328,24 +527,89 @@ export const SellerProfile: React.FC = () => {
                     )}
                   </div>
                 ))}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {activeTab === 'about' && (
-          <div className="space-y-4">
-            {seller.bio && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Bio</h3>
-                <p className="text-sm text-gray-600">{seller.bio}</p>
+        {activeTab === 'disputes' && (
+          <div>
+            {disputes.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                No disputes.
               </div>
-            )}
-            {seller.activityRegion && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Area</h3>
-                <p className="text-sm text-gray-600">{seller.activityRegion}</p>
-              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-4 overflow-x-auto">
+                  {disputeFilterOptions.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setDisputeFilter(value)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+                        disputeFilter === value
+                          ? 'text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                      style={disputeFilter === value ? { backgroundColor: '#00A8A3' } : undefined}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {filteredDisputes.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    No disputes in this category.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredDisputes.map((dispute) => {
+                  const isSent = dispute.opened_by_user_id === id;
+                  const directionLabel = isSent ? DISPUTE_LIST_SENT : DISPUTE_LIST_RECEIVED;
+                  return (
+                    <div
+                      key={dispute.id}
+                      className="p-4 border border-gray-200 rounded-lg"
+                    >
+                      <div className="flex gap-3 mb-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
+                          <img
+                            src={dispute.product_image || '/placeholder.jpg'}
+                            alt={dispute.product_title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <h3 className="text-sm font-medium text-gray-900 truncate">
+                              {dispute.product_title}
+                            </h3>
+                            <Badge variant={disputeStatusVariant(dispute.status)}>
+                              {disputeStatusLabel(dispute.status)}
+                            </Badge>
+                          </div>
+                          <p className="text-base font-bold text-gray-900 mb-1">
+                            {Number(dispute.proposed_price).toLocaleString()} Pi
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            Reason: {dispute.reason}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pt-3 border-t border-gray-100 text-xs text-gray-500">
+                        <span className={isSent ? 'text-gray-700 font-medium' : 'text-amber-700 font-medium'}>
+                          {directionLabel}
+                        </span>
+                        {' · '}
+                        {new Date(dispute.created_at).toLocaleDateString('en-US')}
+                      </div>
+                    </div>
+                  );
+                })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

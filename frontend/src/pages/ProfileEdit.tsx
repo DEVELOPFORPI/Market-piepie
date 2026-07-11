@@ -15,12 +15,13 @@ import {
   ProfilePersonSilhouetteIcon,
 } from '@/components/common/profileAvatarPlaceholder';
 import { getRegion } from '@/utils/regionStorage';
-import { getCurrentUserId } from '@/utils/authStorage';
-import { saveMyProfileToDB } from '@/utils/dbSync';
+import { getCurrentUserId, isGuestUser } from '@/utils/authStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
-import { getShareCountByUserId } from '@/utils/orderStorage';
+import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderStorage';
 import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
+import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
+import { KYCBadge } from '@/components/common/KYCBadge';
 
 export const ProfileEdit: React.FC = () => {
   const myUser = getMyUser();
@@ -95,16 +96,11 @@ export const ProfileEdit: React.FC = () => {
         bio,
         activityRegion,
       };
-      // DB가 원본: 서버 저장 성공 후에만 완료 처리
-      const uid = getCurrentUserId();
-      if (uid && !uid.startsWith('guest_')) {
-        const ok = await saveMyProfileToDB(uid, profileData);
-        if (!ok) {
-          alert('Could not save profile to server. Check your connection and try again.');
-          return;
-        }
+      const ok = await saveProfile(profileData);
+      if (!ok) {
+        alert('Could not save profile to server. Check your connection and try again.');
+        return;
       }
-      saveProfile(profileData);
       navigate('/my');
     })();
   };
@@ -181,27 +177,22 @@ export const ProfileEdit: React.FC = () => {
           </div>
         </div>
 
-        {/* Read-only Info Rows */}
-        <div className="space-y-0">
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
-            <span className="text-sm text-gray-700">KYC</span>
-            <div className="flex items-center gap-1.5">
-              <img src="/check_1.svg" alt="Verified" className="w-3 h-3" />
-              <span className="text-sm font-medium" style={{ color: '#00A8A3' }}>Verified</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
-            <span className="text-sm text-gray-700">Rating</span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <img src="/star.svg" alt="Rating" className="w-4 h-4" />
-              <span className="text-sm font-medium text-gray-900">
-                {initialData.rating.toFixed(1)} · {initialData.tradeCount} trades · {getCurrentUserId() ? getShareCountByUserId(getCurrentUserId()!) : 0} shares
-                {getCurrentUserId() && getDisputeCountByUserId(getCurrentUserId()!) > 0 && (
-                  <> · {getDisputeCountByUserId(getCurrentUserId()!)} disputes</>
-                )}
-              </span>
-            </div>
-          </div>
+        {/* Read-only stats — same layout as My profile */}
+        <div className="border-t border-b border-gray-100 py-4">
+          <ProfileStatsRow
+            variant="ownProfile"
+            centered
+            rating={initialData.rating}
+            tradeCount={getCurrentUserId() ? getPaidTradeCountByUserId(getCurrentUserId()!) : initialData.tradeCount}
+            shareCount={getCurrentUserId() ? getShareCountByUserId(getCurrentUserId()!) : 0}
+            disputeCount={getCurrentUserId() ? getDisputeCountByUserId(getCurrentUserId()!) : 0}
+            showDisputes
+            ratingAccessory={
+              !isGuestUser() ? (
+                <KYCBadge status={initialData.kycStatus} userId={getCurrentUserId() ?? undefined} />
+              ) : undefined
+            }
+          />
         </div>
 
         {/* Editable Fields */}

@@ -31,6 +31,10 @@ import {
   CHAT_MSG_SELLER_MEETUP_STARTED,
   CHAT_BANNER_TRADE_COMPLETE,
   CHAT_BANNER_LISTING_SOLD,
+  CHAT_BANNER_YOUR_DISPUTE,
+  CHAT_BANNER_THEIR_DISPUTE,
+  CHAT_BANNER_DISPUTE_GENERIC,
+  CHAT_BANNER_DISPUTE_RESOLVED,
   CHAT_LEAVE_ROOM,
   CHAT_LEAVE_ROOM_CONFIRM,
   CHAT_ROOM_ENDED,
@@ -41,6 +45,7 @@ import {
   isMeetupCanceledMessage,
   NOTIFY_OFFER_DECLINED,
 } from '@/locale/enUI';
+import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 
 const SHIPPING_RECEIVE_OK = new Set<OrderStatus>([
   ORDER_STATUS_VALUE.SHIPPED,
@@ -83,6 +88,23 @@ function findFirstUnreadIndex(
     return msgs.findIndex((m) => m.senderId !== myId);
   }
   return msgs.length > 0 ? 0 : -1;
+}
+
+/** Only the newest pending price-offer card should show Accept / Decline */
+function getLatestPendingPriceOfferMessageId(msgs: ChatMessage[]): string | null {
+  let latestId: string | null = null;
+  let latestTs = 0;
+  for (const m of msgs) {
+    if (m.type !== 'price_offer' || !m.orderId) continue;
+    const order = getOrderById(m.orderId);
+    if (!order || order.status !== ORDER_STATUS_VALUE.PENDING_OFFER) continue;
+    const ts = new Date(m.timestamp).getTime();
+    if (ts >= latestTs) {
+      latestTs = ts;
+      latestId = m.id;
+    }
+  }
+  return latestId;
 }
 
 function resolveMeetupBannerInfo(
@@ -180,6 +202,28 @@ function ChatActionChipRow({ chips }: { chips: ChatChipAction[] }) {
   );
 }
 
+function buildOrderDisputeBannerRows(order: Order): { label: string; to: string }[] {
+  const myId = getCurrentUserId();
+  if (!myId) return [];
+  const open = getDisputesByOrderId(order.id).filter((d) => d.status !== 'RESOLVED');
+  if (open.length === 0) {
+    return [{ label: CHAT_BANNER_DISPUTE_GENERIC, to: `/dispute/${order.id}` }];
+  }
+  const myDispute = open.find((d) => d.openedByUserId === myId);
+  const theirDispute = open.find((d) => d.openedByUserId && d.openedByUserId !== myId);
+  const rows: { label: string; to: string }[] = [];
+  if (myDispute) {
+    rows.push({ label: CHAT_BANNER_YOUR_DISPUTE, to: `/dispute/${order.id}` });
+  }
+  if (theirDispute) {
+    rows.push({ label: CHAT_BANNER_THEIR_DISPUTE, to: `/dispute/${order.id}?view=other` });
+  }
+  if (rows.length === 0) {
+    rows.push({ label: CHAT_BANNER_DISPUTE_GENERIC, to: `/dispute/${order.id}` });
+  }
+  return rows;
+}
+
 export const ChatRoom: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -196,6 +240,8 @@ export const ChatRoom: React.FC = () => {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
+  useDismissOnClickOutside(chatMenuRef, showMenu, () => setShowMenu(false));
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
@@ -366,6 +412,7 @@ export const ChatRoom: React.FC = () => {
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('chatRoomsChanged', handleSameTab);
     window.addEventListener('ordersChanged', handleOrdersChanged);
+    window.addEventListener('disputesChanged', handleOrdersChanged);
     window.addEventListener('productRegistered', handleProductChange);
 
 
@@ -452,6 +499,7 @@ export const ChatRoom: React.FC = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('chatRoomsChanged', handleSameTab);
       window.removeEventListener('ordersChanged', handleOrdersChanged);
+      window.removeEventListener('disputesChanged', handleOrdersChanged);
       window.removeEventListener('productRegistered', handleProductChange);
       window.removeEventListener('productsChanged', handleProductChange);
     };
@@ -511,6 +559,7 @@ export const ChatRoom: React.FC = () => {
 
   const displayMessages = messages;
   void ordersRevision;
+  const latestPendingPriceOfferMessageId = getLatestPendingPriceOfferMessageId(displayMessages);
   const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
   const meetupCanceled = isMeetupCanceledState(currentOrder, displayMessages);
   const listingProduct = room?.product?.id ? getProductById(room.product.id) : null;
@@ -924,28 +973,42 @@ export const ChatRoom: React.FC = () => {
           
           {/* Avatar, nickname, KYC */}
           <div className="flex-1 flex items-center justify-center gap-2 min-w-0">
-            {room &&
-              (() => {
-                const other = getOtherUser(room);
-                const avatarUrl = resolveProfileAvatarUrl(other.id, other.profileImage);
-                return (
-                  <AvatarWithBadgeOverlay userId={other.id} sizePx={40}>
-                    <UserAvatarImage src={avatarUrl} />
-                  </AvatarWithBadgeOverlay>
-                );
-              })()}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h1 className="text-lg font-bold text-gray-900 truncate">
-                {room ? resolveDisplayNickname(getOtherUser(room).id, getOtherUser(room).nickname) : 'Chat'}
-              </h1>
-              {room && getOtherUser(room).kycStatus === 'verified' && (
-                <img src="/check_1.svg" alt="Verified" className="w-3.5 h-3.5 flex-shrink-0" />
-              )}
-            </div>
+            {room && (() => {
+              const other = getOtherUser(room);
+              const avatarUrl = resolveProfileAvatarUrl(other.id, other.profileImage);
+              const displayName = resolveDisplayNickname(other.id, other.nickname);
+              const goToOtherProfile = () => navigate(`/seller/${other.id}`);
+              return (
+                <>
+                  <button
+                    type="button"
+                    onClick={goToOtherProfile}
+                    className="flex-shrink-0 rounded-full"
+                    aria-label={`View ${displayName}'s profile`}
+                  >
+                    <AvatarWithBadgeOverlay userId={other.id} sizePx={40}>
+                      <UserAvatarImage src={avatarUrl} />
+                    </AvatarWithBadgeOverlay>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToOtherProfile}
+                    className="flex items-center gap-1.5 min-w-0"
+                  >
+                    <h1 className="text-lg font-bold text-gray-900 truncate hover:underline">
+                      {displayName}
+                    </h1>
+                    {other.kycStatus === 'verified' && (
+                      <img src="/check_1.svg" alt="Verified" className="w-3.5 h-3.5 flex-shrink-0" />
+                    )}
+                  </button>
+                </>
+              );
+            })()}
           </div>
           
           {/* Menu Button */}
-          <div className="relative">
+          <div ref={chatMenuRef} className="relative">
             <button
               onClick={() => setShowMenu((v) => !v)}
               className="p-2 -mr-2 text-gray-600"
@@ -985,7 +1048,7 @@ export const ChatRoom: React.FC = () => {
                   <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="text-sm font-medium text-green-800 flex-1">Dispute resolved for this item.</p>
+                  <p className="text-sm font-medium text-green-800 flex-1">{CHAT_BANNER_DISPUTE_RESOLVED}</p>
                   <button
                     onClick={() => navigate(`/dispute/${currentOrder.id}`)}
                     className="text-xs font-medium text-green-600 underline hover:text-green-700 whitespace-nowrap"
@@ -996,8 +1059,8 @@ export const ChatRoom: React.FC = () => {
               </div>
             );
           }
-          return (
-            <div className="bg-red-50 border-t border-red-200 px-4 py-2.5">
+          return buildOrderDisputeBannerRows(currentOrder).map((row) => (
+            <div key={row.to} className="bg-red-50 border-t border-red-200 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <svg
                   className="w-4 h-4 text-red-600 flex-shrink-0"
@@ -1012,18 +1075,16 @@ export const ChatRoom: React.FC = () => {
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                   />
                 </svg>
-                <p className="text-sm font-medium text-red-800 flex-1">
-                  This item is in a dispute
-                </p>
+                <p className="text-sm font-medium text-red-800 flex-1">{row.label}</p>
                 <button
-                  onClick={() => navigate(`/dispute/${currentOrder.id}`)}
+                  onClick={() => navigate(row.to)}
                   className="text-xs font-medium text-red-600 underline hover:text-red-700 whitespace-nowrap"
                 >
                   Details
                 </button>
               </div>
             </div>
-          );
+          ));
         })()}
 
         {isTradeCompleteForThisChat && (
@@ -1049,7 +1110,10 @@ export const ChatRoom: React.FC = () => {
           </div>
         )}
 
-        {meetupBannerInfo && !isTradeCompleteForThisChat && !isSoldToOtherParty && (
+        {meetupBannerInfo
+          && !isTradeCompleteForThisChat
+          && !isSoldToOtherParty
+          && currentOrder?.status !== ORDER_STATUS_VALUE.DISPUTE && (
           <div className="bg-teal-50 border-t border-teal-200 px-4 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
@@ -1250,7 +1314,11 @@ export const ChatRoom: React.FC = () => {
           if (msg.type === 'price_offer') {
             const offerOrder = msg.orderId ? getOrderById(msg.orderId) : null;
             const isSeller = room && getCurrentUserId() === room.sellerId;
-            const showActions = isSeller && offerOrder && offerOrder.status === ORDER_STATUS_VALUE.PENDING_OFFER;
+            const showActions =
+              isSeller
+              && offerOrder
+              && offerOrder.status === ORDER_STATUS_VALUE.PENDING_OFFER
+              && msg.id === latestPendingPriceOfferMessageId;
             // Offer from buyer: align to buyer side
             const isOfferFromMe = getCurrentUserId() === room?.buyerId;
             const d = new Date(msg.timestamp);

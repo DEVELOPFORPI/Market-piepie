@@ -147,7 +147,9 @@ export const saveProfile = async (profile: StoredProfile): Promise<boolean> => {
   });
   if (!ok) return false;
   const key = userKey(BASE_KEY);
-  localStorage.setItem(key, JSON.stringify(profile));
+  const merged = { ...getProfile(), ...profile };
+  localStorage.setItem(key, JSON.stringify(merged));
+  localStorage.setItem(`${BASE_KEY}_${userId}`, JSON.stringify(merged));
   window.dispatchEvent(new Event('profileSaved'));
   window.dispatchEvent(new Event('userProfilesChanged'));
   return true;
@@ -241,15 +243,25 @@ const getReviewStats = () => {
   }
 };
 
-/** Completed trade count */
+/** Completed paid-trade count (excludes free share) */
 const getTradeCount = () => {
   try {
     const raw = getItem('all_orders');
-    const orders: { status: string; buyer?: { id: string }; seller?: { id: string } }[] = raw ? JSON.parse(raw) : [];
+    const orders: {
+      status: string;
+      proposedPrice?: number;
+      buyer?: { id: string };
+      seller?: { id: string };
+      product?: { isFreeShare?: boolean; price?: number };
+    }[] = raw ? JSON.parse(raw) : [];
     const userId = getCurrentUserId();
-    return orders.filter(
-      (o) => o.status === ORDER_STATUS_VALUE.COMPLETE && (o.buyer?.id === userId || o.seller?.id === userId)
-    ).length;
+    if (!userId) return 0;
+    return orders.filter((o) => {
+      if (o.status !== ORDER_STATUS_VALUE.COMPLETE) return false;
+      const isParticipant = o.buyer?.id === userId || o.seller?.id === userId;
+      const isShare = Boolean(o.product?.isFreeShare || o.proposedPrice === 0 || o.product?.price === 0);
+      return isParticipant && !isShare;
+    }).length;
   } catch {
     return 0;
   }

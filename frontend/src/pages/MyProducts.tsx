@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
-import { labelProductStatus } from '@/locale/enUI';
+import { isFreeShareListing, labelFreeShareMenu, labelProductStatus } from '@/locale/enUI';
 import { getMyProducts, deleteProduct } from '@/utils/productStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 
-type FilterStatus = 'all' | ProductStatus;
+type FilterStatus = 'all' | 'free' | ProductStatus;
 
 export const MyProducts: React.FC = () => {
   const navigate = useNavigate();
@@ -30,12 +30,15 @@ export const MyProducts: React.FC = () => {
     }
   };
 
-  const filteredProducts = filterStatus === 'all'
-    ? products
-    : products.filter((p) => p.status === filterStatus);
+  const filteredProducts = (() => {
+    if (filterStatus === 'all') return products;
+    if (filterStatus === 'free') return products.filter((p) => isFreeShareListing(p));
+    return products.filter((p) => p.status === filterStatus);
+  })();
 
   const filterTabs: { value: FilterStatus; label: string }[] = [
     { value: 'all', label: 'All' },
+    { value: 'free', label: labelFreeShareMenu() },
     { value: PRODUCT_STATUS_VALUE.FOR_SALE, label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
     { value: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
     { value: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatus(PRODUCT_STATUS_VALUE.SOLD) },

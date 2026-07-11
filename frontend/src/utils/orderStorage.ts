@@ -88,12 +88,25 @@ export const getOrders = (): Order[] => {
   );
 };
 
-/** Completed trade count for a user (buyer or seller) */
+const isFreeShareOrder = (order: { product?: { isFreeShare?: boolean; price?: number }; proposedPrice?: number }) =>
+  Boolean(order.product?.isFreeShare || order.proposedPrice === 0 || order.product?.price === 0);
+
+/** Completed trade count for a user (buyer or seller), all order types */
 export const getCompletedTradeCountForUser = (userId: string): number => {
   if (!userId) return 0;
   return getAllOrders().filter(
     (o) => o.status === ORDER_STATUS_VALUE.COMPLETE && (o.buyer?.id === userId || o.seller?.id === userId)
   ).length;
+};
+
+/** Completed paid-trade count (excludes free share) */
+export const getPaidTradeCountByUserId = (userId: string): number => {
+  if (!userId) return 0;
+  return getAllOrders().filter((o) => {
+    if (o.status !== ORDER_STATUS_VALUE.COMPLETE) return false;
+    const isParticipant = o.buyer?.id === userId || o.seller?.id === userId;
+    return isParticipant && !isFreeShareOrder(o);
+  }).length;
 };
 
 /** Whether product has any in-progress order (not completed) */
@@ -198,8 +211,7 @@ export const getShareCountByUserId = (userId: string): number => {
   return getAllOrders().filter((o) => {
     if (o.status !== ORDER_STATUS_VALUE.COMPLETE) return false;
     const isParticipant = o.buyer?.id === userId || o.seller?.id === userId;
-    const isShare = Boolean(o.product?.isFreeShare);
-    return isParticipant && isShare;
+    return isParticipant && isFreeShareOrder(o);
   }).length;
 };
 

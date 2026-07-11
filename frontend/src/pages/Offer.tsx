@@ -11,7 +11,6 @@ export const Offer: React.FC = () => {
   const { productId } = useParams();
   const [product, setProduct] = useState<Product | null>(null);
   const [price, setPrice] = useState('');
-  const [memo, setMemo] = useState('');
 
   useEffect(() => {
     const allProducts = getAllProducts();
@@ -34,7 +33,6 @@ export const Offer: React.FC = () => {
       product,
       proposedPrice: Number(price),
       tradeMethod: TRADE_METHOD_VALUE.IN_PERSON,
-      memo,
     });
     if (!order) {
       alert('Could not send offer. Check your connection and try again.');
@@ -112,18 +110,6 @@ export const Offer: React.FC = () => {
               )}
             </p>
           )}
-        </div>
-
-        {/* Memo */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Note (optional)</label>
-          <textarea
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="Anything else to add"
-            rows={3}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3] resize-none"
-          />
         </div>
 
         {/* Policy Notice */}

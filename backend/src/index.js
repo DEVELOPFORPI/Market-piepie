@@ -1195,6 +1195,25 @@ app.get("/api/users/:id", requireDb, async (req, res) => {
   }
 });
 
+/** Public read-only disputes for a user profile (trust transparency) */
+app.get("/api/users/:id/disputes", requireDb, async (req, res) => {
+  const userId = req.params.id;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, order_id, product_title, product_image, proposed_price, trade_method,
+              buyer_id, seller_id, opened_by_user_id, reason, status, created_at, resolved_at
+       FROM disputes
+       WHERE buyer_id = $1 OR seller_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [userId],
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/users", requireDb, async (req, res) => {
   const {
     id,

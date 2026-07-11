@@ -406,7 +406,7 @@ export async function syncPostDeleteToDB(postId: string): Promise<boolean> {
 
 // ─── DB → Post 타입 변환 ──────────────────────────────────
 
-function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<string>): Post {
+export function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<string>): Post {
   const author = (row.author as Record<string, unknown>) || {};
   cacheEmbeddedUser(author.id ? author : null);
   const attachedRaw = row.attached_product as Record<string, unknown> | undefined;

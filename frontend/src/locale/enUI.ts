@@ -59,6 +59,18 @@ export function labelCommentReply(): string {
   return pick('Reply', '답글달기');
 }
 
+export function labelProfileStatTrades(): string {
+  return pick('Trades', '거래');
+}
+
+export function labelProfileStatShares(): string {
+  return pick('Shares', '나눔');
+}
+
+export function labelProfileStatDisputes(): string {
+  return pick('Disputes', '분쟁');
+}
+
 export function labelInDispute(): string {
   return pick('In dispute', '\uBD84\uC7C1\uC911');
 }
@@ -166,6 +178,19 @@ export const CHAT_MSG_SELLER_MEETUP_STARTED = pick('The seller started schedulin
 export const CHAT_MSG_TRADE_COMPLETED = pick('The trade is complete.', '\uAC70\uB798\uAC00 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4.');
 export const CHAT_BANNER_TRADE_COMPLETE = pick('Trade complete for this order.', 'This trade is complete.');
 export const CHAT_BANNER_LISTING_SOLD = pick('This listing has been sold.', 'This item has been sold.');
+export const CHAT_BANNER_YOUR_DISPUTE = pick('You opened a dispute', 'You filed a dispute');
+export const CHAT_BANNER_THEIR_DISPUTE = pick('The other party opened a dispute', 'The other party filed a dispute');
+export const CHAT_BANNER_DISPUTE_GENERIC = pick('This item is in a dispute', 'This item is in dispute');
+export const CHAT_BANNER_DISPUTE_RESOLVED = pick('Dispute resolved for this item.', 'Dispute resolved for this item.');
+export const DISPUTE_VIEW_OTHER_READONLY = pick(
+  'You are viewing the other party\'s dispute (read-only).',
+  'You are viewing the other party\'s dispute (read-only).',
+);
+export const DISPUTE_LIST_SENT = pick('Sent', 'Sent');
+export const DISPUTE_LIST_RECEIVED = pick('Received', 'Received');
+export const DISPUTE_STATUS_ACTIVE = pick('Active', 'Active');
+export const DISPUTE_STATUS_RESOLVED = pick('Resolved', 'Resolved');
+export const DISPUTE_OTHER_PARTY = pick('Other party', 'Other party');
 export const CHAT_MSG_RECEIPT_CONFIRMED = pick('The buyer confirmed receipt.', '\uAD6C\uB9E4\uC790\uAC00 \uC218\uB839\uC744 \uD655\uC778\uD588\uC2B5\uB2C8\uB2E4.');
 export const CHAT_MSG_REVIEW_WRITTEN = pick('A review has been posted.', '\uB9AC\uBDF0\uAC00 \uB4F1\uB85D\uB418\uC5C8\uC2B5\uB2C8\uB2E4.');
 export const CHAT_MSG_BUYER_SHARE_REQUEST = pick('The buyer requested a free share.', '구매자가 나눔을 요청했습니다.');

@@ -122,12 +122,16 @@ function shouldHideNav(pathname: string, search: string): boolean {
   return false;
 }
 
-/** Open disputes I am party to (realtime banner when counterparty files) */
-function getMyOpenDisputes() {
+/** Open disputes filed by the counterparty (global alert banner) */
+function getCounterpartyOpenDisputes() {
   const userId = getCurrentUserId();
   if (!userId) return [];
   return getDisputes().filter(
-    (d) => (d.buyerId === userId || d.sellerId === userId) && d.status !== 'RESOLVED'
+    (d) =>
+      (d.buyerId === userId || d.sellerId === userId)
+      && d.status !== 'RESOLVED'
+      && d.openedByUserId
+      && d.openedByUserId !== userId,
   );
 }
 
@@ -249,12 +253,12 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [heavyReady]);
-  const [myOpenDisputes, setMyOpenDisputes] = useState(getMyOpenDisputes());
+  const [myOpenDisputes, setMyOpenDisputes] = useState(getCounterpartyOpenDisputes());
   /** Dismissed dispute banner orderIds for this session */
   const [dismissedDisputeOrderIds, setDismissedDisputeOrderIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    const refresh = () => setMyOpenDisputes(getMyOpenDisputes());
+    const refresh = () => setMyOpenDisputes(getCounterpartyOpenDisputes());
     refresh();
     window.addEventListener('disputesChanged', refresh);
     const onStorage = (e: StorageEvent) => {
@@ -381,7 +385,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
             <span aria-hidden className="shrink-0">!</span>
             <span
               role="button"
-              onClick={() => navigate(`/dispute/${firstUndismissed.orderId}`)}
+              onClick={() => navigate(`/dispute/${firstUndismissed.orderId}?view=other`)}
               className="flex-1 text-center"
             >
               The other party opened a dispute. Please review.

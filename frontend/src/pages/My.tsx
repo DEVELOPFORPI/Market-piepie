@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getMyUser, isProfileImageActivityBadge, profileAvatarObjectClass } from '@/utils/profileStorage';
 import { getCurrentUserId, isGuestUser } from '@/utils/authStorage';
+import { syncMyProfileFromDB } from '@/utils/dbSync';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
-import { getShareCountByUserId } from '@/utils/orderStorage';
+import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderStorage';
 import { ActivityBadgesPanel } from '@/components/profile/ActivityBadgesPanel';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
+import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
+import { KYCBadge } from '@/components/common/KYCBadge';
 import {
   isPlaceholderProfileImage,
   ProfilePersonSilhouetteIcon,
@@ -22,8 +25,18 @@ export const My: React.FC = () => {
     if (isGuest()) navigate('/welcome', { replace: true });
   }, [navigate]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const user = getMyUser();
+  const [user, setUser] = useState(() => getMyUser());
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  useEffect(() => {
+    const refresh = () => setUser(getMyUser());
+    const uid = getCurrentUserId();
+    if (uid) {
+      void syncMyProfileFromDB(uid).then(refresh);
+    }
+    window.addEventListener('profileSaved', refresh);
+    return () => window.removeEventListener('profileSaved', refresh);
+  }, []);
   /** Sync with bottom nav: App hides nav when ?tab=badges */
   const profileTab: ProfileTab =
     searchParams.get('tab') === 'badges' ? 'badges' : 'info';
@@ -44,10 +57,10 @@ export const My: React.FC = () => {
     { label: 'Saved', icon: '/profile/2.svg', path: '/my/favorites' },
     { label: 'Active trades', icon: '/profile/8.svg', path: '/my/active-trades' },
     { label: 'Orders', icon: '/profile/3.svg', path: '/my/orders' },
-    { label: 'Disputes', icon: '/profile/4.svg', path: '/my/disputes' },
     { label: 'My posts', icon: '/profile/5.svg', path: '/my/posts' },
     { label: 'Reviews', icon: '/profile/6.svg', path: '/my/reviews' },
     { label: 'Inquiries', icon: '/profile/9.svg', path: '/my/inquiries' },
+    { label: 'Disputes', icon: '/profile/4.svg', path: '/my/disputes' },
     { label: 'Settings', icon: '/profile/7.svg', path: '/settings' },
   ];
 
@@ -163,28 +176,25 @@ export const My: React.FC = () => {
               <span className="text-lg font-bold text-gray-900 truncate">
                 {user.nickname}
               </span>
-              {isGuestUser() ? (
+              {isGuestUser() && (
                 <span className="text-xs font-medium flex-shrink-0 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
                   Guest
                 </span>
-              ) : (
-                <>
-                  <span className="text-xs font-medium flex-shrink-0" style={{ color: '#00A8A3' }}>
-                    KYC verified
-                  </span>
-                  <img src="/check_1.svg" alt="Verified" className="w-3.5 h-3.5 flex-shrink-0" />
-                </>
               )}
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <img src="/star.svg" alt="Rating" className="w-4 h-4" />
-              <span className="text-sm text-gray-700">
-                {user.rating.toFixed(1)} · {user.tradeCount} trades · {getCurrentUserId() ? getShareCountByUserId(getCurrentUserId()!) : 0} shares
-                {getCurrentUserId() && getDisputeCountByUserId(getCurrentUserId()!) > 0 && (
-                  <> · {getDisputeCountByUserId(getCurrentUserId()!)} disputes</>
-                )}
-              </span>
-            </div>
+            <ProfileStatsRow
+              variant="ownProfile"
+              rating={user.rating}
+              tradeCount={getCurrentUserId() ? getPaidTradeCountByUserId(getCurrentUserId()!) : user.tradeCount}
+              shareCount={getCurrentUserId() ? getShareCountByUserId(getCurrentUserId()!) : 0}
+              disputeCount={getCurrentUserId() ? getDisputeCountByUserId(getCurrentUserId()!) : 0}
+              showDisputes
+              ratingAccessory={
+                !isGuestUser() ? (
+                  <KYCBadge status={user.kycStatus} userId={getCurrentUserId() ?? undefined} />
+                ) : undefined
+              }
+            />
           </div>
         </div>
       </div>

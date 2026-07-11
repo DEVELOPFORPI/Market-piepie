@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ReportModal } from '@/components/common/ReportModal';
@@ -11,12 +11,13 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
-import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
+import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatus, labelProductStatusListing, labelProductAvailability, labelFreeShareMenu, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
+import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 
 const fallbackProduct: Product = {
   id: '0',
@@ -70,6 +71,8 @@ export const ProductDetail: React.FC = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [showProductMenu, setShowProductMenu] = useState(false);
+  const productMenuRef = useRef<HTMLDivElement>(null);
+  useDismissOnClickOutside(productMenuRef, showProductMenu, () => setShowProductMenu(false));
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
@@ -259,7 +262,6 @@ export const ProductDetail: React.FC = () => {
   const headerStatusLocked = isMine ? sellerStatusLocked : productDisputeOpen;
 
   const chatCount = getChatRoomCountByProductId(product.id);
-  const sellerDisputeCount = product.seller?.id ? getDisputeCountByUserId(product.seller.id) : 0;
   const uid = getCurrentUserId();
   void ctaRefresh;
   const hasPendingOffer = Boolean(
@@ -350,7 +352,7 @@ export const ProductDetail: React.FC = () => {
           </span>
         )}
         rightContent={!isMine ? (
-          <div className="relative">
+          <div ref={productMenuRef} className="relative">
             <button
               onClick={() => setShowProductMenu((v) => !v)}
               className="p-2 text-gray-600"
@@ -497,7 +499,6 @@ export const ProductDetail: React.FC = () => {
         <div className="flex items-center gap-2 text-sm text-gray-500 mt-1.5">
           <span>{product.region} · {relativeTimeShort(product.createdAt)}</span>
           {chatCount > 0 && <span>· {chatCount} chats</span>}
-          {sellerDisputeCount > 0 && <span>· {sellerDisputeCount} disputes</span>}
         </div>
         {(product.isFreeShare || product.price === 0) && (
           <div className="flex flex-wrap gap-2 mt-2">

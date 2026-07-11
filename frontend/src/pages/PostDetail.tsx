@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { BottomSheet } from '@/components/common/BottomSheet';
@@ -20,34 +20,63 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort, labelCommentReply } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
+import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
+
+const MAX_REPLY_INDENT_DEPTH = 1;
+const REPLY_INDENT_REM = 2.5;
 
 const CommentTree: React.FC<{
   items: Comment[];
   depth?: number;
+  parentAuthorNickname?: string;
   onReply: (commentId: string, nickname: string) => void;
   onOpenMenu: (comment: Comment) => void;
+  onAuthorClick: (authorId: string) => void;
   timeAgo: (createdAt: string) => string;
-}> = ({ items, depth = 0, onReply, onOpenMenu, timeAgo }) => (
+}> = ({ items, depth = 0, parentAuthorNickname, onReply, onOpenMenu, onAuthorClick, timeAgo }) => (
   <>
-    {items.map((c) => (
+    {items.map((c) => {
+      const displayName = resolveDisplayNickname(c.author.id, c.author.nickname);
+      const isReply = depth > 0;
+      const indentDeltaRem = depth === 1 ? REPLY_INDENT_REM : 0;
+      const showReplyTarget = isReply && depth > MAX_REPLY_INDENT_DEPTH && !!parentAuthorNickname;
+
+      return (
       <div
         key={c.id}
-        className={depth > 0 ? 'mt-3 ml-10 pl-3 border-l-2 border-gray-100' : 'py-3 border-b border-gray-50 last:border-b-0'}
+        className={isReply ? 'mt-3 min-w-0' : 'py-3 border-b border-gray-50 last:border-b-0 min-w-0'}
+        style={isReply && indentDeltaRem > 0 ? { marginLeft: `${indentDeltaRem}rem` } : undefined}
       >
-        <div className="flex gap-3">
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+        <div className="flex gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => onAuthorClick(c.author.id)}
+            className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0"
+            aria-label={`View ${displayName}'s profile`}
+          >
             <UserAvatarImage
               src={resolveProfileAvatarUrl(c.author.id, c.author.profileImage)}
-              alt={resolveDisplayNickname(c.author.id, c.author.nickname)}
+              alt={displayName}
               iconClassName="w-4 h-4 text-gray-500"
             />
-          </div>
+          </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-2 min-w-0">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
-                  {resolveDisplayNickname(c.author.id, c.author.nickname)}
-                </p>
+                <div className="flex items-center gap-1 min-w-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => onAuthorClick(c.author.id)}
+                    className="text-sm font-semibold text-gray-900 truncate text-left hover:underline"
+                  >
+                    {displayName}
+                  </button>
+                  {showReplyTarget && (
+                    <span className="text-xs text-gray-500 truncate">
+                      @{parentAuthorNickname}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-400 mt-0.5">{timeAgo(c.createdAt)}</p>
               </div>
               <button
@@ -79,13 +108,16 @@ const CommentTree: React.FC<{
           <CommentTree
             items={c.replies}
             depth={depth + 1}
+            parentAuthorNickname={displayName}
             onReply={onReply}
             onOpenMenu={onOpenMenu}
+            onAuthorClick={onAuthorClick}
             timeAgo={timeAgo}
           />
         )}
       </div>
-    ))}
+      );
+    })}
   </>
 );
 
@@ -97,6 +129,8 @@ export const PostDetail: React.FC = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [showReport, setShowReport] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const postMenuRef = useRef<HTMLDivElement>(null);
+  useDismissOnClickOutside(postMenuRef, showMenu, () => setShowMenu(false));
   const [commentMenuTarget, setCommentMenuTarget] = useState<Comment | null>(null);
   const [commentReportTarget, setCommentReportTarget] = useState<Comment | null>(null);
   const [showCommentReport, setShowCommentReport] = useState(false);
@@ -115,6 +149,10 @@ export const PostDetail: React.FC = () => {
   const currentUserId = getCurrentUserId();
   const isMineComment = (authorId: string) => authorId === currentUserId;
   const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
+  const goToUserProfile = (userId: string) => {
+    if (!userId) return;
+    navigate(`/seller/${userId}`);
+  };
   const isDisputePost = post?.category === POST_CATEGORY_VALUE.DISPUTE;
   const isGeneralPost = !isDisputePost;
   const linkedDispute = post
@@ -319,7 +357,7 @@ export const PostDetail: React.FC = () => {
           </button>
         }
         rightContent={
-          <div className="relative">
+          <div ref={postMenuRef} className="relative">
             <button
               onClick={() => setShowMenu(!showMenu)}
               className="p-2 text-gray-600"
@@ -400,7 +438,10 @@ export const PostDetail: React.FC = () => {
 
         {/* Author Card */}
         <div className="rounded-lg">
-          <SellerMiniCard seller={post.author} />
+          <SellerMiniCard
+            seller={post.author}
+            onClick={() => goToUserProfile(post.author.id)}
+          />
         </div>
 
         {/* Title */}
@@ -544,7 +585,7 @@ export const PostDetail: React.FC = () => {
         </div>
 
         {/* Comments Section */}
-        <div className={`space-y-4 ${isGeneralPost ? 'pt-2' : ''}`}>
+        <div className={`space-y-4 overflow-x-hidden ${isGeneralPost ? 'pt-2' : ''}`}>
           <h3 className="text-lg font-semibold text-gray-900">Comments ({commentCount})</h3>
 
           {comments.length === 0 ? (
@@ -558,6 +599,7 @@ export const PostDetail: React.FC = () => {
                 setReplyingToNickname(nickname);
               }}
               onOpenMenu={setCommentMenuTarget}
+              onAuthorClick={goToUserProfile}
               timeAgo={relativeTimeShort}
             />
           )}

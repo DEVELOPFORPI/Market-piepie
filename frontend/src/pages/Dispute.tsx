@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Badge } from '@/components/common/Badge';
+import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { ORDER_STATUS_VALUE, POST_CATEGORY_VALUE } from '@/types';
 import { ensureOrderById, getOrderById, updateOrderStatus } from '@/utils/orderStorage';
 import {
@@ -18,8 +19,8 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
-import { labelTradeMethod } from '@/locale/enUI';
-import { Order } from '@/types';
+import { labelTradeMethod, DISPUTE_VIEW_OTHER_READONLY, DISPUTE_OTHER_PARTY, DISPUTE_STATUS_ACTIVE, DISPUTE_STATUS_RESOLVED } from '@/locale/enUI';
+import { Order, User } from '@/types';
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -39,9 +40,26 @@ const sellerDisputeReasons = [
 
 const buyerDisputeActions = ['Request full refund', 'Request partial refund', 'Request seller action'];
 
+function resolveCounterparty(order: Order, currentUserId: string): User | null {
+  if (order.buyer.id === currentUserId) return order.seller;
+  if (order.seller.id === currentUserId) return order.buyer;
+  return null;
+}
+
+function resolveDisputeOpenerUserId(
+  order: Order,
+  currentUserId: string,
+  viewOtherParty: boolean,
+): string {
+  if (!viewOtherParty) return currentUserId;
+  return order.buyer.id === currentUserId ? order.seller.id : order.buyer.id;
+}
+
 export const Dispute: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const viewOtherParty = searchParams.get('view') === 'other';
   const [reason, setReason] = useState('');
   const [action, setAction] = useState('');
   const [description, setDescription] = useState('');
@@ -60,10 +78,12 @@ export const Dispute: React.FC = () => {
     let cancelled = false;
     void (async () => {
       setLoading(true);
-      const [foundOrder, existingDispute] = await Promise.all([
-        ensureOrderById(orderId),
-        ensureDisputeByOrderId(orderId, getCurrentUserId()),
-      ]);
+      const foundOrder = await ensureOrderById(orderId);
+      const uid = getCurrentUserId();
+      const openerId = uid && foundOrder
+        ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
+        : uid ?? undefined;
+      const existingDispute = await ensureDisputeByOrderId(orderId, openerId);
       if (cancelled) return;
       setOrder(foundOrder);
       if (existingDispute) {
@@ -72,11 +92,13 @@ export const Dispute: React.FC = () => {
         setAction(existingDispute.action);
         setDescription(existingDispute.description);
         setEvidence(existingDispute.evidence || []);
+      } else {
+        setDispute(null);
       }
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [orderId]);
+  }, [orderId, viewOtherParty]);
 
   useEffect(() => {
     if (!orderId) return;
@@ -86,7 +108,11 @@ export const Dispute: React.FC = () => {
     const readLocal = () => {
       const foundOrder = getOrderById(orderId);
       if (foundOrder) setOrder(foundOrder);
-      setDispute(getDisputeByOrderId(orderId, getCurrentUserId()) ?? null);
+      const uid = getCurrentUserId();
+      const openerId = uid && foundOrder
+        ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
+        : uid ?? undefined;
+      setDispute(openerId ? getDisputeByOrderId(orderId, openerId) ?? null : null);
     };
     const syncThenRead = () => {
       void (async () => {
@@ -109,7 +135,7 @@ export const Dispute: React.FC = () => {
       window.removeEventListener('ordersChanged', readLocal);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [orderId]);
+  }, [orderId, viewOtherParty]);
 
   useEffect(() => {
     if (order) {
@@ -242,17 +268,18 @@ export const Dispute: React.FC = () => {
 
   const statusVariant = {
     OPEN: 'warning' as const,
-    IN_REVIEW: 'info' as const,
+    IN_REVIEW: 'warning' as const,
     RESOLVED: 'success' as const,
   };
 
   const statusLabel = {
-    OPEN: 'Submitted',
-    IN_REVIEW: 'In review',
-    RESOLVED: 'Resolved',
+    OPEN: DISPUTE_STATUS_ACTIVE,
+    IN_REVIEW: DISPUTE_STATUS_ACTIVE,
+    RESOLVED: DISPUTE_STATUS_RESOLVED,
   };
 
   const currentUserId = getCurrentUserId();
+  const counterparty = order && currentUserId ? resolveCounterparty(order, currentUserId) : null;
   const isSellerOpening = Boolean(order && currentUserId && order.seller.id === currentUserId);
   const isDisputeOpener = Boolean(
     dispute && currentUserId && dispute.openedByUserId === currentUserId,
@@ -290,6 +317,12 @@ export const Dispute: React.FC = () => {
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
+        {viewOtherParty && dispute && (
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm text-gray-600">{DISPUTE_VIEW_OTHER_READONLY}</p>
+          </div>
+        )}
+
         {dispute && (
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between">
@@ -306,6 +339,16 @@ export const Dispute: React.FC = () => {
                 Resolved: {new Date(dispute.resolvedAt).toLocaleString('en-US')}
               </p>
             )}
+          </div>
+        )}
+
+        {counterparty && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{DISPUTE_OTHER_PARTY}</h3>
+            <SellerMiniCard
+              seller={counterparty}
+              onClick={() => navigate(`/seller/${counterparty.id}`)}
+            />
           </div>
         )}
 
@@ -338,10 +381,18 @@ export const Dispute: React.FC = () => {
           </div>
         )}
 
-        {!dispute && order && (
+        {!dispute && order && viewOtherParty && (
+          <div className="text-center py-8 text-gray-500">
+            <p>The other party has not filed a dispute for this order.</p>
+          </div>
+        )}
+
+        {!dispute && order && !viewOtherParty && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason <span className="text-red-500">*</span>
+              </label>
               <div className="space-y-2">
                 {disputeReasonOptions.map((r) => (
                   <button
@@ -362,7 +413,9 @@ export const Dispute: React.FC = () => {
 
             {!isSellerOpening && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Requested action</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Requested action <span className="text-red-500">*</span>
+              </label>
               <div className="space-y-2">
                 {buyerDisputeActions.map((a) => (
                   <button
@@ -390,7 +443,9 @@ export const Dispute: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Details</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Details <span className="text-red-500">*</span>
+              </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -505,7 +560,7 @@ export const Dispute: React.FC = () => {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
-        {!dispute && order ? (
+        {!dispute && order && !viewOtherParty ? (
           <button
             onClick={handleSubmit}
             disabled={!reason || (!isSellerOpening && !action) || !description || uploadingEvidence}
