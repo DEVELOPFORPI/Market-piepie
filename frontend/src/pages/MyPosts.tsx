@@ -5,17 +5,28 @@ import { Post } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
 import { getUserPosts, deleteUserPost } from '@/utils/communityStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { getCurrentUserId } from '@/utils/authStorage';
+import { syncMyPostsFromDB } from '@/utils/dbSync';
 
 export const MyPosts: React.FC = () => {
   const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
 
   const loadPosts = () => {
-    setPosts(getUserPosts());
+    const userPosts = getUserPosts();
+    const feedCount = (() => { try { const r = localStorage.getItem('community_feed_posts'); return r ? JSON.parse(r).length : 0; } catch { return -1; } })();
+    // #region agent log
+    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'MyPosts.tsx:loadPosts',message:'my posts rendered',data:{userPostCount:userPosts.length,feedPostCount:feedCount,authorIds:[...new Set(userPosts.map(p=>p.author?.id).filter(Boolean))].slice(0,3)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    setPosts(userPosts);
   };
 
   useEffect(() => {
-    loadPosts();
+    void (async () => {
+      const uid = getCurrentUserId();
+      if (uid) await syncMyPostsFromDB(uid);
+      loadPosts();
+    })();
     window.addEventListener('postsChanged', loadPosts);
     return () => window.removeEventListener('postsChanged', loadPosts);
   }, []);

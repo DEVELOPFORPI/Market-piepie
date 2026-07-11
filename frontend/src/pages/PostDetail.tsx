@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { BottomSheet } from '@/components/common/BottomSheet';
 import { ReportModal } from '@/components/common/ReportModal';
-import { KYCBadge } from '@/components/common/KYCBadge';
+import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Post, Comment } from '@/types';
 import { maskSensitiveContent } from '@/utils/contentFilter';
 import { ensurePostById, deleteUserPost, getCommentsByPostId, addComment, deleteComment, buildCommentTree } from '@/utils/communityStorage';
-import { getMyUser, resolveDisplayNickname } from '@/utils/profileStorage';
+import { getMyUser, resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
 import { syncCommentsFromDB } from '@/utils/dbSync';
@@ -17,56 +18,71 @@ import { getPostCommentCount, syncPostCommentCountFromDB } from '@/utils/postCom
 import { getDisputeByOrderId, getDisputeByPostId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { POST_CATEGORY_VALUE } from '@/types';
-import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
+import { labelPostCategory, relativeTimeShort, labelCommentReply } from '@/locale/enUI';
+import { guestGuard } from '@/utils/guestGate';
 
 const CommentTree: React.FC<{
   items: Comment[];
   depth?: number;
   onReply: (commentId: string, nickname: string) => void;
-  onDelete: (commentId: string) => void;
+  onOpenMenu: (comment: Comment) => void;
   timeAgo: (createdAt: string) => string;
-  isMineComment: (authorId: string) => boolean;
-}> = ({ items, depth = 0, onReply, onDelete, timeAgo, isMineComment }) => (
+}> = ({ items, depth = 0, onReply, onOpenMenu, timeAgo }) => (
   <>
     {items.map((c) => (
-      <div key={c.id} className={depth > 0 ? `pl-4 mt-2 border-l-2 border-gray-100` : ''}>
-        <div className="flex gap-3 py-1">
-          <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center text-xs text-gray-500">
-            {resolveDisplayNickname(c.author.id, c.author.nickname).charAt(0)}
+      <div
+        key={c.id}
+        className={depth > 0 ? 'mt-3 ml-10 pl-3 border-l-2 border-gray-100' : 'py-3 border-b border-gray-50 last:border-b-0'}
+      >
+        <div className="flex gap-3">
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+            <UserAvatarImage
+              src={resolveProfileAvatarUrl(c.author.id, c.author.profileImage)}
+              alt={resolveDisplayNickname(c.author.id, c.author.nickname)}
+              iconClassName="w-4 h-4 text-gray-500"
+            />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="text-sm font-medium text-gray-900">{resolveDisplayNickname(c.author.id, c.author.nickname)}</span>
-              <KYCBadge status={c.author.kycStatus} userId={c.author.id} />
-              <span className="text-xs text-gray-400">{timeAgo(c.createdAt)}</span>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {resolveDisplayNickname(c.author.id, c.author.nickname)}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{timeAgo(c.createdAt)}</p>
+              </div>
               <button
                 type="button"
-                onClick={() => onReply(c.id, c.author.nickname)}
-                className="text-xs text-gray-500 hover:text-[#00A8A3]"
-                aria-label={`Reply to ${c.author.nickname}'s comment`}
+                onClick={() => onOpenMenu(c)}
+                className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                aria-label="Comment options"
               >
-                Reply
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="5" r="1.5" />
+                  <circle cx="12" cy="12" r="1.5" />
+                  <circle cx="12" cy="19" r="1.5" />
+                </svg>
               </button>
-              {isMineComment(c.author.id) && (
-                <button type="button" onClick={() => onDelete(c.id)} className="text-xs text-red-400">
-                  Delete
-                </button>
-              )}
             </div>
-            <p className="text-sm text-gray-700">{maskSensitiveContent(c.content)}</p>
+            <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words">
+              {maskSensitiveContent(c.content)}
+            </p>
+            <button
+              type="button"
+              onClick={() => onReply(c.id, c.author.nickname)}
+              className="text-xs text-gray-500 hover:text-[#00A8A3] mt-2"
+            >
+              {labelCommentReply()}
+            </button>
           </div>
         </div>
         {c.replies && c.replies.length > 0 && (
-          <div className="mt-1">
-            <CommentTree
-              items={c.replies}
-              depth={depth + 1}
-              onReply={onReply}
-              onDelete={onDelete}
-              timeAgo={timeAgo}
-              isMineComment={isMineComment}
-            />
-          </div>
+          <CommentTree
+            items={c.replies}
+            depth={depth + 1}
+            onReply={onReply}
+            onOpenMenu={onOpenMenu}
+            timeAgo={timeAgo}
+          />
         )}
       </div>
     ))}
@@ -81,6 +97,9 @@ export const PostDetail: React.FC = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [showReport, setShowReport] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [commentMenuTarget, setCommentMenuTarget] = useState<Comment | null>(null);
+  const [commentReportTarget, setCommentReportTarget] = useState<Comment | null>(null);
+  const [showCommentReport, setShowCommentReport] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
@@ -93,6 +112,8 @@ export const PostDetail: React.FC = () => {
   const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
 
   const isMine = post?.author.id === getCurrentUserId();
+  const currentUserId = getCurrentUserId();
+  const isMineComment = (authorId: string) => authorId === currentUserId;
   const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
   const isDisputePost = post?.category === POST_CATEGORY_VALUE.DISPUTE;
   const isGeneralPost = !isDisputePost;
@@ -220,6 +241,7 @@ export const PostDetail: React.FC = () => {
   }, [id]);
 
   const handleSubmitComment = () => {
+    if (guestGuard('comment')) return;
     if (!commentText.trim() || !id) return;
 
     const newComment: Comment = {
@@ -341,15 +363,18 @@ export const PostDetail: React.FC = () => {
                     </button>
                   </>
                 )}
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowReport(true);
-                  }}
-                  className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
-                >
-                  Report
-                </button>
+                {!isMine && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (guestGuard('report')) return;
+                      setShowReport(true);
+                    }}
+                    className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
+                  >
+                    Report
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -489,6 +514,7 @@ export const PostDetail: React.FC = () => {
             <button
               type="button"
               onClick={() => {
+                if (guestGuard('like')) return;
                 void togglePostLike(post.id);
               }}
               className="flex items-center gap-1.5 text-sm"
@@ -527,12 +553,12 @@ export const PostDetail: React.FC = () => {
             <CommentTree
               items={commentTree}
               onReply={(commentId, nickname) => {
+                if (guestGuard('comment')) return;
                 setReplyingToId(commentId);
                 setReplyingToNickname(nickname);
               }}
-              onDelete={handleDeleteComment}
+              onOpenMenu={setCommentMenuTarget}
               timeAgo={relativeTimeShort}
-              isMineComment={(authorId) => authorId === getCurrentUserId()}
             />
           )}
         </div>
@@ -556,6 +582,7 @@ export const PostDetail: React.FC = () => {
           <input
             type="text"
             value={commentText}
+            onFocus={() => { guestGuard('comment'); }}
             onChange={(e) => setCommentText(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSubmitComment()}
             placeholder={replyingToNickname ? `Reply to @${replyingToNickname}` : 'Write a comment'}
@@ -572,6 +599,48 @@ export const PostDetail: React.FC = () => {
         </div>
       </div>
 
+      <BottomSheet
+        isOpen={!!commentMenuTarget}
+        onClose={() => setCommentMenuTarget(null)}
+        height="auto"
+      >
+        <div className="py-2">
+          {commentMenuTarget && isMineComment(commentMenuTarget.author.id) ? (
+            <button
+              type="button"
+              onClick={() => {
+                const targetId = commentMenuTarget.id;
+                setCommentMenuTarget(null);
+                handleDeleteComment(targetId);
+              }}
+              className="w-full px-4 py-4 text-center text-base text-red-500 border-b border-gray-100"
+            >
+              Delete
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (guestGuard('report')) return;
+                setCommentReportTarget(commentMenuTarget);
+                setCommentMenuTarget(null);
+                setShowCommentReport(true);
+              }}
+              className="w-full px-4 py-4 text-center text-base text-gray-900 border-b border-gray-100"
+            >
+              Report
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCommentMenuTarget(null)}
+            className="w-full px-4 py-4 text-center text-base text-gray-500"
+          >
+            Cancel
+          </button>
+        </div>
+      </BottomSheet>
+
       {/* Report Modal */}
       {post && (
         <ReportModal
@@ -580,6 +649,18 @@ export const PostDetail: React.FC = () => {
           targetType="post"
           targetId={post.id}
           targetLabel={post.title}
+        />
+      )}
+      {commentReportTarget && (
+        <ReportModal
+          open={showCommentReport}
+          onClose={() => {
+            setShowCommentReport(false);
+            setCommentReportTarget(null);
+          }}
+          targetType="comment"
+          targetId={commentReportTarget.id}
+          targetLabel={commentReportTarget.content.slice(0, 80)}
         />
       )}
     </div>

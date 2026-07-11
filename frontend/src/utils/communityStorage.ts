@@ -6,6 +6,7 @@ import { applyPostCommentCount } from '@/utils/postCommentCountStorage';
 
 const DISPUTE_STORAGE_KEY = 'community_dispute_posts';
 const USER_POSTS_STORAGE_KEY = 'community_user_posts';
+const FEED_POSTS_STORAGE_KEY = 'community_feed_posts';
 const COMMENTS_STORAGE_KEY = 'community_comments';
 
 export const COMMUNITY_QUOTA_EXCEEDED_MESSAGE =
@@ -26,7 +27,6 @@ function setUserPostsWithQuotaRetry(posts: Post[], protectPostId?: string): void
         );
         const toRemove = byDate.find((p) => p.id !== protectPostId);
         if (!toRemove) {
-          // Only protected post left: strip images and retry
           const protectedPost = list.find((p) => p.id === protectPostId);
           if (protectedPost && (protectedPost.images?.length ?? 0) > 0) {
             const trimmed = list.map((p) =>
@@ -37,10 +37,9 @@ function setUserPostsWithQuotaRetry(posts: Post[], protectPostId?: string): void
               window.dispatchEvent(new Event('postsChanged'));
               return;
             } catch {
-              // fall through to try free space
+              // fall through
             }
           }
-          // Still full: trim other stores once, then retry
           if (!freedSpaceOnce) {
             freedSpaceOnce = true;
             tryFreeSpaceForSave();
@@ -55,6 +54,20 @@ function setUserPostsWithQuotaRetry(posts: Post[], protectPostId?: string): void
       throw e;
     }
   }
+}
+
+function upsertFeedPost(post: Post): void {
+  const posts = getFeedPosts();
+  const clone = JSON.parse(JSON.stringify(post)) as Post;
+  const idx = posts.findIndex((p) => p.id === post.id);
+  if (idx >= 0) posts[idx] = clone;
+  else posts.unshift(clone);
+  setItem(FEED_POSTS_STORAGE_KEY, JSON.stringify(posts));
+}
+
+function removeFeedPost(postId: string): void {
+  const posts = getFeedPosts().filter((p) => p.id !== postId);
+  setItem(FEED_POSTS_STORAGE_KEY, JSON.stringify(posts));
 }
 
 // --- User posts ---
@@ -72,6 +85,18 @@ export const getUserPosts = (): Post[] => {
   }
 };
 
+/** Community feed cache (all posts from server sync) */
+export const getFeedPosts = (): Post[] => {
+  try {
+    const raw = getItem(FEED_POSTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 export const addUserPost = async (post: Post): Promise<boolean> => {
   const ok = await syncPostToDB(post);
   if (!ok) return false;
@@ -79,6 +104,7 @@ export const addUserPost = async (post: Post): Promise<boolean> => {
   const clone = JSON.parse(JSON.stringify(post)) as Post;
   posts.unshift(clone);
   setUserPostsWithQuotaRetry(posts, post.id);
+  upsertFeedPost(clone);
   window.dispatchEvent(new Event('postsChanged'));
   return true;
 };
@@ -89,8 +115,10 @@ export const updateUserPost = async (post: Post): Promise<boolean> => {
   const posts = getUserPosts();
   const idx = posts.findIndex((p) => p.id === post.id);
   if (idx >= 0) {
-    posts[idx] = JSON.parse(JSON.stringify(post));
+    const updated = JSON.parse(JSON.stringify(post)) as Post;
+    posts[idx] = updated;
     setUserPostsWithQuotaRetry(posts, post.id);
+    upsertFeedPost(updated);
     window.dispatchEvent(new Event('postsChanged'));
   }
   return true;
@@ -101,6 +129,7 @@ export const deleteUserPost = async (postId: string): Promise<boolean> => {
   if (!ok) return false;
   const posts = getUserPosts().filter((p) => p.id !== postId);
   setUserPostsWithQuotaRetry(posts);
+  removeFeedPost(postId);
   deleteCommentsByPostId(postId);
   window.dispatchEvent(new Event('postsChanged'));
   return true;
@@ -147,15 +176,17 @@ export const deleteDisputePost = (postId: string): void => {
 // --- Combined feed ---
 
 export const getAllPosts = (): Post[] => {
-  const user = getUserPosts();
-  const legacyDispute = getDisputePosts().filter((d) => !user.some((u) => u.id === d.id));
-  return [...legacyDispute, ...user].sort(
+  const feed = getFeedPosts();
+  const legacyDispute = getDisputePosts().filter((d) => !feed.some((u) => u.id === d.id));
+  return [...legacyDispute, ...feed].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 };
 
 export const getPostById = (id: string | undefined): Post | null => {
   if (!id) return null;
+  const fromFeed = getFeedPosts().find((p) => p.id === id);
+  if (fromFeed) return fromFeed;
   const fromUser = getUserPosts().find((p) => p.id === id);
   if (fromUser) return fromUser;
   const fromDispute = getDisputePosts().find((p) => p.id === id);
@@ -204,6 +235,12 @@ const patchLocalPostCommentCount = (postId: string, count: number) => {
   if (userPost) {
     userPost.commentCount = count;
     setItem(USER_POSTS_STORAGE_KEY, JSON.stringify(userPosts));
+  }
+  const feedPosts = getFeedPosts();
+  const feedPost = feedPosts.find((p) => p.id === postId);
+  if (feedPost) {
+    feedPost.commentCount = count;
+    setItem(FEED_POSTS_STORAGE_KEY, JSON.stringify(feedPosts));
   }
   const disputePosts = getDisputePosts();
   const disputePost = disputePosts.find((p) => p.id === postId);

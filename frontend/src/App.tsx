@@ -18,7 +18,6 @@ import { ProductDetail } from './pages/ProductDetail';
 import { SellerProfile } from './pages/SellerProfile';
 import { ChatRoom } from './pages/ChatRoom';
 import { Offer } from './pages/Offer';
-import { ShareApply } from './pages/ShareApply';
 import { OrderTimeline } from './pages/OrderTimeline';
 import { ReviewWrite } from './pages/ReviewWrite';
 import { Dispute } from './pages/Dispute';
@@ -95,7 +94,6 @@ const HIDE_NAV_PREFIXES = [
   '/product/',
   '/profile/edit',
   '/offer/',
-  '/share/',
   '/order/',
   '/my/products',
   '/my/orders',
@@ -430,7 +428,6 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/seller/:id" element={<SellerProfile />} />
           <Route path="/offer/:productId" element={<Offer />} />
-          <Route path="/share/:productId" element={<ShareApply />} />
           <Route path="/order/:orderId" element={<OrderTimeline />} />
           <Route path="/review/:orderId" element={<ReviewWrite />} />
           <Route path="/dispute/:orderId" element={<Dispute />} />

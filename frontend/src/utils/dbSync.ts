@@ -247,6 +247,26 @@ function mapProductFromDB(row: Record<string, unknown>, favoriteIds?: Set<string
 
 // ─── 커뮤니티 게시물 동기화 ──────────────────────────────────
 
+/** 내가 쓴 게시물만 DB에서 로드 */
+export async function syncMyPostsFromDB(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const res = await api.get<Post[]>(`/api/posts?author_id=${encodeURIComponent(userId)}`);
+    if (!res.ok || !res.data) return;
+    const favoriteIds = getFavoriteProductIds();
+    const myPosts = (res.data as unknown as Record<string, unknown>[]).map((row) =>
+      mapPostFromDB(row, favoriteIds),
+    );
+    setItem('community_user_posts', JSON.stringify(myPosts));
+    // #region agent log
+    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'dbSync.ts:syncMyPostsFromDB',message:'my posts synced',data:{userId,count:myPosts.length,ids:myPosts.slice(0,5).map(p=>p.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    window.dispatchEvent(new Event('postsChanged'));
+  } catch {
+    // ignore
+  }
+}
+
 /** API에서 게시물 목록을 가져와 localStorage 갱신 */
 export async function syncPostsFromDB(): Promise<void> {
   try {
@@ -263,7 +283,10 @@ export async function syncPostsFromDB(): Promise<void> {
       seedPostCommentCounts(
         dbPosts.map((p) => ({ postId: p.id, count: p.commentCount ?? 0 })),
       );
-      setItem('community_user_posts', JSON.stringify(dbPosts));
+      setItem('community_feed_posts', JSON.stringify(dbPosts));
+      // #region agent log
+      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'dbSync.ts:syncPostsFromDB',message:'feed posts synced',data:{count:dbPosts.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       cleanupLocalPostLeftovers(dbPosts);
       window.dispatchEvent(new Event('postsChanged'));
     }
@@ -320,7 +343,7 @@ export async function syncPostFromDB(postId: string): Promise<Post | undefined> 
     seedPostCommentCounts([{ postId: mapped.id, count: mapped.commentCount ?? 0 }]);
     const posts: Post[] = (() => {
       try {
-        const raw = getItem('community_user_posts');
+        const raw = getItem('community_feed_posts');
         return raw ? JSON.parse(raw) : [];
       } catch {
         return [];
@@ -329,7 +352,7 @@ export async function syncPostFromDB(postId: string): Promise<Post | undefined> 
     const idx = posts.findIndex((p) => p.id === postId);
     if (idx >= 0) posts[idx] = mapped;
     else posts.unshift(mapped);
-    setItem('community_user_posts', JSON.stringify(posts));
+    setItem('community_feed_posts', JSON.stringify(posts));
     window.dispatchEvent(new Event('postsChanged'));
     return mapped;
   } catch {
@@ -1563,6 +1586,7 @@ export async function initDBSync(userId?: string): Promise<void> {
   await syncProductsFromDB();
   await syncPostsFromDB();
   if (userId) {
+    await syncMyPostsFromDB(userId);
     await syncMyProfileFromDB(userId);
     await syncFavoritesFromDB(userId);
     await syncOrdersFromDB(userId);

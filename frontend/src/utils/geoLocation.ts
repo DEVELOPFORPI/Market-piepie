@@ -5,17 +5,128 @@
 
 const UNKNOWN_REGION = 'Unknown';
 
+type NominatimAddress = {
+  neighbourhood?: string;
+  suburb?: string;
+  quarter?: string;
+  hamlet?: string;
+  village?: string;
+  borough?: string;
+  city_district?: string;
+  district?: string;
+  county?: string;
+  city?: string;
+  town?: string;
+  municipality?: string;
+  state?: string;
+  state_district?: string;
+  country?: string;
+};
+
+function pickFirst(...values: (string | undefined)[]): string | undefined {
+  for (const v of values) {
+    const t = v?.trim();
+    if (t) return t;
+  }
+  return undefined;
+}
+
+function normalizeToken(value: string): string {
+  return value.toLowerCase().replace(/[\s,.-]+/g, '');
+}
+
+function includesPart(haystack: string, needle: string): boolean {
+  const h = normalizeToken(haystack);
+  const n = normalizeToken(needle);
+  return h.includes(n) || n.includes(h);
+}
+
+/** Neighbourhood / block level — too granular for trade area */
+function isNeighbourhoodLevel(name: string): boolean {
+  const n = name.trim();
+  if (!n) return true;
+  if (/동$/.test(n)) return true;
+  if (/-dong$/i.test(n)) return true;
+  if (/\bdong\b/i.test(n) && n.length <= 12) return true;
+  return false;
+}
+
+/** District / county level — skip neighbourhood-sized borough names */
+function pickDistrict(address: NominatimAddress): string | undefined {
+  const candidates = [
+    address.city_district,
+    address.county,
+    address.district,
+    address.borough,
+    address.state_district,
+  ];
+  for (const c of candidates) {
+    const t = c?.trim();
+    if (t && !isNeighbourhoodLevel(t)) return t;
+  }
+  return undefined;
+}
+
+/** City + district/state label for consistent global trade area display */
+export function normalizeRegionLabel(parts: {
+  district?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+}): string | null {
+  const district = parts.district?.trim();
+  const city = parts.city?.trim();
+  const state = parts.state?.trim();
+  const country = parts.country?.trim();
+
+  if (district && city) {
+    if (includesPart(district, city)) return district;
+    return `${district}, ${city}`;
+  }
+  if (district && state) {
+    if (includesPart(district, state)) return district;
+    return `${district}, ${state}`;
+  }
+  if (city && state) {
+    if (includesPart(city, state)) return city;
+    return `${city}, ${state}`;
+  }
+  if (district) return district;
+  if (city) return city;
+  if (state) return state;
+  if (country) return country;
+  return null;
+}
+
+function normalizeRegionFromNominatimAddress(address: NominatimAddress | undefined): string | null {
+  if (!address) return null;
+  return normalizeRegionLabel({
+    district: pickDistrict(address),
+    city: pickFirst(address.city, address.town, address.municipality),
+    state: address.state,
+    country: address.country,
+  });
+}
+
 // Free IP geolocation APIs (try next on failure)
 const IP_APIS = [
   {
     url: 'https://ipapi.co/json/',
     parser: (data: { city?: string; region?: string; country_name?: string }) =>
-      data.city || data.region || data.country_name,
+      normalizeRegionLabel({
+        city: data.city,
+        state: data.region,
+        country: data.country_name,
+      }),
   },
   {
     url: 'https://freeipapi.com/api/json',
     parser: (data: { cityName?: string; regionName?: string; countryName?: string }) =>
-      data.cityName || data.regionName || data.countryName,
+      normalizeRegionLabel({
+        city: data.cityName,
+        state: data.regionName,
+        country: data.countryName,
+      }),
   },
 ];
 
@@ -68,18 +179,9 @@ export async function detectLocationByGPS(): Promise<{ region: string } | null> 
           }
 
           const data = await response.json();
-          const address = data.address;
+          const region = normalizeRegionFromNominatimAddress(data.address as NominatimAddress);
 
-          const region =
-            address?.borough ??
-            address?.city ??
-            address?.town ??
-            address?.municipality ??
-            address?.state ??
-            address?.country ??
-            UNKNOWN_REGION;
-
-          resolve({ region });
+          resolve(region ? { region } : null);
         } catch {
           resolve(null);
         }

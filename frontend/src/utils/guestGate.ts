@@ -1,6 +1,6 @@
 import { isGuestUser, getCurrentUserId, markExplicitLogout } from '@/utils/authStorage';
 
-export type GuestGuardReason = 'chat' | 'profile' | 'sell' | 'post' | 'offer' | 'share' | 'default';
+export type GuestGuardReason = 'chat' | 'profile' | 'sell' | 'post' | 'offer' | 'share' | 'like' | 'comment' | 'report' | 'default';
 
 const REASON_MESSAGES: Record<GuestGuardReason, string> = {
   chat: 'Log in with Pi Network to chat with sellers.',
@@ -9,6 +9,9 @@ const REASON_MESSAGES: Record<GuestGuardReason, string> = {
   post: 'Log in with Pi Network to write a community post.',
   offer: 'Log in with Pi Network to make an offer.',
   share: 'Log in with Pi Network to apply for free share.',
+  like: 'Log in with Pi Network to like posts and listings.',
+  comment: 'Log in with Pi Network to leave a comment.',
+  report: 'Log in with Pi Network to report content.',
   default: 'Log in with Pi Network to unlock all features.',
 };
 

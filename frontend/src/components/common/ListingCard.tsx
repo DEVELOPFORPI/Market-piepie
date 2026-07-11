@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
-import { labelProductStatusListing, relativeTimeShort } from '@/locale/enUI';
+import { labelProductAvailability, isFreeShareListing, relativeTimeShort } from '@/locale/enUI';
 import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
 import { getOrdersByProductId } from '@/utils/orderStorage';
@@ -86,7 +86,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     [PRODUCT_STATUS_VALUE.SOLD]: 'default',
   };
 
-  const statusLabel = labelProductStatusListing(product.status);
+  const statusLabel = labelProductAvailability(product);
+  const isFreeListing = isFreeShareListing(product);
   const disputeDisplay = getProductDisputeDisplay(product.id);
 
   const [liked, setLiked] = useState(() => isFavorite(product.id));
@@ -159,7 +160,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               </Badge>
             ) : (
               <>
-                {!isSold && !isTrading && (
+                {!isSold && !isTrading && (!isFreeListing || product.status !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
                   <Badge variant={statusVariant[product.status]} size="sm">
                     {statusLabel}
                   </Badge>
@@ -248,7 +249,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </Badge>
           ) : (
             <>
-              {!isSold && !isTrading && (
+              {!isSold && !isTrading && (!isFreeListing || product.status !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
                 <Badge variant={statusVariant[product.status]} size="sm">
                   {statusLabel}
                 </Badge>

@@ -35,6 +35,30 @@ export function labelProductStatusListing(s: ProductStatus): string {
   return s === PRODUCT_STATUS_VALUE.SOLD ? pick('Trade complete', '\uAC70\uB798\uC644\uB8CC') : labelProductStatus(s);
 }
 
+export function isFreeShareListing(product: { isFreeShare?: boolean; price?: number }): boolean {
+  return Boolean(product.isFreeShare || product.price === 0);
+}
+
+/** Free listings still for sale show "Free"; trading/sold keep status labels */
+export function labelProductAvailability(product: {
+  status: ProductStatus;
+  isFreeShare?: boolean;
+  price?: number;
+}): string {
+  if (isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) {
+    return pick('Free', '나눔');
+  }
+  return labelProductStatusListing(product.status);
+}
+
+export function labelFreeShareMenu(): string {
+  return pick('Free', '나눔');
+}
+
+export function labelCommentReply(): string {
+  return pick('Reply', '답글달기');
+}
+
 export function labelInDispute(): string {
   return pick('In dispute', '\uBD84\uC7C1\uC911');
 }

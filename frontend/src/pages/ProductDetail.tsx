@@ -6,7 +6,7 @@ import { Badge } from '@/components/common/Badge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { Product, ProductStatus } from '@/types';
-import { getAllProducts, deleteProduct, updateProductStatus } from '@/utils/productStorage';
+import { getAllProducts, deleteProduct, updateProductStatus, saveProduct } from '@/utils/productStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
@@ -14,7 +14,7 @@ import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStor
 import { hasProductActiveDispute, getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
-import { labelProductStatus, labelProductStatusListing, labelInDispute, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
+import { labelProductStatus, labelProductStatusListing, labelProductAvailability, labelFreeShareMenu, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 
@@ -40,6 +40,29 @@ const fallbackProduct: Product = {
   todayTradeAvailable: false,
   liked: false,
 };
+
+type SellerListingMenuKey =
+  | 'for_sale'
+  | 'free'
+  | typeof PRODUCT_STATUS_VALUE.RESERVED
+  | typeof PRODUCT_STATUS_VALUE.SOLD;
+
+const SELLER_LISTING_MENU: { key: SellerListingMenuKey; label: string }[] = [
+  { key: 'for_sale', label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
+  { key: 'free', label: labelFreeShareMenu() },
+  { key: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
+  { key: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatusListing(PRODUCT_STATUS_VALUE.SOLD) },
+];
+
+function isSellerListingMenuSelected(key: SellerListingMenuKey, p: Product): boolean {
+  if (key === 'free') {
+    return isFreeShareListing(p) && p.status === PRODUCT_STATUS_VALUE.FOR_SALE;
+  }
+  if (key === 'for_sale') {
+    return !isFreeShareListing(p) && p.status === PRODUCT_STATUS_VALUE.FOR_SALE;
+  }
+  return p.status === key;
+}
 
 export const ProductDetail: React.FC = () => {
   const navigate = useNavigate();
@@ -160,8 +183,59 @@ export const ProductDetail: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (status: ProductStatus) => {
+  const handleSellerListingMenu = async (key: SellerListingMenuKey) => {
     setShowStatusMenu(false);
+
+    if (key === 'free') {
+      if (isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) return;
+      const updated: Product = {
+        ...product,
+        status: PRODUCT_STATUS_VALUE.FOR_SALE,
+        isFreeShare: true,
+        price: 0,
+        allowOffer: false,
+      };
+      const ok = await saveProduct(updated);
+      if (!ok) {
+        alert('Could not update listing. Check your connection and try again.');
+        return;
+      }
+      setProduct(updated);
+      return;
+    }
+
+    if (key === 'for_sale') {
+      if (!isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) return;
+      if (isFreeShareListing(product)) {
+        if (!product.price || product.price <= 0) {
+          alert('Edit the listing to set a price before switching to For sale.');
+          navigate(`/register/edit/${product.id}`);
+          return;
+        }
+        const updated: Product = {
+          ...product,
+          status: PRODUCT_STATUS_VALUE.FOR_SALE,
+          isFreeShare: false,
+          allowOffer: product.allowOffer !== false,
+        };
+        const ok = await saveProduct(updated);
+        if (!ok) {
+          alert('Could not update listing. Check your connection and try again.');
+          return;
+        }
+        setProduct(updated);
+        return;
+      }
+      const ok = await updateProductStatus(product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
+      if (!ok) {
+        alert('Could not update status. Check your connection and try again.');
+        return;
+      }
+      setProduct((prev) => ({ ...prev, status: PRODUCT_STATUS_VALUE.FOR_SALE }));
+      return;
+    }
+
+    const status = key as ProductStatus;
     const ok = await updateProductStatus(product.id, status);
     if (!ok) {
       alert('Could not update status. Check your connection and try again.');
@@ -177,18 +251,12 @@ export const ProductDetail: React.FC = () => {
     ? labelInDispute()
     : productMeetupReserved
       ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
-      : labelProductStatus(product.status);
+      : labelProductAvailability(product);
   const buyerHeaderStatusLabel = productDisputeOpen
     ? labelInDispute()
-    : labelProductStatus(product.status);
+    : labelProductAvailability(product);
   const headerStatusLabel = isMine ? sellerHeaderStatusLabel : buyerHeaderStatusLabel;
   const headerStatusLocked = isMine ? sellerStatusLocked : productDisputeOpen;
-
-  const sellerStatusOptions: ProductStatus[] = [
-    PRODUCT_STATUS_VALUE.FOR_SALE,
-    PRODUCT_STATUS_VALUE.RESERVED,
-    PRODUCT_STATUS_VALUE.SOLD,
-  ];
 
   const chatCount = getChatRoomCountByProductId(product.id);
   const sellerDisputeCount = product.seller?.id ? getDisputeCountByUserId(product.seller.id) : 0;
@@ -295,7 +363,11 @@ export const ProductDetail: React.FC = () => {
             {showProductMenu && (
               <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
                 <button
-                  onClick={() => { setShowProductMenu(false); setShowReport(true); }}
+                  onClick={() => {
+                    setShowProductMenu(false);
+                    if (guestGuard('report')) return;
+                    setShowReport(true);
+                  }}
                   className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 rounded-lg"
                 >
                   Report
@@ -311,16 +383,16 @@ export const ProductDetail: React.FC = () => {
         height="auto"
       >
         <div className="py-2">
-          {sellerStatusOptions.map((status) => (
+          {SELLER_LISTING_MENU.map((option) => (
             <button
-              key={status}
+              key={option.key}
               type="button"
-              onClick={() => void handleStatusChange(status)}
+              onClick={() => void handleSellerListingMenu(option.key)}
               className={`w-full px-4 py-4 text-center text-base border-b border-gray-100 last:border-b-0 ${
-                product.status === status ? 'font-semibold text-gray-900' : 'text-gray-700'
+                isSellerListingMenuSelected(option.key, product) ? 'font-semibold text-gray-900' : 'text-gray-700'
               }`}
             >
-              {labelProductStatus(status)}
+              {option.label}
             </button>
           ))}
           <button
@@ -349,7 +421,11 @@ export const ProductDetail: React.FC = () => {
         />
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); void toggleFavorite(product).then(setLiked); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (guestGuard('like')) return;
+            void toggleFavorite(product).then(setLiked);
+          }}
           className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-white/90 rounded-lg shadow-sm hover:bg-white"
         >
           <svg className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,7 +486,7 @@ export const ProductDetail: React.FC = () => {
           {!isMine && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
-                {labelProductStatusListing(product.status)}
+                {labelProductAvailability(product)}
               </Badge>
               {productDisputeOpen && (
                 <Badge variant="danger" size="sm">Dispute</Badge>
@@ -534,14 +610,6 @@ export const ProductDetail: React.FC = () => {
                   Make offer
                 </button>
               )
-            )}
-            {(product.isFreeShare || product.price === 0) && (
-              <button
-                onClick={() => { if (guestGuard('share')) return; navigate(`/share/${product.id}`); }}
-                className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 text-sm"
-              >
-                Request free share
-              </button>
             )}
           </div>
         )}

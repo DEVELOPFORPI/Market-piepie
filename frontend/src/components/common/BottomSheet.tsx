@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -8,6 +8,8 @@ interface BottomSheetProps {
   height?: string;
 }
 
+const ANIM_MS = 300;
+
 export const BottomSheet: React.FC<BottomSheetProps> = ({
   isOpen,
   onClose,
@@ -15,48 +17,85 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   children,
   height = '80vh',
 }) => {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const isAuto = height === 'auto';
+  const hasTitle = Boolean(title?.trim());
+
   useEffect(() => {
     if (isOpen) {
+      setMounted(true);
+      setVisible(false);
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+      const frame = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+      return () => cancelAnimationFrame(frame);
     }
-    return () => {
+
+    setVisible(false);
+    const timer = window.setTimeout(() => {
+      setMounted(false);
       document.body.style.overflow = '';
+    }, ANIM_MS);
+    return () => {
+      clearTimeout(timer);
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  useEffect(() => () => {
+    document.body.style.overflow = '';
+  }, []);
+
+  if (!mounted) return null;
 
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity ease-out ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ transitionDuration: `${ANIM_MS}ms` }}
         onClick={onClose}
+        aria-hidden
       />
       <div
-        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 shadow-2xl transition-transform"
-        style={{ height, maxHeight: '90vh' }}
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl transition-transform ease-out will-change-transform safe-area-bottom ${
+          visible ? 'translate-y-0' : 'translate-y-full'
+        }`}
+        style={{
+          transitionDuration: `${ANIM_MS}ms`,
+          ...(isAuto ? { maxHeight: '90vh' } : { height, maxHeight: '90vh' }),
+        }}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between rounded-t-2xl">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600"
-            aria-label="Close"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="overflow-y-auto" style={{ height: `calc(${height} - 60px)` }}>
+        {!hasTitle && (
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-gray-300" aria-hidden />
+          </div>
+        )}
+        {hasTitle && (
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between rounded-t-2xl">
+            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+        <div
+          className="overflow-y-auto"
+          style={isAuto || !hasTitle ? undefined : { height: `calc(${height} - 60px)` }}
+        >
           {children}
         </div>
       </div>
     </>
   );
 };
-
-
-

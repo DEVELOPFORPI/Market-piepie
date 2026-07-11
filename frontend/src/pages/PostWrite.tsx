@@ -5,6 +5,7 @@ import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory } from '@/locale/enUI';
 import { addUserPost, getPostById, ensurePostById, updateUserPost, updateDisputePost, COMMUNITY_QUOTA_EXCEEDED_MESSAGE } from '@/utils/communityStorage';
+import { syncPostsFromDB } from '@/utils/dbSync';
 import { getMyProducts } from '@/utils/productStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
@@ -131,12 +132,23 @@ export const PostWrite: React.FC = () => {
       if (isEdit) {
         if (existingForEdit?.category === POST_CATEGORY_VALUE.DISPUTE && existingForEdit?.orderId) {
           updateDisputePost(post);
+          alert('Post updated.');
         } else {
-          updateUserPost(post);
+          const ok = await updateUserPost(post);
+          if (!ok) {
+            alert('Could not save the post. Try again.');
+            return;
+          }
+          await syncPostsFromDB();
+          alert('Post updated.');
         }
-        alert('Post updated.');
       } else {
-        addUserPost(post);
+        const ok = await addUserPost(post);
+        if (!ok) {
+          alert('Could not save the post. Try again.');
+          return;
+        }
+        await syncPostsFromDB();
         alert('Post published.');
       }
       navigate('/community', { replace: true });

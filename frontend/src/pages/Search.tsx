@@ -12,7 +12,6 @@ export const Search: React.FC = () => {
   const [showFilter, setShowFilter] = useState(false);
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [kycOnly, setKycOnly] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -181,41 +180,12 @@ export const Search: React.FC = () => {
             </div>
           </div>
 
-          {/* Toggles */}
-          <div className="space-y-3">
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm text-gray-700">KYC sellers only</span>
-              <span className="relative w-5 h-5 shrink-0 inline-flex items-center justify-center">
-                <input
-                  type="checkbox"
-                  checked={kycOnly}
-                  onChange={(e) => setKycOnly(e.target.checked)}
-                  className="peer sr-only"
-                />
-                <span
-                  className="absolute inset-0 rounded border-2 border-gray-300 peer-checked:border-[#00A8A3] peer-checked:bg-[#00A8A3]"
-                  aria-hidden
-                />
-                <svg
-                  className="relative z-10 w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-            </label>
-          </div>
-
           {/* Actions */}
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => {
                 setMinPrice('');
                 setMaxPrice('');
-                setKycOnly(false);
                 setSelectedCategory('');
               }}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"

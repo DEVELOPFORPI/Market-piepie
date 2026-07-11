@@ -31,6 +31,7 @@ export const HEAVY_KEYS = [
   'all_chatrooms',
   'myDisputes',
   'community_user_posts',
+  'community_feed_posts',
   'community_dispute_posts',
   'community_comments',
   'all_received_reviews',

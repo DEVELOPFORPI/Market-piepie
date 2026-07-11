@@ -36,7 +36,10 @@ export const Community: React.FC = () => {
   const loadPosts = () => setPosts(getAllPosts());
 
   useEffect(() => {
-    loadPosts();
+    void (async () => {
+      await syncPostsFromDB();
+      loadPosts();
+    })();
     window.addEventListener('postsChanged', loadPosts);
     return () => window.removeEventListener('postsChanged', loadPosts);
   }, []);
