@@ -120,6 +120,8 @@ export const ProductDetail: React.FC = () => {
           liked: false,
           isFreeShare: d.is_free_share ?? false,
           allowOffer: d.allow_offer ?? true,
+          adminHidden: Boolean(d.admin_hidden),
+          adminHiddenReason: d.admin_hidden_reason || undefined,
         };
         setProduct(mapped);
       } else {
@@ -551,7 +553,13 @@ export const ProductDetail: React.FC = () => {
             <span className="text-lg font-bold text-gray-900">{product.price.toLocaleString()} PI</span>
           )}
         </div>
-        {isMine ? (
+        {product.adminHidden ? (
+          <div className="rounded-lg bg-gray-100 px-4 py-3 text-sm text-gray-600">
+            This listing was hidden by admin.
+            {product.adminHiddenReason ? ` Reason: ${product.adminHiddenReason}` : ''}
+            {!isMine ? ' You can continue an existing trade from the chat room.' : ''}
+          </div>
+        ) : isMine ? (
           hasProductActiveDispute(product.id) ? (
             <div className="flex items-center gap-2 py-2">
               <p className="flex-1 text-sm text-gray-500">You cannot edit or delete while a dispute is open.</p>

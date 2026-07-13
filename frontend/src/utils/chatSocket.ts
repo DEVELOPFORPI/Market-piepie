@@ -172,9 +172,25 @@ export function broadcastOrderUpdate(targetUserId: string, orderId: string, orde
 }
 
 export function broadcastProductChange(action: string, productId: string): void {
-  if (!feedChannel) return;
   const senderId = getCurrentUserId() || '';
-  feedChannel.send({ type: 'broadcast', event: 'product_change', payload: { action, productId, senderId } });
+  const message = {
+    type: 'broadcast' as const,
+    event: 'product_change',
+    payload: { action, productId, senderId },
+  };
+  if (feedChannel) {
+    feedChannel.send(message);
+    return;
+  }
+
+  const temporaryChannel = supabase.channel('products_feed');
+  temporaryChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      temporaryChannel.send(message).finally(() => {
+        setTimeout(() => supabase.removeChannel(temporaryChannel), 500);
+      });
+    }
+  });
 }
 
 export function broadcastNotification(targetUserId: string): void {

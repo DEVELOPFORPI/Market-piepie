@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { broadcastProductChange } from '@/utils/chatSocket';
 
 interface Product {
   id: string;
@@ -15,6 +16,8 @@ interface Product {
   seller_id: string | null;
   seller_nickname?: string;
   description: string | null;
+  admin_hidden: boolean;
+  admin_hidden_reason: string | null;
   created_at: string;
 }
 
@@ -33,13 +36,16 @@ export const AdminProducts: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [freeOnly, setFreeOnly] = useState(false);
+  const [hiddenOnly, setHiddenOnly] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
+  const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (statusFilter !== 'ALL') params.set('status', statusFilter);
     if (freeOnly) params.set('free_share', 'true');
+    if (hiddenOnly) params.set('hidden', 'true');
     if (search.trim()) params.set('q', search.trim());
     const res = await api.get<Product[]>(`/api/admin/products?${params.toString()}`, {
       headers: adminPasswordHeaders(),
@@ -48,7 +54,7 @@ export const AdminProducts: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [statusFilter, freeOnly]);
+  useEffect(() => { load(); }, [statusFilter, freeOnly, hiddenOnly]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +70,40 @@ export const AdminProducts: React.FC = () => {
     }
     setSelected(null);
     load();
+  };
+
+  const handleVisibility = async (product: Product) => {
+    const nextHidden = !product.admin_hidden;
+    let reason = '';
+    if (nextHidden) {
+      const entered = window.prompt(
+        '판매자에게 보여줄 숨김 사유를 입력하세요. (선택)',
+        product.admin_hidden_reason || '',
+      );
+      if (entered === null) return;
+      reason = entered.trim();
+    }
+
+    setVisibilitySavingId(product.id);
+    try {
+      const res = await api.patch<Product>(
+        `/api/admin/products/${product.id}/visibility`,
+        { hidden: nextHidden, reason },
+        { headers: adminPasswordHeaders() },
+      );
+      if (!res.ok) {
+        alert(`처리 실패: ${res.error || `HTTP ${res.status}`}`);
+        return;
+      }
+      broadcastProductChange(
+        nextHidden ? 'admin_hidden' : 'admin_unhidden',
+        product.id,
+      );
+      setSelected(null);
+      await load();
+    } finally {
+      setVisibilitySavingId(null);
+    }
   };
 
   return (
@@ -90,6 +130,10 @@ export const AdminProducts: React.FC = () => {
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" checked={freeOnly} onChange={(e) => setFreeOnly(e.target.checked)} />
           나눔만 보기
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={hiddenOnly} onChange={(e) => setHiddenOnly(e.target.checked)} />
+          숨김만 보기
         </label>
         <button onClick={() => load()} className="px-4 py-2.5 text-sm text-white rounded-lg" style={{ backgroundColor: TEAL }}>
           검색
@@ -143,14 +187,28 @@ export const AdminProducts: React.FC = () => {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      p.status === '판매중' ? 'bg-green-100 text-green-700'
+                      p.admin_hidden ? 'bg-gray-200 text-gray-700'
+                      : p.status === '판매중' ? 'bg-green-100 text-green-700'
                       : p.status === '예약중' ? 'bg-yellow-100 text-yellow-700'
                       : 'bg-gray-100 text-gray-500'
-                    }`}>{p.status}</span>
+                    }`}>{p.admin_hidden ? '관리자 숨김' : p.status}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{p.category || '-'}</td>
                   <td className="px-4 py-3 text-xs text-gray-400">{new Date(p.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => void handleVisibility(p)}
+                      disabled={visibilitySavingId === p.id}
+                      className={`mr-3 text-xs font-medium hover:underline disabled:opacity-50 ${
+                        p.admin_hidden ? 'text-[#00A8A3]' : 'text-gray-600'
+                      }`}
+                    >
+                      {visibilitySavingId === p.id
+                        ? '처리 중…'
+                        : p.admin_hidden
+                          ? '숨김 해제'
+                          : '숨김'}
+                    </button>
                     <button
                       onClick={() => handleDelete(p.id)}
                       className="text-red-500 text-xs font-medium hover:underline"
@@ -172,10 +230,11 @@ export const AdminProducts: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">상품 상세</h2>
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                selected.status === '판매중' ? 'bg-green-100 text-green-700'
+                selected.admin_hidden ? 'bg-gray-200 text-gray-700'
+                : selected.status === '판매중' ? 'bg-green-100 text-green-700'
                 : selected.status === '예약중' ? 'bg-yellow-100 text-yellow-700'
                 : 'bg-gray-100 text-gray-500'
-              }`}>{selected.status}</span>
+              }`}>{selected.admin_hidden ? '관리자 숨김' : selected.status}</span>
             </div>
 
             {selected.images && selected.images.length > 0 && (
@@ -219,12 +278,31 @@ export const AdminProducts: React.FC = () => {
                   <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 mt-1 max-h-40 overflow-y-auto">{selected.description}</p>
                 </div>
               )}
+              {selected.admin_hidden && (
+                <div>
+                  <span className="text-xs text-gray-400">숨김 사유</span>
+                  <p className="mt-1 rounded-lg bg-gray-100 p-3 text-gray-700">
+                    {selected.admin_hidden_reason || '사유 없음'}
+                  </p>
+                </div>
+              )}
               <div className="text-xs text-gray-400 break-all">ID: {selected.id}</div>
             </div>
 
             <div className="flex gap-2 mt-6">
               <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                 닫기
+              </button>
+              <button
+                onClick={() => void handleVisibility(selected)}
+                disabled={visibilitySavingId === selected.id}
+                className="flex-1 rounded-lg bg-gray-700 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {visibilitySavingId === selected.id
+                  ? '처리 중…'
+                  : selected.admin_hidden
+                    ? '숨김 해제'
+                    : '상품 숨김'}
               </button>
               <button onClick={() => handleDelete(selected.id)}
                 className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg bg-red-500 hover:bg-red-600">

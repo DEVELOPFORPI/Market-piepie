@@ -1,24 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { Post } from '@/types';
+import { Post, PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
 import { getUserPosts, deleteUserPost } from '@/utils/communityStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncMyPostsFromDB } from '@/utils/dbSync';
 
+type CategoryFilter = PostCategory | 'all';
+
+const CATEGORY_TABS: CategoryFilter[] = [
+  'all',
+  POST_CATEGORY_VALUE.QUESTION,
+  POST_CATEGORY_VALUE.INFO,
+  POST_CATEGORY_VALUE.LOOKING_FOR,
+  POST_CATEGORY_VALUE.DISPUTE,
+  POST_CATEGORY_VALUE.SWAP,
+];
+
+function tabLabel(category: CategoryFilter): string {
+  if (category === 'all') return 'All';
+  return labelPostCategory(category);
+}
+
 export const MyPosts: React.FC = () => {
   const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [filterCategory, setFilterCategory] = useState<CategoryFilter>('all');
 
   const loadPosts = () => {
-    const userPosts = getUserPosts();
-    const feedCount = (() => { try { const r = localStorage.getItem('community_feed_posts'); return r ? JSON.parse(r).length : 0; } catch { return -1; } })();
-    // #region agent log
-    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'MyPosts.tsx:loadPosts',message:'my posts rendered',data:{userPostCount:userPosts.length,feedPostCount:feedCount,authorIds:[...new Set(userPosts.map(p=>p.author?.id).filter(Boolean))].slice(0,3)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    setPosts(userPosts);
+    setPosts(getUserPosts());
   };
 
   useEffect(() => {
@@ -30,6 +42,11 @@ export const MyPosts: React.FC = () => {
     window.addEventListener('postsChanged', loadPosts);
     return () => window.removeEventListener('postsChanged', loadPosts);
   }, []);
+
+  const filteredPosts = useMemo(() => {
+    if (filterCategory === 'all') return posts;
+    return posts.filter((post) => post.category === filterCategory);
+  }, [posts, filterCategory]);
 
   const handleDelete = (post: Post) => {
     if (confirm(`Delete "${post.title}"?`)) {
@@ -50,6 +67,29 @@ export const MyPosts: React.FC = () => {
         }
         title="My posts"
       />
+
+      {posts.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto border-b border-gray-200 px-4 py-3">
+          {CATEGORY_TABS.map((category) => (
+            <button
+              key={category}
+              onClick={() =>
+                setFilterCategory((current) =>
+                  current === category && category !== 'all' ? 'all' : category,
+                )
+              }
+              className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+                filterCategory === category
+                  ? 'text-white'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+              style={filterCategory === category ? { backgroundColor: '#00A8A3' } : undefined}
+            >
+              {tabLabel(category)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="px-4 py-4">
         {posts.length === 0 ? (
@@ -76,9 +116,13 @@ export const MyPosts: React.FC = () => {
               Write post
             </button>
           </div>
+        ) : filteredPosts.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm text-gray-500">No posts in this category.</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {posts.map((post) => (
+            {filteredPosts.map((post) => (
               <div
                 key={post.id}
                 className="p-4 border border-gray-200 rounded-lg"

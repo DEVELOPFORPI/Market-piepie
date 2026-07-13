@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
+import { showToast } from '@/utils/toast';
 
 export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment';
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const TEAL = '#00A8A3';
+const PENDING_REPORT_TOAST = '이미 신고한 항목입니다. 처리 중입니다.';
 
 const REASONS: Record<ReportTargetType, string[]> = {
   product: [
@@ -63,25 +65,73 @@ const TYPE_LABEL: Record<ReportTargetType, string> = {
   comment: 'comment',
 };
 
+interface MyReport {
+  target_type: string;
+  target_id: string;
+  status: string;
+}
+
 export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, targetId, targetLabel }) => {
   const [reason, setReason] = useState<string>('');
   const [description, setDescription] = useState('');
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
-
-  if (!open) return null;
+  const [checkingPending, setCheckingPending] = useState(false);
 
   const reset = () => {
     setReason('');
     setDescription('');
     setSending(false);
     setDone(false);
+    setCheckingPending(false);
   };
 
   const close = () => {
     reset();
     onClose();
   };
+
+  const notifyPendingReport = () => {
+    showToast(PENDING_REPORT_TOAST);
+    close();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setCheckingPending(true);
+
+    void (async () => {
+      const res = await api.get<MyReport[]>('/api/reports/mine');
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setCheckingPending(false);
+        return;
+      }
+
+      const pending = res.data?.some(
+        (report) =>
+          report.target_type === targetType &&
+          report.target_id === targetId &&
+          report.status === 'open',
+      );
+
+      if (pending) {
+        notifyPendingReport();
+        return;
+      }
+
+      setCheckingPending(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, targetType, targetId]);
+
+  if (!open || checkingPending) return null;
 
   const handleSubmit = async () => {
     if (!reason || sending) return;
@@ -95,8 +145,7 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
     setSending(false);
     if (!res.ok) {
       if (res.status === 409) {
-        alert('You already reported this. Wait for admin review.');
-        close();
+        notifyPendingReport();
         return;
       }
       alert(res.error || `Failed to submit (HTTP ${res.status})`);

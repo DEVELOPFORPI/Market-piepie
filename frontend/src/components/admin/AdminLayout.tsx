@@ -77,15 +77,19 @@ export const AdminLayout: React.FC = () => {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `${asideLink} ${
       isActive
-        ? 'bg-white/12 text-white shadow-inner'
-        : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+        ? 'bg-white/20 text-white shadow-sm'
+        : 'text-white/80 hover:bg-white/10 hover:text-white'
     }`;
 
   return (
     <div className="flex min-h-screen bg-[#f0f2f5]" lang="ko">
-      <aside className="flex w-[248px] shrink-0 flex-col border-r border-black/20 bg-[#1c1c1e] text-white">
+      <aside className="flex w-[248px] shrink-0 flex-col border-r border-[#008f8b] bg-[#00A8A3] text-white">
         <div className="flex flex-col items-center border-b border-white/10 px-4 py-8">
-          <div className="mb-4 h-14 w-14 shrink-0 rounded-full bg-white/20" aria-hidden />
+          <img
+            src="/LOGO_M.svg"
+            alt="Market PiePie"
+            className="mb-4 h-14 w-14 shrink-0 object-contain"
+          />
           <span className="text-[15px] font-semibold tracking-tight">관리자 패널</span>
         </div>
 
@@ -118,6 +122,10 @@ export const AdminLayout: React.FC = () => {
             <IconInquiry />
             문의사항
           </NavLink>
+          <NavLink to="/admin/notices" className={linkClass}>
+            <IconDocument />
+            공지
+          </NavLink>
           <NavLink to="/admin/popup" className={linkClass}>
             <IconPopup />
             홈 팝업
@@ -128,7 +136,7 @@ export const AdminLayout: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="w-full rounded-lg py-2.5 text-center text-xs font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="w-full rounded-lg py-2.5 text-center text-xs font-medium text-white/75 transition-colors hover:bg-white/10 hover:text-white"
           >
             앱으로 돌아가기
           </button>

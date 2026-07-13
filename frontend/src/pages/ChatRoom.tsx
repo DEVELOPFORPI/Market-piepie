@@ -254,6 +254,10 @@ export const ChatRoom: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   /** Message ids for which we already showed the "meetup started" popup */
   const shownMeetupPopupIdsRef = useRef<Set<string>>(new Set());
+  /** Message ids already present when room was entered (for delta-only popup checks) */
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  /** First bulk message sync for this room visit — old meetups must not popup */
+  const initialMessageSeedDoneRef = useRef(false);
   /** Show deleted-listing alert once, then leave */
   const deletedProductPopupShownRef = useRef(false);
 
@@ -276,6 +280,9 @@ export const ChatRoom: React.FC = () => {
     setNewMessageCount(0);
     setRoom(roomId ? getChatRoom(roomId) : null);
     deletedProductPopupShownRef.current = false;
+    shownMeetupPopupIdsRef.current = new Set();
+    knownMessageIdsRef.current = new Set();
+    initialMessageSeedDoneRef.current = false;
   }, [roomId]);
 
   // WebSocket: connect, join room, listen for messages + read receipts
@@ -288,7 +295,8 @@ export const ChatRoom: React.FC = () => {
       if (data.roomId === roomId) {
         addRemoteMessage(roomId, data.message);
         setMessages(getMessages(roomId));
-        checkNewMeetupFromOther([data.message]);
+        knownMessageIdsRef.current.add(data.message.id);
+        checkNewMeetupFromOther([data.message], 'websocket');
       }
     });
 
@@ -360,16 +368,34 @@ export const ChatRoom: React.FC = () => {
   }, [location.pathname, roomId]);
 
   // Realtime: partner sent meetup card -> popup for buyer
-  const checkNewMeetupFromOther = (updatedMessages: ChatMessage[]) => {
+  const checkNewMeetupFromOther = (updatedMessages: ChatMessage[], source = 'unknown') => {
     const myId = getCurrentUserId();
     if (!myId) return;
     for (const msg of updatedMessages) {
       if (msg.type === 'meetup_confirmed' && msg.senderId !== myId && !shownMeetupPopupIdsRef.current.has(msg.id)) {
+        // #region agent log
+        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:checkNewMeetupFromOther',message:'meetup popup triggered',data:{source,msgId:msg.id,wasKnown:knownMessageIdsRef.current.has(msg.id),shownCount:shownMeetupPopupIdsRef.current.size,knownCount:knownMessageIdsRef.current.size,batchSize:updatedMessages.length},timestamp:Date.now(),hypothesisId:'A-C'})}).catch(()=>{});
+        // #endregion
         shownMeetupPopupIdsRef.current.add(msg.id);
         setShowMeetupStartedPopup(true);
         break;
       }
     }
+  };
+
+  const seedKnownMeetupMessages = (messages: ChatMessage[], source: string) => {
+    const myId = getCurrentUserId();
+    let meetupMarked = 0;
+    for (const msg of messages) {
+      knownMessageIdsRef.current.add(msg.id);
+      if (myId && msg.type === 'meetup_confirmed' && msg.senderId !== myId) {
+        shownMeetupPopupIdsRef.current.add(msg.id);
+        meetupMarked += 1;
+      }
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:seedKnownMeetupMessages',message:'seed meetup messages',data:{source,total:messages.length,meetupMarked,knownCount:knownMessageIdsRef.current.size},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
+    // #endregion
   };
 
   useEffect(() => {
@@ -378,10 +404,10 @@ export const ChatRoom: React.FC = () => {
 
     // Existing meetup messages on load: no popup
     const initial = getMessages(roomId);
-    const myId = getCurrentUserId();
-    initial.forEach((msg) => {
-      if (msg.type === 'meetup_confirmed' && msg.senderId !== myId) shownMeetupPopupIdsRef.current.add(msg.id);
-    });
+    if (initial.length > 0) {
+      seedKnownMeetupMessages(initial, 'initial-load');
+      initialMessageSeedDoneRef.current = true;
+    }
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'all_products') {
@@ -394,7 +420,23 @@ export const ChatRoom: React.FC = () => {
       setRoom(getChatRoom(roomId));
       const updated = getMessages(roomId);
       setMessages(updated);
-      checkNewMeetupFromOther(updated);
+
+      if (!initialMessageSeedDoneRef.current) {
+        seedKnownMeetupMessages(updated, 'first-bulk-sync');
+        for (const m of updated) knownMessageIdsRef.current.add(m.id);
+        initialMessageSeedDoneRef.current = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:handleSameTab',message:'first bulk sync seeded',data:{total:updated.length},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+
+      const newOnly = updated.filter((m) => !knownMessageIdsRef.current.has(m.id));
+      // #region agent log
+      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:handleSameTab',message:'chatRoomsChanged',data:{total:updated.length,newOnly:newOnly.length,knownBefore:knownMessageIdsRef.current.size},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      for (const m of newOnly) knownMessageIdsRef.current.add(m.id);
+      if (newOnly.length > 0) checkNewMeetupFromOther(newOnly, 'chatRoomsChanged');
     };
 
     const handleProductChange = () => {

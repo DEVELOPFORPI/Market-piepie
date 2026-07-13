@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 
@@ -38,6 +38,27 @@ const FILTER_OPTIONS = [
   { value: 'RESOLVED', label: '해결됨' },
 ] as const;
 
+const REASON_LABEL: Record<string, string> = {
+  'Listing mismatch': '물품 정보 불일치',
+  'Not received': '미수령',
+  'Damaged item': '파손·하자',
+  'Seller no-show': '판매자 노쇼',
+  'Buyer no-show': '구매자 노쇼',
+  'Buyer not responding': '구매자 무응답',
+  'Payment not received': '미입금',
+  'Bad-faith behavior': '악의적 행위',
+  Other: '기타',
+};
+
+const REASON_OPTIONS = Object.keys(REASON_LABEL);
+
+type ReasonFilter = 'ALL' | keyof typeof REASON_LABEL;
+
+function reasonLabel(value: string | null | undefined) {
+  if (!value) return '-';
+  return REASON_LABEL[value] || value;
+}
+
 export const AdminDisputes: React.FC = () => {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +66,8 @@ export const AdminDisputes: React.FC = () => {
   const [adminNote, setAdminNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<string>('ALL');
+  const [reasonFilter, setReasonFilter] = useState<ReasonFilter>('ALL');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -65,7 +88,27 @@ export const AdminDisputes: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = filter === 'ALL' ? disputes : disputes.filter((d) => d.status === filter);
+  const filtered = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return disputes.filter((d) => {
+      if (filter !== 'ALL' && d.status !== filter) return false;
+      if (reasonFilter !== 'ALL' && d.reason !== reasonFilter) return false;
+      if (!keyword) return true;
+      return [
+        d.id,
+        d.order_id,
+        d.product_title,
+        d.buyer_id,
+        d.seller_id,
+        d.buyer_nickname,
+        d.seller_nickname,
+        d.reason,
+        d.description,
+        d.action,
+        d.admin_response,
+      ].some((value) => value?.toLowerCase().includes(keyword));
+    });
+  }, [disputes, filter, reasonFilter, search]);
 
   const openDetail = (d: Dispute) => {
     setSelected(d);
@@ -98,15 +141,46 @@ export const AdminDisputes: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
-        {FILTER_OPTIONS.map(({ value, label }) => (
-          <button key={value} onClick={() => setFilter(value)}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="상품명, 닉네임, 주문 ID, 사유로 검색"
+        className="mb-4 w-full max-w-md rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
+      />
+
+      <div className="mb-6 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {FILTER_OPTIONS.map(({ value, label }) => (
+            <button key={value} onClick={() => setFilter(value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                filter === value ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setReasonFilter('ALL')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === value ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}>
-            {label}
+              reasonFilter === 'ALL' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            전체 사유
           </button>
-        ))}
+          {REASON_OPTIONS.map((reason) => (
+            <button
+              key={reason}
+              onClick={() => setReasonFilter(reason as ReasonFilter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                reasonFilter === reason ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {REASON_LABEL[reason]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -131,7 +205,7 @@ export const AdminDisputes: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     구매자: {d.buyer_nickname} / 판매자: {d.seller_nickname}
                   </p>
-                  {d.reason && <p className="text-xs text-gray-400 mt-1 truncate">{d.reason}</p>}
+                  {d.reason && <p className="text-xs text-gray-400 mt-1 truncate">{reasonLabel(d.reason)}</p>}
                 </div>
               </div>
             </div>
@@ -159,7 +233,7 @@ export const AdminDisputes: React.FC = () => {
               </div>
 
               {selected.reason && (
-                <div><span className="text-gray-400 text-xs">사유</span><p className="text-gray-700">{selected.reason}</p></div>
+                <div><span className="text-gray-400 text-xs">사유</span><p className="text-gray-700">{reasonLabel(selected.reason)}</p></div>
               )}
               {selected.description && (
                 <div><span className="text-gray-400 text-xs">상세 설명</span><p className="text-gray-700">{selected.description}</p></div>

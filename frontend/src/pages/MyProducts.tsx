@@ -20,6 +20,12 @@ export const MyProducts: React.FC = () => {
 
   useEffect(() => {
     loadProducts();
+    window.addEventListener('productsChanged', loadProducts);
+    window.addEventListener('productRegistered', loadProducts);
+    return () => {
+      window.removeEventListener('productsChanged', loadProducts);
+      window.removeEventListener('productRegistered', loadProducts);
+    };
   }, []);
 
   const handleDelete = (productId: string, productTitle: string) => {
@@ -92,18 +98,28 @@ export const MyProducts: React.FC = () => {
           <div className="space-y-4">
             {filteredProducts.map((product) => (
               <div key={product.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                <div onClick={() => navigate(`/product/${product.id}`)}>
+                <div
+                  onClick={() => {
+                    if (!product.adminHidden) navigate(`/product/${product.id}`);
+                  }}
+                >
                   <ListingCard
                     product={product}
                     layout="list"
                   />
                 </div>
+                {product.adminHidden ? (
+                  <div className="border-t border-gray-200 bg-gray-100 px-4 py-2 text-xs text-gray-600">
+                    This listing was hidden by admin.
+                    {product.adminHiddenReason ? ` Reason: ${product.adminHiddenReason}` : ''}
+                  </div>
+                ) : null}
                 <div className="flex border-t border-gray-200">
                   {hasProductActiveDispute(product.id) ? (
                     <p className="flex-1 py-2.5 text-center text-sm text-gray-500">You cannot edit or delete during a dispute.</p>
                   ) : (
                     <>
-                      {product.status !== PRODUCT_STATUS_VALUE.SOLD && (
+                      {!product.adminHidden && product.status !== PRODUCT_STATUS_VALUE.SOLD && (
                         <>
                           <button
                             onClick={() => navigate(`/register/edit/${product.id}`)}

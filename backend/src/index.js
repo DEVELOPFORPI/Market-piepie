@@ -373,6 +373,22 @@ async function requireAuth(req, res, next) {
   const userId = await getUserIdFromToken(auth.slice(7));
   if (!userId)
     return res.status(401).json({ error: "Invalid or expired session" });
+  if (pool) {
+    try {
+      const { rows } = await pool.query(
+        "SELECT account_status FROM users WHERE id = $1 LIMIT 1",
+        [userId],
+      );
+      if (!rows.length)
+        return res.status(401).json({ error: "User not found" });
+      if (rows[0].account_status === "suspended")
+        return res.status(403).json({ error: "Account suspended" });
+    } catch (e) {
+      if (!/account_status|Unknown column/i.test(String(e.message))) {
+        return res.status(500).json({ error: "Could not verify account status" });
+      }
+    }
+  }
   req.authUserId = userId;
   next();
 }
@@ -1332,6 +1348,12 @@ app.get("/api/products", requireDb, async (req, res) => {
       params.push(seller_id);
       query += ` AND p.seller_id=$${params.length}`;
     }
+    if (req.authUserId) {
+      params.push(req.authUserId);
+      query += ` AND (p.admin_hidden = false OR p.seller_id = $${params.length})`;
+    } else {
+      query += ` AND p.admin_hidden = false`;
+    }
     params.push(limit, offset);
     query += ` ORDER BY p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
     const { rows } = await pool.query(query, params);
@@ -1350,6 +1372,25 @@ app.get("/api/products/:id", requireDb, async (req, res) => {
     );
     if (!rows.length)
       return res.status(404).json({ error: "Product not found" });
+    if (rows[0].admin_hidden && rows[0].seller_id !== req.authUserId) {
+      if (!req.authUserId) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      const access = await pool.query(
+        `SELECT 1
+           FROM chat_rooms
+          WHERE product_id = $1 AND (buyer_id = $2 OR seller_id = $2)
+          UNION
+         SELECT 1
+           FROM orders
+          WHERE product_id = $1 AND (buyer_id = $2 OR seller_id = $2)
+          LIMIT 1`,
+        [req.params.id, req.authUserId],
+      );
+      if (!access.rows.length) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+    }
     res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1669,6 +1710,19 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
       ? `${meetup_date} ${meetup_time}`
       : meetup_time || null;
   try {
+    const existingOrder = await pool.query(
+      "SELECT id FROM orders WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    if (!existingOrder.rows.length && product_id) {
+      const product = await pool.query(
+        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        [product_id],
+      );
+      if (product.rows[0]?.admin_hidden) {
+        return res.status(409).json({ error: "This listing is hidden by admin" });
+      }
+    }
     const { rows } = await queryReturning(
       `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company, shipping_proof_images)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
@@ -1926,6 +1980,19 @@ app.post("/api/chat-rooms", requireDb, requireAuth, async (req, res) => {
   if (req.authUserId !== buyer_id && req.authUserId !== seller_id)
     return res.status(403).json({ error: "Forbidden" });
   try {
+    const existingRoom = await pool.query(
+      "SELECT id FROM chat_rooms WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    if (!existingRoom.rows.length && product_id) {
+      const product = await pool.query(
+        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        [product_id],
+      );
+      if (product.rows[0]?.admin_hidden) {
+        return res.status(409).json({ error: "This listing is hidden by admin" });
+      }
+    }
     const leftIds = Array.isArray(left_user_ids) ? left_user_ids : [];
     const { rows } = await queryReturning(
       `INSERT INTO chat_rooms (id, product_id, buyer_id, seller_id, order_id, left_user_ids)
@@ -2316,6 +2383,43 @@ app.get("/api/posts/:id/comment-count", requireDb, async (req, res) => {
   }
 });
 
+function getDailyViewDate() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function getDailyViewerKey(req) {
+  const rawViewer = req.authUserId
+    ? `user:${req.authUserId}`
+    : `device:${String(req.body?.viewer_id || req.ip || "unknown").slice(0, 255)}`;
+  return crypto.createHash("sha256").update(rawViewer).digest("hex");
+}
+
+async function recordDailyContentView(req, targetType, targetId, tableName) {
+  const inserted = await pool.query(
+    `INSERT IGNORE INTO content_views
+       (target_type, target_id, viewer_key, view_date)
+     VALUES ($1, $2, $3, $4)`,
+    [targetType, targetId, getDailyViewerKey(req), getDailyViewDate()],
+  );
+
+  if (inserted.rowCount > 0) {
+    await pool.query(
+      `UPDATE ${tableName} SET view_count = view_count + 1 WHERE id = $1`,
+      [targetId],
+    );
+  }
+
+  const { rows } = await pool.query(
+    `SELECT view_count FROM ${tableName} WHERE id = $1 LIMIT 1`,
+    [targetId],
+  );
+  return {
+    found: rows.length > 0,
+    count: rows.length ? Number(rows[0].view_count || 0) : 0,
+    counted: inserted.rowCount > 0,
+  };
+}
+
 /** Post view count */
 app.get("/api/posts/:id/views", requireDb, async (req, res) => {
   try {
@@ -2332,15 +2436,26 @@ app.get("/api/posts/:id/views", requireDb, async (req, res) => {
 
 app.post("/api/posts/:id/view", requireDb, async (req, res) => {
   try {
-    const { rows } = await queryReturning(
-      `UPDATE community_posts SET view_count = view_count + 1 WHERE id=$1`,
-      [req.params.id],
-      "community_posts",
-      "id=$1",
+    const post = await pool.query(
+      `SELECT author_id, view_count FROM community_posts WHERE id = $1 LIMIT 1`,
       [req.params.id],
     );
-    if (!rows.length) return res.status(404).json({ error: "Not found" });
-    res.json({ count: Number(rows[0].view_count || 0) });
+    if (!post.rows.length) return res.status(404).json({ error: "Not found" });
+
+    if (req.authUserId && post.rows[0].author_id === req.authUserId) {
+      return res.json({
+        count: Number(post.rows[0].view_count || 0),
+        counted: false,
+      });
+    }
+
+    const result = await recordDailyContentView(
+      req,
+      "post",
+      req.params.id,
+      "community_posts",
+    );
+    res.json({ count: result.count, counted: result.counted });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2875,6 +2990,8 @@ function requireAdmin(req, res, next) {
 
 // ?????????? ?????
 app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
+  const zero = () => ({ rows: [{ count: "0" }] });
+  const emptyRows = () => ({ rows: [] });
   try {
     const r = await Promise.all([
       pool.query("SELECT COUNT(*) FROM users"),
@@ -2885,23 +3002,85 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
       pool.query("SELECT COUNT(*) FROM disputes"),
       pool.query("SELECT COUNT(*) FROM reviews"),
       pool.query("SELECT COUNT(*) FROM disputes WHERE status='OPEN'"),
-      pool.query("SELECT COUNT(*) FROM orders WHERE status='completed'"),
+      pool.query(
+        "SELECT COUNT(*) FROM orders WHERE status IN ('completed','complete','완료')",
+      ),
       pool.query("SELECT COUNT(*) FROM products WHERE is_free_share=true"),
+      pool.query("SELECT COUNT(*) FROM inquiries").catch(zero),
+      pool.query("SELECT COUNT(*) FROM reports").catch(zero),
+      pool.query("SELECT COUNT(*) FROM reports WHERE status='open'").catch(zero),
       pool
-        .query("SELECT COUNT(*) FROM inquiries")
-        .catch(() => ({ rows: [{ count: "0" }] })),
+        .query("SELECT COUNT(*) FROM inquiries WHERE status='pending'")
+        .catch(zero),
       pool
-        .query("SELECT COUNT(*) FROM reports")
-        .catch(() => ({ rows: [{ count: "0" }] })),
+        .query("SELECT COUNT(*) FROM users WHERE account_status='suspended'")
+        .catch(zero),
       pool
-        .query("SELECT COUNT(*) FROM reports WHERE status='open'")
-        .catch(() => ({ rows: [{ count: "0" }] })),
+        .query("SELECT COUNT(*) FROM products WHERE admin_hidden=true")
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM users WHERE created_at >= CURDATE()")
+        .catch(zero),
+      pool
+        .query(
+          "SELECT COUNT(*) FROM users WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)",
+        )
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM products WHERE status='판매중'")
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM products WHERE status='예약중'")
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM products WHERE status='판매완료'")
+        .catch(zero),
+      pool
+        .query(
+          "SELECT COUNT(*) FROM orders WHERE status IN ('제안중','pending_offer')",
+        )
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM orders WHERE status IN ('분쟁','dispute')")
+        .catch(zero),
+      pool
+        .query(
+          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','분쟁','dispute')",
+        )
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM notices WHERE published=true")
+        .catch(zero),
+      pool
+        .query("SELECT COUNT(*) FROM home_popups WHERE enabled=true")
+        .catch(zero),
       pool.query(
         "SELECT id, nickname, created_at FROM users ORDER BY created_at DESC LIMIT 5",
       ),
       pool.query(
         "SELECT id, status, created_at FROM orders ORDER BY created_at DESC LIMIT 5",
       ),
+      pool
+        .query(
+          `SELECT id, target_type, reason, status, created_at
+           FROM reports WHERE status='open'
+           ORDER BY created_at DESC LIMIT 5`,
+        )
+        .catch(emptyRows),
+      pool
+        .query(
+          `SELECT id, title, status, created_at
+           FROM inquiries WHERE status='pending'
+           ORDER BY created_at DESC LIMIT 5`,
+        )
+        .catch(emptyRows),
+      pool
+        .query(
+          `SELECT id, reason, status, created_at
+           FROM disputes WHERE status='OPEN'
+           ORDER BY created_at DESC LIMIT 5`,
+        )
+        .catch(emptyRows),
     ]);
     res.json({
       users: +r[0].rows[0].count,
@@ -2917,8 +3096,24 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
       inquiries: +r[10].rows[0].count,
       reports: +r[11].rows[0].count,
       openReports: +r[12].rows[0].count,
-      recentUsers: r[13].rows,
-      recentOrders: r[14].rows,
+      pendingInquiries: +r[13].rows[0].count,
+      suspendedUsers: +r[14].rows[0].count,
+      hiddenProducts: +r[15].rows[0].count,
+      usersToday: +r[16].rows[0].count,
+      usersWeek: +r[17].rows[0].count,
+      productsForSale: +r[18].rows[0].count,
+      productsReserved: +r[19].rows[0].count,
+      productsSold: +r[20].rows[0].count,
+      ordersPending: +r[21].rows[0].count,
+      ordersDispute: +r[22].rows[0].count,
+      ordersInProgress: +r[23].rows[0].count,
+      publishedNotices: +r[24].rows[0].count,
+      enabledPopups: +r[25].rows[0].count,
+      recentUsers: r[26].rows,
+      recentOrders: r[27].rows,
+      recentOpenReports: r[28].rows,
+      recentPendingInquiries: r[29].rows,
+      recentOpenDisputes: r[30].rows,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2927,12 +3122,23 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
 
 // ??? ????? ??
 app.get("/api/admin/users", requireDb, requireAdmin, async (req, res) => {
+  const activityCounts = `,
+              (SELECT COUNT(*) FROM products p WHERE p.seller_id = u.id) AS product_count,
+              (SELECT COUNT(*) FROM community_posts cp WHERE cp.author_id = u.id) AS post_count,
+              (SELECT COUNT(*) FROM reports r
+                WHERE r.reporter_id = u.id OR (r.target_type = 'user' AND r.target_id = u.id)) AS report_count,
+              (SELECT COUNT(*) FROM disputes d
+                WHERE d.buyer_id = u.id OR d.seller_id = u.id) AS dispute_count`;
   const fullSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
-              trade_count, activity_region, seller_type, pi_verified, pi_username, created_at
-       FROM users ORDER BY created_at DESC LIMIT 500`;
+              trade_count, activity_region, seller_type, pi_verified, pi_username,
+              account_status, suspension_reason, suspended_at, created_at
+              ${activityCounts}
+       FROM users u ORDER BY created_at DESC LIMIT 500`;
   const fallbackSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
-              trade_count, activity_region, seller_type, pi_verified, created_at
-       FROM users ORDER BY created_at DESC LIMIT 500`;
+              trade_count, activity_region, seller_type, pi_verified,
+              account_status, suspension_reason, suspended_at, created_at
+              ${activityCounts}
+       FROM users u ORDER BY created_at DESC LIMIT 500`;
   try {
     let rows;
     try {
@@ -2960,15 +3166,42 @@ app.get("/api/admin/users/:id", requireDb, requireAdmin, async (req, res) => {
       req.params.id,
     ]);
     if (!rows.length) return res.status(404).json({ error: "Not found" });
-    const products = await pool.query(
-      "SELECT id,title,status,price,created_at FROM products WHERE seller_id=$1 ORDER BY created_at DESC",
-      [req.params.id],
-    );
-    const orders = await pool.query(
-      "SELECT id,status,created_at FROM orders WHERE buyer_id=$1 OR seller_id=$1 ORDER BY created_at DESC",
-      [req.params.id],
-    );
-    res.json({ ...rows[0], products: products.rows, orders: orders.rows });
+    const [products, orders, posts, reports, disputes] = await Promise.all([
+      pool.query(
+        "SELECT id,title,status,price,admin_hidden,created_at FROM products WHERE seller_id=$1 ORDER BY created_at DESC LIMIT 100",
+        [req.params.id],
+      ),
+      pool.query(
+        "SELECT id,product_id,buyer_id,seller_id,status,proposed_price,created_at FROM orders WHERE buyer_id=$1 OR seller_id=$1 ORDER BY created_at DESC LIMIT 100",
+        [req.params.id],
+      ),
+      pool.query(
+        "SELECT id,title,category,view_count,created_at FROM community_posts WHERE author_id=$1 ORDER BY created_at DESC LIMIT 100",
+        [req.params.id],
+      ),
+      pool.query(
+        `SELECT id,target_type,target_id,reason,status,created_at
+           FROM reports
+          WHERE reporter_id=$1 OR (target_type='user' AND target_id=$1)
+          ORDER BY created_at DESC LIMIT 100`,
+        [req.params.id],
+      ),
+      pool.query(
+        `SELECT id,order_id,reason,status,created_at
+           FROM disputes
+          WHERE buyer_id=$1 OR seller_id=$1
+          ORDER BY created_at DESC LIMIT 100`,
+        [req.params.id],
+      ),
+    ]);
+    res.json({
+      ...rows[0],
+      products: products.rows,
+      orders: orders.rows,
+      posts: posts.rows,
+      reports: reports.rows,
+      disputes: disputes.rows,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2993,6 +3226,41 @@ app.put("/api/admin/users/:id", requireDb, requireAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.patch(
+  "/api/admin/users/:id/suspension",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const suspended = Boolean(req.body.suspended);
+    const reason = suspended
+      ? String(req.body.reason || "").trim().slice(0, 500)
+      : null;
+    try {
+      const { rows } = await queryReturning(
+        `UPDATE users
+            SET account_status = $1,
+                suspension_reason = $2,
+                suspended_at = CASE WHEN $1 = 'suspended' THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [suspended ? "suspended" : "active", reason, req.params.id],
+        "users",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      if (suspended) {
+        await pool.query("DELETE FROM sessions WHERE user_id = $1", [req.params.id]);
+        for (const [token, session] of sessionCache) {
+          if (session.userId === req.params.id) sessionCache.delete(token);
+        }
+      }
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
 
 // ????? ?????
 app.delete(
@@ -3067,7 +3335,7 @@ app.delete(
 
 // Admin: list products with seller info, filterable by status/free_share/search
 app.get("/api/admin/products", requireDb, requireAdmin, async (req, res) => {
-  const { status, q, free_share } = req.query;
+  const { status, q, free_share, hidden } = req.query;
   try {
     let query = `SELECT p.*, u.nickname AS seller_nickname
                  FROM products p
@@ -3081,6 +3349,9 @@ app.get("/api/admin/products", requireDb, requireAdmin, async (req, res) => {
     if (free_share === "true") {
       query += ` AND p.is_free_share=true`;
     }
+    if (hidden === "true") {
+      query += ` AND p.admin_hidden=true`;
+    }
     if (q) {
       params.push(`%${q}%`);
       query += ` AND (p.title LIKE $${params.length} OR CAST(p.id AS CHAR) LIKE $${params.length})`;
@@ -3092,6 +3363,33 @@ app.get("/api/admin/products", requireDb, requireAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.patch(
+  "/api/admin/products/:id/visibility",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const hidden = Boolean(req.body.hidden);
+    const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
+    try {
+      const { rows } = await queryReturning(
+        `UPDATE products
+            SET admin_hidden = $1,
+                admin_hidden_reason = $2,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hidden, reason, req.params.id],
+        "products",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
 
 // Admin: list community posts with author info
 app.get("/api/admin/posts", requireDb, requireAdmin, async (req, res) => {
@@ -3228,10 +3526,10 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: resolve / dismiss / reopen a report
+// Admin: resolve / reopen a report
 app.put("/api/admin/reports/:id", requireDb, requireAdmin, async (req, res) => {
   const { status, admin_note } = req.body;
-  if (status && !["open", "resolved", "dismissed"].includes(status)) {
+  if (status && !["open", "resolved"].includes(status)) {
     return res.status(400).json({ error: "Invalid status" });
   }
   try {
@@ -3239,7 +3537,7 @@ app.put("/api/admin/reports/:id", requireDb, requireAdmin, async (req, res) => {
       `UPDATE reports SET
          status = COALESCE($1, status),
          admin_note = COALESCE($2, admin_note),
-         resolved_at = CASE WHEN $1 IN ('resolved','dismissed') THEN NOW() ELSE resolved_at END
+         resolved_at = CASE WHEN $1 = 'resolved' THEN NOW() ELSE resolved_at END
        WHERE id = $3
       `,
       [status ?? null, admin_note ?? null, req.params.id],
@@ -3295,6 +3593,288 @@ app.put(
     }
   },
 );
+
+// ——— Home popup & notices ———
+function isMissingTableError(message) {
+  return /doesn't exist|does not exist|Unknown table|42P01/i.test(String(message));
+}
+
+async function nextHomePopupRevision() {
+  const { rows } = await pool.query(
+    "SELECT COALESCE(MAX(revision), 0) + 1 AS rev FROM home_popups",
+  );
+  return Number(rows[0]?.rev) || 1;
+}
+
+async function disableAllHomePopups() {
+  await pool.query("UPDATE home_popups SET enabled = false WHERE enabled = true");
+}
+
+const HOME_POPUP_TITLE_MAX = 30;
+function validateHomePopupTitle(title) {
+  const trimmed = String(title ?? "").trim();
+  if (!trimmed) return { ok: false, error: "title is required" };
+  if (trimmed.length > HOME_POPUP_TITLE_MAX) {
+    return {
+      ok: false,
+      error: `title must be at most ${HOME_POPUP_TITLE_MAX} characters`,
+    };
+  }
+  return { ok: true, title: trimmed };
+}
+
+app.get("/api/home-popup", requireDb, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, hero_image, detail_link, notice_id, revision, enabled, created_at
+         FROM home_popups
+        WHERE enabled = true
+        ORDER BY revision DESC
+        LIMIT 1`,
+    );
+    res.json(rows[0] ?? null);
+  } catch (e) {
+    if (isMissingTableError(e.message)) return res.json(null);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/notices", requireDb, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, view_count, created_at, updated_at
+         FROM notices
+        WHERE published = true
+        ORDER BY created_at DESC
+        LIMIT 100`,
+    );
+    res.json(rows);
+  } catch (e) {
+    if (isMissingTableError(e.message)) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/notices/:id", requireDb, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, content, view_count, created_at, updated_at
+         FROM notices
+        WHERE id = $1 AND published = true`,
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (e) {
+    if (isMissingTableError(e.message)) return res.status(404).json({ error: "Not found" });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/notices/:id/view", requireDb, async (req, res) => {
+  try {
+    const notice = await pool.query(
+      `SELECT id FROM notices WHERE id = $1 AND published = true LIMIT 1`,
+      [req.params.id],
+    );
+    if (!notice.rows.length) return res.status(404).json({ error: "Not found" });
+
+    const result = await recordDailyContentView(
+      req,
+      "notice",
+      req.params.id,
+      "notices",
+    );
+    res.json({ count: result.count, counted: result.counted });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/notices", requireDb, requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, content, published, view_count, created_at, updated_at
+         FROM notices
+        ORDER BY created_at DESC
+        LIMIT 200`,
+    );
+    res.json(rows);
+  } catch (e) {
+    if (isMissingTableError(e.message)) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/notices", requireDb, requireAdmin, async (req, res) => {
+  const { title, content, published } = req.body;
+  if (!title || !String(title).trim() || !content || !String(content).trim()) {
+    return res.status(400).json({ error: "title and content are required" });
+  }
+  const id = `notice_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  try {
+    const { rows } = await queryReturning(
+      `INSERT INTO notices (id, title, content, published)
+       VALUES ($1, $2, $3, $4)`,
+      [id, String(title).trim(), String(content).trim(), published !== false],
+      "notices",
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/api/admin/notices/:id", requireDb, requireAdmin, async (req, res) => {
+  const { title, content, published } = req.body;
+  if (title != null && !String(title).trim()) {
+    return res.status(400).json({ error: "title is required" });
+  }
+  if (content != null && !String(content).trim()) {
+    return res.status(400).json({ error: "content is required" });
+  }
+  try {
+    const { rows } = await queryReturning(
+      `UPDATE notices SET
+         title = COALESCE($1, title),
+         content = COALESCE($2, content),
+         published = COALESCE($3, published)
+       WHERE id = $4`,
+      [
+        title != null ? String(title).trim() : null,
+        content != null ? String(content).trim() : null,
+        published != null ? Boolean(published) : null,
+        req.params.id,
+      ],
+      "notices",
+      "id=$1",
+      [req.params.id],
+      { emptyOnNoChange: true },
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/admin/notices/:id", requireDb, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM notices WHERE id = $1", [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/home-popups", requireDb, requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id, p.title, p.hero_image, p.detail_link, p.notice_id, p.revision,
+              p.enabled, p.created_at, n.title AS notice_title
+         FROM home_popups p
+         LEFT JOIN notices n ON n.id = p.notice_id
+        ORDER BY p.created_at DESC
+        LIMIT 200`,
+    );
+    res.json(rows);
+  } catch (e) {
+    if (isMissingTableError(e.message)) return res.json([]);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/home-popups", requireDb, requireAdmin, async (req, res) => {
+  const { title, hero_image, detail_link, notice_id, enabled } = req.body;
+  const titleCheck = validateHomePopupTitle(title);
+  if (!titleCheck.ok) return res.status(400).json({ error: titleCheck.error });
+  if (!hero_image || !String(hero_image).trim()) {
+    return res.status(400).json({ error: "hero_image is required" });
+  }
+  const id = `popup_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  const revision = await nextHomePopupRevision();
+  const shouldEnable = enabled !== false;
+  try {
+    if (shouldEnable) await disableAllHomePopups();
+    const { rows } = await queryReturning(
+      `INSERT INTO home_popups (id, title, hero_image, detail_link, notice_id, revision, enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        id,
+        titleCheck.title,
+        String(hero_image).trim(),
+        detail_link ? String(detail_link).trim() : null,
+        notice_id || null,
+        revision,
+        shouldEnable,
+      ],
+      "home_popups",
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/api/admin/home-popups/:id", requireDb, requireAdmin, async (req, res) => {
+  const { title, hero_image, detail_link, notice_id, enabled, bump_revision } = req.body;
+  if (title != null) {
+    const titleCheck = validateHomePopupTitle(title);
+    if (!titleCheck.ok) return res.status(400).json({ error: titleCheck.error });
+  }
+  try {
+    const existing = await pool.query("SELECT * FROM home_popups WHERE id = $1", [
+      req.params.id,
+    ]);
+    if (!existing.rows.length) return res.status(404).json({ error: "Not found" });
+    const prev = existing.rows[0];
+
+    let revision = prev.revision;
+    if (bump_revision || (enabled === true && !prev.enabled)) {
+      revision = await nextHomePopupRevision();
+    }
+    if (enabled === true) await disableAllHomePopups();
+
+    const { rows } = await queryReturning(
+      `UPDATE home_popups SET
+         title = COALESCE($1, title),
+         hero_image = COALESCE($2, hero_image),
+         detail_link = COALESCE($3, detail_link),
+         notice_id = COALESCE($4, notice_id),
+         enabled = COALESCE($5, enabled),
+         revision = $6
+       WHERE id = $7`,
+      [
+        title != null ? validateHomePopupTitle(title).title : null,
+        hero_image != null ? String(hero_image).trim() : null,
+        detail_link !== undefined ? (detail_link ? String(detail_link).trim() : null) : null,
+        notice_id !== undefined ? notice_id || null : null,
+        enabled !== undefined ? Boolean(enabled) : null,
+        revision,
+        req.params.id,
+      ],
+      "home_popups",
+      "id=$1",
+      [req.params.id],
+      { emptyOnNoChange: true },
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/admin/home-popups/:id", requireDb, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM home_popups WHERE id = $1", [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ????????? 404 ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.use((_req, res) => {

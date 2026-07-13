@@ -7,8 +7,8 @@ import { HomeFeedChip, Product, HOME_FEED_CHIP_VALUE, PRODUCT_STATUS_VALUE } fro
 import { getAllProducts } from '@/utils/productStorage';
 import { getLikeCount } from '@/utils/favoriteStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { labelHomeFeedChip, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
-import { getHomePopupConfig, shouldShowHomePopup, dismissHomePopupForSession } from '@/utils/homePopupStorage';
+import { isFreeShareListing, labelFreeShareMenu, labelHomeFeedChip, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { fetchActiveHomePopup, type HomePopupView } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
 import { usePiPrice } from '@/utils/piPrice';
 import { syncProductsFromDB } from '@/utils/dbSync';
@@ -16,6 +16,8 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 
 const defaultMockProducts: Product[] = [];
+const HOME_PROMO_SHOWN_SESSION_KEY = 'marketpiepie_home_popup_shown_this_session';
+const PRODUCT_CATEGORIES = ['Electronics', 'Furniture', 'Clothes', 'Hobby', 'Books', 'Other'] as const;
 
 const feedChips: HomeFeedChip[] = [
   HOME_FEED_CHIP_VALUE.ALL,
@@ -72,29 +74,41 @@ export const Home: React.FC = () => {
   const [activeChip, setActiveChip] = useState<HomeFeedChip>(HOME_FEED_CHIP_VALUE.ALL);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
+  const [freeOnly, setFreeOnly] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [allProducts, setAllProducts] = useState<Product[]>(defaultMockProducts);
   const [selectedRegion, setSelectedRegion] = useState<string>(UI_REGION_PLACEHOLDER);
   const [piExpanded, setPiExpanded] = useState(false);
   const piPrice = usePiPrice();
-  const [homePromo, setHomePromo] = useState(() => ({
-    show: shouldShowHomePopup(),
-    config: getHomePopupConfig(),
-  }));
+  const [homePromo, setHomePromo] = useState<{ show: boolean; popup: HomePopupView | null }>({
+    show: false,
+    popup: null,
+  });
   const [homePromoReady, setHomePromoReady] = useState(false);
   const [favoritesVersion, setFavoritesVersion] = useState(0);
 
-  const refreshHomePromo = useCallback(() => {
-    const show = shouldShowHomePopup();
-    const config = getHomePopupConfig();
-    setHomePromo({ show, config });
+  const refreshHomePromo = useCallback(async () => {
+    const popup = await fetchActiveHomePopup();
+    if (!popup) {
+      setHomePromo({ show: false, popup: null });
+      return;
+    }
+    const alreadyShown =
+      sessionStorage.getItem(HOME_PROMO_SHOWN_SESSION_KEY) === '1';
+    if (alreadyShown) {
+      setHomePromo({ show: false, popup });
+      return;
+    }
+    sessionStorage.setItem(HOME_PROMO_SHOWN_SESSION_KEY, '1');
+    setHomePromo({ show: popup.enabled, popup });
   }, []);
 
   useEffect(() => {
     if (location.pathname !== '/') return;
     setHomePromoReady(false);
-    refreshHomePromo();
+    void refreshHomePromo();
     const raf = window.requestAnimationFrame(() => {
       setHomePromoReady(true);
     });
@@ -102,22 +116,14 @@ export const Home: React.FC = () => {
   }, [location.pathname, refreshHomePromo]);
 
   useEffect(() => {
-    const fn = () => refreshHomePromo();
+    const fn = () => {
+      void refreshHomePromo();
+    };
     window.addEventListener('homePopupConfigChanged', fn);
     return () => window.removeEventListener('homePopupConfigChanged', fn);
   }, [refreshHomePromo]);
 
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== 'marketpiepie_home_popup_config_v1') return;
-      refreshHomePromo();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [refreshHomePromo]);
-
   const closeHomePromo = () => {
-    dismissHomePopupForSession();
     setHomePromo((s) => ({ ...s, show: false }));
   };
 
@@ -195,11 +201,19 @@ export const Home: React.FC = () => {
       );
     }
 
-    // Price range
-    if (minPrice) {
+    if (freeOnly) {
+      filtered = filtered.filter((p) => isFreeShareListing(p));
+    }
+
+    if (selectedCategory) {
+      filtered = filtered.filter((p) => p.category === selectedCategory);
+    }
+
+    // Price range (paid listings only)
+    if (!freeOnly && minPrice) {
       filtered = filtered.filter((p) => p.price >= Number(minPrice));
     }
-    if (maxPrice) {
+    if (!freeOnly && maxPrice) {
       filtered = filtered.filter((p) => p.price <= Number(maxPrice));
     }
 
@@ -213,12 +227,12 @@ export const Home: React.FC = () => {
     filtered = sortHomeProducts(filtered, activeChip);
 
     return filtered;
-  }, [allProducts, searchQuery, minPrice, maxPrice, activeChip, favoritesVersion]);
+  }, [allProducts, searchQuery, freeOnly, selectedCategory, minPrice, maxPrice, activeChip, favoritesVersion]);
 
   const handlePullRefresh = useCallback(async () => {
     await syncProductsFromDB();
     refreshHomeData();
-    refreshHomePromo();
+    void refreshHomePromo();
   }, [refreshHomePromo]);
 
   const { pull, refreshing } = usePullToRefresh(handlePullRefresh);
@@ -226,8 +240,8 @@ export const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-white pb-20">
       <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
-      {location.pathname === '/' && homePromoReady && homePromo.show && homePromo.config.enabled ? (
-        <HomePromoPopup config={homePromo.config} onClose={closeHomePromo} />
+      {location.pathname === '/' && homePromoReady && homePromo.show && homePromo.popup ? (
+        <HomePromoPopup popup={homePromo.popup} onClose={closeHomePromo} />
       ) : null}
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -395,8 +409,49 @@ export const Home: React.FC = () => {
         title="Filter"
       >
         <div className="px-4 py-6 space-y-6">
-          {/* Price Range */}
           <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Listing type</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setFreeOnly((current) => {
+                  const next = !current;
+                  if (next) {
+                    setMinPrice('');
+                    setMaxPrice('');
+                  }
+                  return next;
+                });
+              }}
+              className={`rounded-full px-4 py-2 text-sm font-medium ${
+                freeOnly ? 'text-white' : 'bg-gray-100 text-gray-700'
+              }`}
+              style={freeOnly ? { backgroundColor: '#00A8A3' } : undefined}
+            >
+              {labelFreeShareMenu()} only
+            </button>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Category</h3>
+            <div className="flex flex-wrap gap-2">
+              {PRODUCT_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory((current) => (current === cat ? '' : cat))}
+                  className={`rounded-full px-4 py-2 text-sm font-medium ${
+                    selectedCategory === cat ? 'text-white' : 'bg-gray-100 text-gray-700'
+                  }`}
+                  style={selectedCategory === cat ? { backgroundColor: '#00A8A3' } : undefined}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={freeOnly ? 'opacity-50' : undefined}>
             <h3 className="text-sm font-medium text-gray-700 mb-3">Price range</h3>
             <div className="flex items-center gap-1">
               <input
@@ -404,7 +459,8 @@ export const Home: React.FC = () => {
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
                 placeholder="Min"
-                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
+                disabled={freeOnly}
+                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-gray-500 shrink-0">~</span>
               <input
@@ -412,7 +468,8 @@ export const Home: React.FC = () => {
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
                 placeholder="Max"
-                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
+                disabled={freeOnly}
+                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-gray-500 shrink-0">Pi</span>
             </div>
@@ -422,6 +479,8 @@ export const Home: React.FC = () => {
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => {
+                setFreeOnly(false);
+                setSelectedCategory('');
                 setMinPrice('');
                 setMaxPrice('');
               }}

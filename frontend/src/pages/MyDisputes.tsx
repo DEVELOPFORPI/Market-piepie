@@ -13,6 +13,7 @@ import {
 } from '@/locale/enUI';
 
 type FilterStatus = 'all' | 'active' | 'resolved';
+type FilterDirection = 'all' | 'sent' | 'received';
 
 function isDisputeActive(status: DisputeStatus): boolean {
   return status === 'OPEN' || status === 'IN_REVIEW';
@@ -34,6 +35,7 @@ function disputeDetailPath(dispute: Dispute, myId: string): string {
 export const MyDisputes: React.FC = () => {
   const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [filterDirection, setFilterDirection] = useState<FilterDirection>('all');
   const [disputes, setDisputes] = useState<Dispute[]>([]);
 
   const loadDisputes = () => {
@@ -51,15 +53,26 @@ export const MyDisputes: React.FC = () => {
   }, []);
 
   const filteredDisputes = disputes.filter((dispute) => {
-    if (filterStatus === 'all') return true;
-    if (filterStatus === 'active') return isDisputeActive(dispute.status);
-    return dispute.status === 'RESOLVED';
+    const myId = getCurrentUserId();
+    if (filterStatus === 'active' && !isDisputeActive(dispute.status)) return false;
+    if (filterStatus === 'resolved' && dispute.status !== 'RESOLVED') return false;
+    if (filterDirection !== 'all' && myId) {
+      const isSent = dispute.openedByUserId === myId;
+      if (filterDirection === 'sent' && !isSent) return false;
+      if (filterDirection === 'received' && isSent) return false;
+    }
+    return true;
   });
 
   const filterOptions: { value: FilterStatus; label: string }[] = [
     { value: 'all', label: 'All' },
     { value: 'active', label: DISPUTE_STATUS_ACTIVE },
     { value: 'resolved', label: DISPUTE_STATUS_RESOLVED },
+  ];
+
+  const directionOptions: { value: Exclude<FilterDirection, 'all'>; label: string }[] = [
+    { value: 'sent', label: DISPUTE_LIST_SENT },
+    { value: 'received', label: DISPUTE_LIST_RECEIVED },
   ];
 
   return (
@@ -80,17 +93,33 @@ export const MyDisputes: React.FC = () => {
         }
       />
 
-      <div className="flex gap-2 px-4 py-3 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-2 overflow-x-auto border-b border-gray-200 px-4 py-3">
         {filterOptions.map(({ value, label }) => (
           <button
             key={value}
-            onClick={() => setFilterStatus(value)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+            onClick={() =>
+              setFilterStatus((current) => (current === value && value !== 'all' ? 'all' : value))
+            }
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
               filterStatus === value
                 ? 'text-white'
                 : 'bg-gray-100 text-gray-700'
             }`}
             style={filterStatus === value ? { backgroundColor: '#00A8A3' } : undefined}
+          >
+            {label}
+          </button>
+        ))}
+        {directionOptions.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => setFilterDirection((current) => (current === value ? 'all' : value))}
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+              filterDirection === value
+                ? 'text-white'
+                : 'bg-gray-100 text-gray-700'
+            }`}
+            style={filterDirection === value ? { backgroundColor: '#00A8A3' } : undefined}
           >
             {label}
           </button>

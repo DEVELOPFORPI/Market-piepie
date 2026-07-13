@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
   seller_type VARCHAR(50),
   pi_verified BOOLEAN NOT NULL DEFAULT FALSE,
   pi_username VARCHAR(255) NULL,
+  account_status VARCHAR(20) NOT NULL DEFAULT 'active',
+  suspension_reason VARCHAR(500),
+  suspended_at DATETIME(3),
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -51,6 +54,9 @@ CREATE TABLE IF NOT EXISTS products (
   today_trade_available BOOLEAN NOT NULL DEFAULT FALSE,
   is_free_share BOOLEAN NOT NULL DEFAULT FALSE,
   allow_offer BOOLEAN NOT NULL DEFAULT FALSE,
+  admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
   liked INT NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_products_seller FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE SET NULL
@@ -297,9 +303,11 @@ CREATE TABLE IF NOT EXISTS payments (
   cancelled_at DATETIME(3) NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE INDEX idx_users_account_status ON users(account_status);
 CREATE INDEX idx_products_seller ON products(seller_id);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_products_category ON products(category);
+CREATE INDEX idx_products_admin_hidden ON products(admin_hidden);
 CREATE INDEX idx_orders_buyer ON orders(buyer_id);
 CREATE INDEX idx_orders_seller ON orders(seller_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -335,6 +343,44 @@ CREATE INDEX idx_reports_status ON reports(status);
 CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 CREATE INDEX idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX idx_reports_created ON reports(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS notices (
+  id VARCHAR(191) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  published TINYINT(1) NOT NULL DEFAULT 1,
+  view_count INT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS home_popups (
+  id VARCHAR(191) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  hero_image TEXT NOT NULL,
+  detail_link VARCHAR(500),
+  notice_id VARCHAR(191),
+  revision INT NOT NULL DEFAULT 1,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_home_popups_notice FOREIGN KEY (notice_id) REFERENCES notices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_notices_published ON notices(published);
+CREATE INDEX idx_home_popups_enabled ON home_popups(enabled);
+CREATE INDEX idx_home_popups_revision ON home_popups(revision);
+
+CREATE TABLE IF NOT EXISTS content_views (
+  target_type VARCHAR(20) NOT NULL,
+  target_id VARCHAR(191) NOT NULL,
+  viewer_key CHAR(64) NOT NULL,
+  view_date DATE NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (target_type, target_id, viewer_key, view_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_content_views_target ON content_views(target_type, target_id);
+CREATE INDEX idx_content_views_date ON content_views(view_date);
 
 -- Existing DB migration (run once on live DBs):
 -- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified;

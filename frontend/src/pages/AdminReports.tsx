@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 
@@ -10,7 +10,7 @@ interface Report {
   target_id: string;
   reason: string;
   description: string | null;
-  status: 'open' | 'resolved' | 'dismissed' | string;
+  status: 'open' | 'resolved' | string;
   admin_note: string | null;
   resolved_by: string | null;
   resolved_by_nickname?: string;
@@ -23,28 +23,27 @@ const TEAL = '#00A8A3';
 const STATUS_LABEL: Record<string, string> = {
   open: '대기',
   resolved: '처리완료',
-  dismissed: '반려',
 };
 
 const STATUS_COLOR: Record<string, string> = {
   open: 'bg-red-100 text-red-700',
   resolved: 'bg-green-100 text-green-700',
-  dismissed: 'bg-gray-100 text-gray-500',
 };
 
 const TARGET_LABEL: Record<string, string> = {
   product: '상품',
   post: '게시물',
-  review: '리뷰',
-  user: '사용자',
   comment: '댓글',
 };
+
+type ReportTargetType = keyof typeof TARGET_LABEL;
 
 export const AdminReports: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('open');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'open' | 'resolved'>('open');
+  const [typeFilter, setTypeFilter] = useState<ReportTargetType>('product');
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Report | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -52,8 +51,8 @@ export const AdminReports: React.FC = () => {
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (statusFilter !== 'ALL') params.set('status', statusFilter);
-    if (typeFilter !== 'ALL') params.set('target_type', typeFilter);
+    params.set('status', statusFilter);
+    params.set('target_type', typeFilter);
     const res = await api.get<Report[]>(`/api/admin/reports?${params.toString()}`, {
       headers: adminPasswordHeaders(),
     });
@@ -68,7 +67,7 @@ export const AdminReports: React.FC = () => {
     setAdminNote(r.admin_note || '');
   };
 
-  const updateStatus = async (newStatus: 'resolved' | 'dismissed' | 'open') => {
+  const updateStatus = async (newStatus: 'resolved' | 'open') => {
     if (!selected) return;
     setSaving(true);
     const res = await api.put(`/api/admin/reports/${selected.id}`,
@@ -93,6 +92,24 @@ export const AdminReports: React.FC = () => {
     }
   };
 
+  const filtered = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return reports;
+    return reports.filter((r) =>
+      [
+        r.id,
+        r.target_id,
+        r.target_type,
+        TARGET_LABEL[r.target_type],
+        r.reason,
+        r.description,
+        r.admin_note,
+        r.reporter_id,
+        r.reporter_nickname,
+      ].some((value) => value?.toLowerCase().includes(keyword)),
+    );
+  }, [reports, search]);
+
   const openCount = reports.filter((r) => r.status === 'open').length;
 
   return (
@@ -106,27 +123,38 @@ export const AdminReports: React.FC = () => {
         )}
       </div>
 
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="신고자, 대상 ID, 사유로 검색"
+        className="mb-4 w-full max-w-md rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
+      />
+
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="flex gap-1">
-          {['open', 'resolved', 'dismissed', 'ALL'].map((s) => (
+          {(['open', 'resolved'] as const).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 statusFilter === s ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
-              {s === 'ALL' ? '전체' : STATUS_LABEL[s]}
+              {STATUS_LABEL[s]}
             </button>
           ))}
         </div>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-          <option value="ALL">전체 타입</option>
-          {Object.entries(TARGET_LABEL).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+        <div className="flex gap-1">
+          {(Object.keys(TARGET_LABEL) as ReportTargetType[]).map((type) => (
+            <button
+              key={type}
+              onClick={() => setTypeFilter(type)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                typeFilter === type ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {TARGET_LABEL[type]}
+            </button>
           ))}
-        </select>
-        <button onClick={load} className="px-3 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-          새로고침
-        </button>
+        </div>
       </div>
 
       {loading ? (
@@ -134,13 +162,13 @@ export const AdminReports: React.FC = () => {
           <div className="w-5 h-5 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
           불러오는 중…
         </div>
-      ) : reports.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <p className="text-gray-400 text-sm">조건에 맞는 신고가 없습니다.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {reports.map((r) => (
+          {filtered.map((r) => (
             <div key={r.id} onClick={() => openDetail(r)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 mb-2">
@@ -232,12 +260,6 @@ export const AdminReports: React.FC = () => {
                 className="flex-1 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                 취소
               </button>
-              {selected.status !== 'dismissed' && (
-                <button onClick={() => updateStatus('dismissed')} disabled={saving}
-                  className="flex-1 py-2.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-                  반려
-                </button>
-              )}
               {selected.status !== 'resolved' && (
                 <button onClick={() => updateStatus('resolved')} disabled={saving}
                   className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg disabled:opacity-50"

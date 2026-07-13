@@ -23,5 +23,37 @@ body {
   box-sizing: border-box;
 }
 
+.notice-rich-editor:empty::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
 
+.notice-rich-editor img,
+.notice-rendered-content img {
+  display: block;
+  height: auto;
+  margin: 1rem 0;
+  max-width: 100%;
+  border-radius: 0.75rem;
+}
+
+.notice-rich-editor ul,
+.notice-rendered-content ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+
+.notice-rich-editor ol,
+.notice-rendered-content ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+
+.notice-rich-editor blockquote,
+.notice-rendered-content blockquote {
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
+  padding-left: 1rem;
+}
 

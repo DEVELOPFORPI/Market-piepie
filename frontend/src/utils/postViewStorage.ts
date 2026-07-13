@@ -1,4 +1,5 @@
 import { api } from '@/utils/api';
+import { getAnonymousViewerId } from '@/utils/viewerIdentity';
 
 const POST_VIEW_COUNTS_KEY = 'postViewCounts';
 
@@ -60,21 +61,21 @@ export const syncPostViewFromDB = async (postId: string): Promise<void> => {
   }
 };
 
-/** 게시글 상세 진입 시 조회수 +1 (DB 먼저, 로컬은 응답으로 보정) */
+/** 게시글 상세 진입: 서버가 사용자별 하루 1회만 조회수에 반영 */
 export const incrementPostViewCount = async (postId: string): Promise<number> => {
   const previous = getPostViewCount(postId);
-  setLocalViewCount(postId, previous + 1);
 
   try {
-    const res = await api.post<{ count: number }>(`/api/posts/${postId}/view`, {});
+    const res = await api.post<{ count: number; counted: boolean }>(
+      `/api/posts/${postId}/view`,
+      { viewer_id: getAnonymousViewerId() },
+    );
     if (res.ok && res.data) {
       setLocalViewCount(postId, res.data.count);
       return res.data.count;
     }
-    setLocalViewCount(postId, previous);
     return previous;
   } catch {
-    setLocalViewCount(postId, previous);
     return previous;
   }
 };

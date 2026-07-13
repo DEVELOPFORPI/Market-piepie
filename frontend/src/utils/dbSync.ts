@@ -241,6 +241,10 @@ function mapProductFromDB(row: Record<string, unknown>, favoriteIds?: Set<string
     liked: favoriteIds?.has(String(row.id)) ?? false,
     isFreeShare: Boolean(row.is_free_share),
     allowOffer: Boolean(row.allow_offer),
+    adminHidden: Boolean(row.admin_hidden),
+    adminHiddenReason: row.admin_hidden_reason
+      ? String(row.admin_hidden_reason)
+      : undefined,
   };
   return product;
 }

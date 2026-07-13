@@ -356,7 +356,7 @@ export const PostDetail: React.FC = () => {
             </svg>
           </button>
         }
-        rightContent={
+        rightContent={isDisputePost ? undefined : (
           <div ref={postMenuRef} className="relative">
             <button
               onClick={() => setShowMenu(!showMenu)}
@@ -368,17 +368,6 @@ export const PostDetail: React.FC = () => {
             </button>
             {showMenu && (
               <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-                {post.category === POST_CATEGORY_VALUE.DISPUTE && post.orderId && (
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      navigate(`/dispute/${post.orderId}`);
-                    }}
-                    className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
-                  >
-                    Dispute details
-                  </button>
-                )}
                 {canEditOrDeletePost && (
                   <>
                     <button
@@ -416,7 +405,7 @@ export const PostDetail: React.FC = () => {
               </div>
             )}
           </div>
-        }
+        )}
       />
 
       <div className="px-4 py-6 space-y-6">

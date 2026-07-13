@@ -8,6 +8,9 @@ const BOOLEAN_FIELDS = new Set([
   'buyer_completed',
   'read',
   'pi_verified',
+  'published',
+  'enabled',
+  'admin_hidden',
 ]);
 
 const TABLE_COLUMNS = {
@@ -25,6 +28,9 @@ const TABLE_COLUMNS = {
     'display_activity_badge_id',
     'seller_type',
     'pi_verified',
+    'account_status',
+    'suspension_reason',
+    'suspended_at',
     'created_at',
   ],
   products: [
@@ -41,6 +47,9 @@ const TABLE_COLUMNS = {
     'today_trade_available',
     'is_free_share',
     'allow_offer',
+    'admin_hidden',
+    'admin_hidden_reason',
+    'admin_hidden_at',
     'liked',
     'created_at',
   ],
@@ -171,6 +180,24 @@ const TABLE_COLUMNS = {
     'resolved_by',
     'created_at',
     'resolved_at',
+  ],
+  notices: ['id', 'title', 'content', 'published', 'view_count', 'created_at', 'updated_at'],
+  home_popups: [
+    'id',
+    'title',
+    'hero_image',
+    'detail_link',
+    'notice_id',
+    'revision',
+    'enabled',
+    'created_at',
+  ],
+  content_views: [
+    'target_type',
+    'target_id',
+    'viewer_key',
+    'view_date',
+    'created_at',
   ],
 };
 

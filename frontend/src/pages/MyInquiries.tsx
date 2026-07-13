@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { api } from '@/utils/api';
@@ -19,6 +19,26 @@ interface Inquiry {
 
 const TEAL = '#00A8A3';
 
+const CATEGORY_LABEL: Record<string, string> = {
+  general: 'General',
+  bug_report: 'Bug Report',
+  account: 'Account',
+  trade: 'Trade',
+  suggestion: 'Suggestion',
+  other: 'Other',
+};
+
+const CATEGORY_TABS = ['all', ...Object.keys(CATEGORY_LABEL)] as const;
+type CategoryFilter = (typeof CATEGORY_TABS)[number];
+
+function normalizeCategory(value: string) {
+  return value.toLowerCase().replace(/ /g, '_');
+}
+
+function categoryLabel(value: string) {
+  return CATEGORY_LABEL[normalizeCategory(value)] || value;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
   replied: 'Replied',
@@ -37,6 +57,7 @@ export const MyInquiries: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Inquiry | null>(null);
+  const [filterCategory, setFilterCategory] = useState<CategoryFilter>('all');
 
   const load = async () => {
     setLoading(true);
@@ -76,6 +97,11 @@ export const MyInquiries: React.FC = () => {
     }
   }, [inquiries, selected]);
 
+  const filteredInquiries = useMemo(() => {
+    if (filterCategory === 'all') return inquiries;
+    return inquiries.filter((inq) => normalizeCategory(inq.category) === filterCategory);
+  }, [inquiries, filterCategory]);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       <TopBar
@@ -98,6 +124,30 @@ export const MyInquiries: React.FC = () => {
         }
       />
 
+      {!loading && !error && (
+        <div className="flex gap-2 overflow-x-auto border-b border-gray-200 bg-white px-4 py-3">
+          {CATEGORY_TABS.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() =>
+                setFilterCategory((current) =>
+                  current === category && category !== 'all' ? 'all' : category,
+                )
+              }
+              className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+                filterCategory === category
+                  ? 'text-white'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+              style={filterCategory === category ? { backgroundColor: TEAL } : undefined}
+            >
+              {category === 'all' ? 'All' : CATEGORY_LABEL[category]}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="px-4 py-4">
         {loading ? (
           <div className="flex items-center gap-2 text-gray-500 text-sm">
@@ -117,16 +167,20 @@ export const MyInquiries: React.FC = () => {
             <p className="text-gray-400 text-sm">No inquiries yet</p>
             <p className="text-gray-400 text-xs mt-2">Tap "New" above to send your first inquiry.</p>
           </div>
+        ) : filteredInquiries.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
+            <p className="text-sm text-gray-500">No inquiries in this category.</p>
+          </div>
         ) : (
           <div className="space-y-3">
-            {inquiries.map((inq) => (
+            {filteredInquiries.map((inq) => (
               <button key={inq.id} onClick={() => setSelected(inq)}
                 className="w-full text-left bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[inq.status] || 'bg-gray-100 text-gray-500'}`}>
                     {STATUS_LABEL[inq.status] || inq.status}
                   </span>
-                  <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-50 rounded">{inq.category}</span>
+                  <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-50 rounded">{categoryLabel(inq.category)}</span>
                   <span className="text-xs text-gray-400 ml-auto">{new Date(inq.created_at).toLocaleDateString()}</span>
                 </div>
                 <p className="text-sm font-medium text-gray-900 truncate">{inq.title}</p>
@@ -141,8 +195,8 @@ export const MyInquiries: React.FC = () => {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setSelected(null)}>
+          <div className="w-full max-w-lg overflow-x-hidden overflow-y-auto rounded-2xl bg-white shadow-xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-900">Inquiry Detail</h2>
@@ -153,24 +207,24 @@ export const MyInquiries: React.FC = () => {
 
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-gray-400 text-xs">Category</span>
-                    <p className="font-medium">{selected.category}</p>
+                    <p className="font-medium">{categoryLabel(selected.category)}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-gray-400 text-xs">Submitted</span>
-                    <p className="font-medium">{new Date(selected.created_at).toLocaleString()}</p>
+                    <p className="break-words font-medium">{new Date(selected.created_at).toLocaleString()}</p>
                   </div>
                 </div>
 
                 <div>
                   <span className="text-gray-400 text-xs">Title</span>
-                  <p className="font-medium text-gray-900">{selected.title}</p>
+                  <p className="break-all font-medium text-gray-900">{selected.title}</p>
                 </div>
 
                 <div>
                   <span className="text-gray-400 text-xs">Content</span>
-                  <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 mt-1">{selected.content}</p>
+                  <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-700">{selected.content}</p>
                 </div>
 
                 {selected.images && selected.images.length > 0 && (
@@ -190,7 +244,7 @@ export const MyInquiries: React.FC = () => {
                     <span className="text-gray-400 text-xs">
                       Admin Reply{selected.replied_at ? ` · ${new Date(selected.replied_at).toLocaleString()}` : ''}
                     </span>
-                    <p className="text-gray-700 whitespace-pre-wrap bg-green-50 rounded-lg p-3 mt-1">{selected.admin_reply}</p>
+                    <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-green-50 p-3 text-gray-700">{selected.admin_reply}</p>
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400 italic">Awaiting admin response.</p>

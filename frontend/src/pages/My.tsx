@@ -55,7 +55,6 @@ export const My: React.FC = () => {
   const menuItems = [
     { label: 'My listings', icon: '/profile/1.svg', path: '/my/products' },
     { label: 'Saved', icon: '/profile/2.svg', path: '/my/favorites' },
-    { label: 'Active trades', icon: '/profile/8.svg', path: '/my/active-trades' },
     { label: 'Orders', icon: '/profile/3.svg', path: '/my/orders' },
     { label: 'My posts', icon: '/profile/5.svg', path: '/my/posts' },
     { label: 'Reviews', icon: '/profile/6.svg', path: '/my/reviews' },

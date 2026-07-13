@@ -128,6 +128,8 @@ export interface Product {
   liked: boolean;
   isFreeShare?: boolean;
   allowOffer?: boolean;
+  adminHidden?: boolean;
+  adminHiddenReason?: string;
 }
 
 export interface Order {

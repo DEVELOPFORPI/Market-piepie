@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 
@@ -25,13 +25,38 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TEAL = '#00A8A3';
 
+const CATEGORY_LABEL: Record<string, string> = {
+  general: '일반',
+  bug_report: '버그',
+  account: '계정',
+  trade: '거래',
+  suggestion: '제안',
+  other: '기타',
+};
+
+const CATEGORY_OPTIONS = Object.keys(CATEGORY_LABEL);
+
+function normalizeCategory(value: string) {
+  return value.toLowerCase().replace(/ /g, '_');
+}
+
+function categoryLabel(value: string) {
+  const key = normalizeCategory(value);
+  return CATEGORY_LABEL[key] || value;
+}
+
+type StatusFilter = 'ALL' | 'pending' | 'replied';
+type CategoryFilter = 'ALL' | keyof typeof CATEGORY_LABEL;
+
 export const AdminInquiries: React.FC = () => {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Inquiry | null>(null);
   const [reply, setReply] = useState('');
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
+  const [search, setSearch] = useState('');
   const [tableExists, setTableExists] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -70,7 +95,25 @@ export const AdminInquiries: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = filter === 'ALL' ? inquiries : inquiries.filter((i) => i.status === filter);
+  const filtered = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return inquiries.filter((inq) => {
+      if (statusFilter !== 'ALL' && inq.status !== statusFilter) return false;
+      if (categoryFilter !== 'ALL' && normalizeCategory(inq.category) !== categoryFilter) return false;
+      if (!keyword) return true;
+      return [
+        inq.id,
+        inq.title,
+        inq.content,
+        inq.user_id,
+        inq.user_nickname,
+        inq.email,
+        inq.category,
+        categoryLabel(inq.category),
+        inq.admin_reply,
+      ].some((value) => value?.toLowerCase().includes(keyword));
+    });
+  }, [inquiries, statusFilter, categoryFilter, search]);
   const pendingCount = inquiries.filter((i) => i.status === 'pending').length;
 
   const openDetail = (inq: Inquiry) => {
@@ -110,8 +153,7 @@ export const AdminInquiries: React.FC = () => {
     load();
   };
 
-  const filterLabel = (s: string) => {
-    if (s === 'ALL') return '전체';
+  const statusLabel = (s: string) => {
     if (s === 'pending') return '대기';
     if (s === 'replied') return '답변완료';
     if (s === 'closed') return '종료';
@@ -180,15 +222,46 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
         </div>
       ) : null}
 
-      <div className="flex gap-2 mb-6">
-        {['ALL', 'pending', 'replied', 'closed'].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="제목, 내용, 보낸 사람, 이메일로 검색"
+        className="mb-4 w-full max-w-md rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
+      />
+
+      <div className="mb-6 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {(['ALL', 'pending', 'replied'] as const).map((s) => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                statusFilter === s ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
+              {s === 'ALL' ? '전체' : statusLabel(s)}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setCategoryFilter('ALL')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === s ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}>
-            {filterLabel(s)}
+              categoryFilter === 'ALL' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            전체 유형
           </button>
-        ))}
+          {CATEGORY_OPTIONS.map((category) => (
+            <button
+              key={category}
+              onClick={() => setCategoryFilter(category as CategoryFilter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                categoryFilter === category ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {CATEGORY_LABEL[category]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -210,12 +283,12 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[inq.status] || 'bg-gray-100 text-gray-500'}`}>
-                      {filterLabel(inq.status)}
+                      {statusLabel(inq.status)}
                     </span>
-                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-50 rounded">{inq.category}</span>
+                    <span className="text-xs text-gray-400 px-1.5 py-0.5 bg-gray-50 rounded">{categoryLabel(inq.category)}</span>
                     <span className="text-xs text-gray-400">{new Date(inq.created_at).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{inq.title}</p>
+                  <p className="truncate text-sm font-medium text-gray-900">{inq.title}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     보낸 사람: {inq.user_nickname}{inq.email ? ` (${inq.email})` : ''}
                   </p>
@@ -230,27 +303,27 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
       ) : null}
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setSelected(null)}>
+          <div className="w-full max-w-lg overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-6 shadow-xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">문의 상세</h2>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[selected.status] || ''}`}>{filterLabel(selected.status)}</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[selected.status] || ''}`}>{statusLabel(selected.status)}</span>
             </div>
 
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-gray-400 text-xs">보낸 사람</span><p className="font-medium">{selected.user_nickname}</p></div>
-                <div><span className="text-gray-400 text-xs">유형</span><p className="font-medium">{selected.category}</p></div>
-                {selected.email && <div className="col-span-2"><span className="text-gray-400 text-xs">이메일</span><p>{selected.email}</p></div>}
+                <div className="min-w-0"><span className="text-gray-400 text-xs">보낸 사람</span><p className="break-all font-medium">{selected.user_nickname}</p></div>
+                <div className="min-w-0"><span className="text-gray-400 text-xs">유형</span><p className="break-all font-medium">{categoryLabel(selected.category)}</p></div>
+                {selected.email && <div className="col-span-2 min-w-0"><span className="text-gray-400 text-xs">이메일</span><p className="break-all">{selected.email}</p></div>}
               </div>
 
               <div>
                 <span className="text-gray-400 text-xs">제목</span>
-                <p className="font-medium text-gray-900">{selected.title}</p>
+                <p className="break-all font-medium text-gray-900">{selected.title}</p>
               </div>
               <div>
                 <span className="text-gray-400 text-xs">내용</span>
-                <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 mt-1">{selected.content}</p>
+                <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-700">{selected.content}</p>
               </div>
 
               {selected.images && selected.images.length > 0 && (
@@ -270,14 +343,14 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
               {selected.admin_reply && (
                 <div>
                   <span className="text-gray-400 text-xs">이전 답변</span>
-                  <p className="text-gray-700 whitespace-pre-wrap bg-green-50 rounded-lg p-3 mt-1">{selected.admin_reply}</p>
+                  <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-green-50 p-3 text-gray-700">{selected.admin_reply}</p>
                 </div>
               )}
 
               <div>
                 <label className="text-gray-400 text-xs">관리자 답변</label>
                 <textarea value={reply} onChange={(e) => setReply(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={4}
+                  className="mt-1 w-full min-w-0 break-all rounded-lg border border-gray-300 px-3 py-2 text-sm" rows={4}
                   placeholder="답변 내용을 입력하세요" />
               </div>
             </div>

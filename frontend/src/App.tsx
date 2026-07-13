@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { ToastHost } from './components/common/ToastHost';
 import { SplashScreen } from './components/SplashScreen';
 import { BottomTab } from './components/navigation/BottomTab';
 import { Home } from './pages/Home';
@@ -25,7 +26,6 @@ import { ProfileEdit } from './pages/ProfileEdit';
 import { MyProducts } from './pages/MyProducts';
 import { MyFavorites } from './pages/MyFavorites';
 import { MyOrders } from './pages/MyOrders';
-import { ActiveTrades } from './pages/ActiveTrades';
 import { MyDisputes } from './pages/MyDisputes';
 import { MyReviews } from './pages/MyReviews';
 import { MyPosts } from './pages/MyPosts';
@@ -34,6 +34,7 @@ import { Settings } from './pages/Settings';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminDisputes } from './pages/AdminDisputes';
 import { AdminHomePopup } from './pages/AdminHomePopup';
+import { AdminNotices } from './pages/AdminNotices';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminData } from './pages/AdminData';
 import { AdminInquiries } from './pages/AdminInquiries';
@@ -50,6 +51,8 @@ import { MeetupSchedule } from './pages/MeetupSchedule';
 import { ReceiveConfirm } from './pages/ReceiveConfirm';
 import { CompleteCheck } from './pages/CompleteCheck';
 import { RegionSelect } from './pages/RegionSelect';
+import { NoticeDetail } from './pages/NoticeDetail';
+import { NoticeList } from './pages/NoticeList';
 import { Welcome } from './pages/Welcome';
 import { SignupProfile } from './pages/SignupProfile';
 import { AppLogin } from './pages/AppLogin';
@@ -80,6 +83,7 @@ const HIDE_NAV_PATHS = [
   '/community/write',
   '/login',
   '/notifications',
+  '/notices',
   '/welcome',
   '/signup',
   '/login-app',
@@ -97,7 +101,6 @@ const HIDE_NAV_PREFIXES = [
   '/order/',
   '/my/products',
   '/my/orders',
-  '/my/active-trades',
   '/my/favorites',
   '/my/disputes',
   '/my/reviews',
@@ -108,6 +111,7 @@ const HIDE_NAV_PREFIXES = [
   '/community/post/',
   '/community/edit/',
   '/dispute',
+  '/notices/',
   '/receive/',
   '/complete-check/',
   '/meetup/',
@@ -420,6 +424,8 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/community/write" element={<PostWrite />} />
           <Route path="/community/edit/:postId" element={<PostWrite />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/notices" element={<NoticeList />} />
+          <Route path="/notices/:id" element={<NoticeDetail />} />
           <Route path="/barter/select/:targetProductId" element={<BarterProductSelect />} />
           <Route path="/barter/offer/:targetProductId" element={<BarterOfferWrite />} />
           <Route path="/barter/complete/:orderId" element={<BarterComplete />} />
@@ -439,7 +445,6 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/my/products" element={<MyProducts />} />
           <Route path="/my/favorites" element={<MyFavorites />} />
           <Route path="/my/orders" element={<MyOrders />} />
-          <Route path="/my/active-trades" element={<ActiveTrades />} />
           <Route path="/my/disputes" element={<MyDisputes />} />
           <Route path="/my/reviews" element={<MyReviews />} />
           <Route path="/my/posts" element={<MyPosts />} />
@@ -449,6 +454,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="popup" replace />} />
             <Route path="popup" element={<AdminHomePopup />} />
+            <Route path="notices" element={<AdminNotices />} />
             <Route path="disputes" element={<AdminDisputes />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="products" element={<AdminProducts />} />
@@ -469,6 +475,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         {!showSplash && !hideNav && <BottomTab />}
+        <ToastHost />
       </div>
     </div>
   );

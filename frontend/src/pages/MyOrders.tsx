@@ -63,46 +63,59 @@ export const MyOrders: React.FC = () => {
         title="Orders"
       />
 
-      <div className="flex gap-2 px-4 py-3 border-b border-gray-200">
-        {(['all', 'buying', 'selling'] as OrderType[]).map((type) => (
+      <div className="flex gap-2 overflow-x-auto border-b border-gray-200 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => {
+            setOrderType('all');
+            setFilterStatus('all');
+          }}
+          className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+            orderType === 'all' && filterStatus === 'all'
+              ? 'text-white'
+              : 'bg-gray-100 text-gray-700'
+          }`}
+          style={orderType === 'all' && filterStatus === 'all' ? { backgroundColor: '#00A8A3' } : undefined}
+        >
+          All
+        </button>
+        {(['buying', 'selling'] as const).map((type) => (
           <button
             key={type}
-            onClick={() => setOrderType(type)}
-            className={`px-4 py-2 rounded-full text-sm font-medium ${
+            type="button"
+            onClick={() => setOrderType((current) => (current === type ? 'all' : type))}
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
               orderType === type
                 ? 'text-white'
                 : 'bg-gray-100 text-gray-700'
             }`}
             style={orderType === type ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {type === 'all' ? 'All' : type === 'buying' ? 'Buying' : 'Selling'}
+            {type === 'buying' ? 'Buying' : 'Selling'}
           </button>
         ))}
-      </div>
-
-      <div className="flex gap-2 px-4 py-3 border-b border-gray-200 overflow-x-auto">
         {(
           [
-            'all',
             ORDER_STATUS_VALUE.PENDING_OFFER,
             ORDER_STATUS_VALUE.ACCEPTED,
             ORDER_STATUS_VALUE.MEETUP_SET,
             ORDER_STATUS_VALUE.RECEIVED,
             ORDER_STATUS_VALUE.COMPLETE,
             ORDER_STATUS_VALUE.DISPUTE,
-          ] as FilterStatus[]
+          ] as OrderStatus[]
         ).map((status) => (
           <button
             key={status}
-            onClick={() => setFilterStatus(status)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+            type="button"
+            onClick={() => setFilterStatus((current) => (current === status ? 'all' : status))}
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
               filterStatus === status
                 ? 'text-white'
                 : 'bg-gray-100 text-gray-700'
             }`}
             style={filterStatus === status ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {status === 'all' ? 'All' : labelOrderStatus(status)}
+            {labelOrderStatus(status)}
           </button>
         ))}
       </div>

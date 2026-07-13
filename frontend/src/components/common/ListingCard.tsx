@@ -130,12 +130,19 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   const isSold = product.status === PRODUCT_STATUS_VALUE.SOLD;
   const isTrading = product.status === PRODUCT_STATUS_VALUE.RESERVED;
+  const isAdminHidden = Boolean(product.adminHidden);
 
   if (layout === 'list') {
     return (
       <div
         onClick={onClick}
-        className={`flex gap-3 p-4 border-b border-gray-100 cursor-pointer ${isSold ? 'opacity-60' : 'hover:bg-gray-50'}`}
+        className={`flex gap-3 border-b border-gray-100 p-4 ${
+          isAdminHidden
+            ? 'cursor-default bg-gray-100 opacity-60 grayscale'
+            : isSold
+              ? 'cursor-pointer opacity-60'
+              : 'cursor-pointer hover:bg-gray-50'
+        }`}
       >
         <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
           <img
@@ -143,12 +150,18 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             alt={product.title}
             className="w-full h-full object-cover"
           />
-          {isSold && (
+          {isAdminHidden ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-700/55">
+              <span className="rounded bg-gray-900/80 px-2 py-1 text-xs font-bold text-white">
+                Hidden by admin
+              </span>
+            </div>
+          ) : isSold ? (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
               <span className="text-white text-xs font-bold px-2 py-1 bg-black/60 rounded">{statusLabel}</span>
             </div>
-          )}
-          {isTrading && (
+          ) : null}
+          {!isAdminHidden && isTrading && (
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
               <span className="text-white text-xs font-bold px-2 py-1 bg-teal-600/80 rounded">{statusLabel}</span>
             </div>
@@ -224,7 +237,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`min-w-0 cursor-pointer transition-opacity ${isSold ? 'opacity-60' : 'hover:opacity-90'}`}
+        className={`min-w-0 transition-opacity ${
+          isAdminHidden
+            ? 'cursor-default opacity-60 grayscale'
+            : isSold
+              ? 'cursor-pointer opacity-60'
+              : 'cursor-pointer hover:opacity-90'
+        }`}
     >
       <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-200 mb-2">
         <img
@@ -232,12 +251,18 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           alt={product.title}
           className="w-full h-full object-cover"
         />
-        {isSold && (
+        {isAdminHidden ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-700/55">
+            <span className="rounded-lg bg-gray-900/80 px-3 py-1.5 text-sm font-bold text-white">
+              Hidden by admin
+            </span>
+          </div>
+        ) : isSold ? (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
             <span className="text-white text-sm font-bold px-3 py-1.5 bg-black/60 rounded-lg">{statusLabel}</span>
           </div>
-        )}
-        {isTrading && (
+        ) : null}
+        {!isAdminHidden && isTrading && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
             <span className="text-white text-sm font-bold px-3 py-1.5 bg-teal-600/80 rounded-lg">{statusLabel}</span>
           </div>

@@ -1,14 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
-import { Product } from '@/types';
+import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
+import { isFreeShareListing, labelFreeShareMenu, labelProductStatus } from '@/locale/enUI';
 import { getFavorites, removeFavorite } from '@/utils/favoriteStorage';
 import { getProductById } from '@/utils/productStorage';
+
+const TEAL = '#00A8A3';
+
+type FilterStatus = 'all' | 'free' | ProductStatus;
+
+const FILTER_TABS: { value: FilterStatus; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'free', label: labelFreeShareMenu() },
+  { value: PRODUCT_STATUS_VALUE.FOR_SALE, label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
+  { value: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
+  { value: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatus(PRODUCT_STATUS_VALUE.SOLD) },
+];
 
 export const MyFavorites: React.FC = () => {
   const navigate = useNavigate();
   const [favorites, setFavorites] = useState<Product[]>([]);
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
   const loadFavorites = () => {
     setFavorites(getFavorites());
@@ -19,6 +33,16 @@ export const MyFavorites: React.FC = () => {
     window.addEventListener('favoritesChanged', loadFavorites);
     return () => window.removeEventListener('favoritesChanged', loadFavorites);
   }, []);
+
+  const filteredFavorites = useMemo(() => {
+    if (filterStatus === 'all') return favorites;
+    return favorites.filter((product) => {
+      const current = getProductById(product.id);
+      if (!current) return false;
+      if (filterStatus === 'free') return isFreeShareListing(current);
+      return current.status === filterStatus;
+    });
+  }, [favorites, filterStatus]);
 
   const handleUnfavorite = (product: Product) => {
     if (confirm(`Remove "${product.title}" from saved?`)) {
@@ -39,11 +63,35 @@ export const MyFavorites: React.FC = () => {
         }
         title="Saved"
         rightContent={
-          favorites.length > 0 ? (
-            <span className="text-sm text-gray-500">{favorites.length}</span>
+          filteredFavorites.length > 0 || favorites.length > 0 ? (
+            <span className="text-sm text-gray-500">
+              {filterStatus === 'all' ? favorites.length : filteredFavorites.length}
+            </span>
           ) : undefined
         }
       />
+
+      {favorites.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto border-b border-gray-200 px-4 py-3">
+          {FILTER_TABS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() =>
+                setFilterStatus((current) =>
+                  current === value && value !== 'all' ? 'all' : value,
+                )
+              }
+              className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+                filterStatus === value ? 'text-white' : 'bg-gray-100 text-gray-700'
+              }`}
+              style={filterStatus === value ? { backgroundColor: TEAL } : undefined}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="px-4 py-4">
         {favorites.length === 0 ? (
@@ -65,14 +113,18 @@ export const MyFavorites: React.FC = () => {
             <button
               onClick={() => navigate('/')}
               className="mt-4 px-6 py-2 rounded-lg text-white text-sm font-medium"
-              style={{ backgroundColor: '#00A8A3' }}
+              style={{ backgroundColor: TEAL }}
             >
               Browse listings
             </button>
           </div>
+        ) : filteredFavorites.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm text-gray-500">No saved listings match this filter.</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {favorites.map((product) => {
+            {filteredFavorites.map((product) => {
               const stillExists = getProductById(product.id);
               if (!stillExists) {
                 return (
