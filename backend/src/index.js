@@ -624,7 +624,7 @@ async function runMigrations() {
   }
 }
 
-runMigrations();
+const migrationsReady = runMigrations();
 
 async function queryReturning(
   sql,
@@ -3711,6 +3711,9 @@ app.post("/api/admin/notices", requireDb, requireAdmin, async (req, res) => {
   if (!title || !String(title).trim() || !content || !String(content).trim()) {
     return res.status(400).json({ error: "title and content are required" });
   }
+  if (String(title).trim().length > 255) {
+    return res.status(400).json({ error: "title must be at most 255 characters" });
+  }
   const id = `notice_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   try {
     const { rows } = await queryReturning(
@@ -3729,6 +3732,9 @@ app.put("/api/admin/notices/:id", requireDb, requireAdmin, async (req, res) => {
   const { title, content, published } = req.body;
   if (title != null && !String(title).trim()) {
     return res.status(400).json({ error: "title is required" });
+  }
+  if (title != null && String(title).trim().length > 255) {
+    return res.status(400).json({ error: "title must be at most 255 characters" });
   }
   if (content != null && !String(content).trim()) {
     return res.status(400).json({ error: "content is required" });
@@ -3998,8 +4004,10 @@ io.on("connection", async (socket) => {
   });
 });
 
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(
-    `[backend] http://0.0.0.0:${PORT}  (health: /api/health, ws: enabled)`,
-  );
+migrationsReady.finally(() => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      `[backend] http://0.0.0.0:${PORT}  (health: /api/health, ws: enabled)`,
+    );
+  });
 });

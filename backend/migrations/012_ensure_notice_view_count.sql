@@ -1,0 +1,1 @@
+ALTER TABLE notices ADD COLUMN view_count INT NOT NULL DEFAULT 0;

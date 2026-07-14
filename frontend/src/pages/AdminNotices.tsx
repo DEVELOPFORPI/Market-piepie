@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
-import { createAdminNotice, fetchAdminNotices, type NoticeRecord } from '@/utils/homePopupStorage';
+import { fetchAdminNotices, type NoticeRecord } from '@/utils/homePopupStorage';
 import { NoticeEditor } from '@/components/notice/NoticeEditor';
 import { uploadImageToR2 } from '@/utils/imageUpload';
 
 const TEAL = '#00A8A3';
+const NOTICE_TITLE_MAX = 255;
 
 function formatDate(iso: string) {
   try {
@@ -69,6 +70,10 @@ export const AdminNotices: React.FC = () => {
       alert('제목과 본문을 입력해 주세요.');
       return;
     }
+    if (title.trim().length > NOTICE_TITLE_MAX) {
+      alert(`제목은 ${NOTICE_TITLE_MAX}자 이내로 입력해 주세요.`);
+      return;
+    }
     setSaving(true);
     try {
       if (editingId) {
@@ -88,12 +93,13 @@ export const AdminNotices: React.FC = () => {
         return;
       }
 
-      const created = await createAdminNotice(
+      const response = await api.post<NoticeRecord>(
+        '/api/admin/notices',
         { title: title.trim(), content: content.trim(), published: true },
-        adminPasswordHeaders(),
+        { headers: adminPasswordHeaders() },
       );
-      if (!created) {
-        alert('공지를 저장하지 못했습니다.');
+      if (!response.ok || !response.data) {
+        alert(`공지를 저장하지 못했습니다.${response.error ? `\n${response.error}` : ''}`);
         return;
       }
       resetForm();
@@ -181,9 +187,13 @@ export const AdminNotices: React.FC = () => {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              maxLength={NOTICE_TITLE_MAX}
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
               placeholder="공지 제목"
             />
+            <p className="mt-1 text-right text-xs text-gray-400">
+              {title.length}/{NOTICE_TITLE_MAX}
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-[#1a1a1a]">본문</label>
