@@ -296,7 +296,7 @@ export const AdminHomePopup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-0 pb-12">
+    <div className="min-h-0 overflow-x-hidden pb-12">
       <div className="mx-auto max-w-2xl space-y-5 px-6 py-8 lg:px-10 lg:py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold tracking-tight text-[#1a1a1a]">홈 화면 팝업</h1>
@@ -381,17 +381,18 @@ export const AdminHomePopup: React.FC = () => {
             </p>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-sm font-semibold text-[#1a1a1a]">연결 공지 (선택)</label>
             <select
               value={form.noticeId}
               onChange={(e) => setForm((f) => ({ ...f, noticeId: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+              title={notices.find((n) => n.id === form.noticeId)?.title || ''}
+              className="w-full max-w-full min-w-0 truncate rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
             >
               <option value="">공지 없음</option>
               {notices.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.title}
+                <option key={n.id} value={n.id} title={n.title}>
+                  {n.title.length > 40 ? `${n.title.slice(0, 40)}…` : n.title}
                 </option>
               ))}
             </select>
@@ -486,7 +487,14 @@ export const AdminHomePopup: React.FC = () => {
                     <p className="line-clamp-1 truncate text-sm font-semibold text-gray-900" title={popup.title}>
                       {popup.title}
                     </p>
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p
+                      className="mt-0.5 truncate text-xs text-gray-500"
+                      title={
+                        popup.notice_title
+                          ? `${formatDate(popup.created_at)} · 리비전 ${popup.revision} · 공지: ${popup.notice_title}`
+                          : undefined
+                      }
+                    >
                       {formatDate(popup.created_at)} · 리비전 {popup.revision}
                       {popup.notice_title ? ` · 공지: ${popup.notice_title}` : ''}
                     </p>
