@@ -1,11 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Post, PostCategory, POST_CATEGORY_VALUE } from '@/types';
-import { labelPostCategory, relativeTimeShort } from '@/locale/enUI';
+import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
+import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
+import { localizeDisputePostTitle } from '@/utils/disputeLabels';
 import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } from '@/utils/postLikeStorage';
 import { getPostViewCount, syncPostViewFromDB } from '@/utils/postViewStorage';
 import { getDisputeByPostId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
+
+const CAT_KEY: Record<PostCategory, AppMessageKey> = {
+  [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
+  [POST_CATEGORY_VALUE.INFO]: 'catInfo',
+  [POST_CATEGORY_VALUE.LOOKING_FOR]: 'catLookingFor',
+  [POST_CATEGORY_VALUE.DISPUTE]: 'catDispute',
+  [POST_CATEGORY_VALUE.SWAP]: 'catSwap',
+};
+
+function relativeTimeLabel(
+  isoDate: string,
+  t: (key: AppMessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
+  if (diff < 1) return t('justNow');
+  if (diff < 60) return t('minutesAgo', { n: diff });
+  if (diff < 1440) return t('hoursAgo', { n: Math.floor(diff / 60) });
+  return t('daysAgo', { n: Math.floor(diff / 1440) });
+}
 
 interface PostCardProps {
   post: Post;
@@ -22,6 +43,8 @@ const categoryColor: Record<PostCategory, string> = {
 
 export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
+  const localizedRegion = useLocalizedRegion(post.region, post.latitude, post.longitude);
   const [liked, setLiked] = useState(isPostLiked(post.id));
   const [likeCount, setLikeCount] = useState(getPostLikeCount(post.id));
   const [viewCount, setViewCount] = useState(() => post.viewCount ?? getPostViewCount(post.id));
@@ -69,6 +92,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
   const color = categoryColor[post.category] || '#6b7280';
   const hasImage = post.images && post.images.length > 0;
+  const isDisputePost = post.category === POST_CATEGORY_VALUE.DISPUTE;
 
   return (
     <div
@@ -81,7 +105,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
           className="px-2.5 py-1 text-xs font-semibold rounded"
           style={{ color, border: `1.5px solid ${color}`, backgroundColor: `${color}10` }}
         >
-          {labelPostCategory(post.category)}
+          {t(CAT_KEY[post.category])}
         </span>
       </div>
 
@@ -90,10 +114,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
         {/* Text Area */}
         <div className="flex-1 min-w-0">
           <h3 className="text-[15px] font-bold text-gray-900 mb-1 line-clamp-2 leading-snug">
-            {post.title}
+            {post.category === POST_CATEGORY_VALUE.DISPUTE
+              ? localizeDisputePostTitle(lang, post.title, t('catDispute'))
+              : post.title}
           </h3>
           {post.category === POST_CATEGORY_VALUE.DISPUTE && getDisputeByPostId(post.id)?.status === 'RESOLVED' && (
-            <p className="text-xs text-green-600 font-medium mb-1">This dispute post is resolved</p>
+            <p className="text-xs text-green-600 font-medium mb-1">{t('disputePostResolved')}</p>
           )}
           <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
             {post.content}
@@ -115,27 +141,29 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
       {/* Bottom: likes · comments · views (left) · region/time (right) */}
       <div className="flex items-center justify-between gap-3 mt-3 text-xs text-gray-400">
         <div className="flex items-center gap-4 min-w-0">
-          <button
-            type="button"
-            onClick={handleLikeClick}
-            className="flex items-center gap-1 hover:opacity-80 transition-opacity shrink-0"
-            aria-label="Like"
-          >
-            <svg
-              className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
-              fill={liked ? 'currentColor' : 'none'}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {!isDisputePost && (
+            <button
+              type="button"
+              onClick={handleLikeClick}
+              className="flex items-center gap-1 hover:opacity-80 transition-opacity shrink-0"
+              aria-label="Like"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-            <span className={liked ? 'text-red-500' : ''}>{likeCount}</span>
-          </button>
+              <svg
+                className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+                fill={liked ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                />
+              </svg>
+              <span className={liked ? 'text-red-500' : ''}>{likeCount}</span>
+            </button>
+          )}
           <span className="flex items-center gap-1 shrink-0">
             <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5" />
             {post.commentCount || 0}
@@ -149,7 +177,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
           </span>
         </div>
         <span className="flex-shrink-0 text-right whitespace-nowrap">
-          {post.region && <>{post.region}&nbsp;&nbsp;</>}{relativeTimeShort(post.createdAt)}
+          {localizedRegion && <>{localizedRegion}&nbsp;&nbsp;</>}{relativeTimeLabel(post.createdAt, t)}
         </span>
       </div>
 
@@ -157,7 +185,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
       {post.category === POST_CATEGORY_VALUE.LOOKING_FOR && post.attachedProduct && (
         <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-blue-700">🔍 Looking for this item</span>
+            <span className="text-xs font-medium text-blue-700">{t('lookingForThisItem')}</span>
           </div>
           <div className="flex gap-2">
             {post.attachedProduct.images && post.attachedProduct.images.length > 0 && (

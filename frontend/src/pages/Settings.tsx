@@ -4,21 +4,22 @@ import { TopBar } from '@/components/common/TopBar';
 import { getRegion } from '@/utils/regionStorage';
 import { markExplicitLogout } from '@/utils/authStorage';
 import { isTestLoginEnabled } from '@/config/features';
-import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
+import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 
 export const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const [currentRegion, setCurrentRegion] = useState<string>('');
+  const { t } = useLanguage();
+  const [storedRegion, setStoredRegion] = useState('');
+  const localizedRegion = useLocalizedRegion(storedRegion || null);
 
   useEffect(() => {
-    const savedRegion = getRegion();
-    setCurrentRegion(savedRegion || UI_REGION_PLACEHOLDER);
+    setStoredRegion(getRegion() || '');
   }, []);
 
   useEffect(() => {
     const handleRegionChange = () => {
-      const savedRegion = getRegion();
-      setCurrentRegion(savedRegion || UI_REGION_PLACEHOLDER);
+      setStoredRegion(getRegion() || '');
     };
     window.addEventListener('regionChanged', handleRegionChange);
     return () => {
@@ -26,15 +27,19 @@ export const Settings: React.FC = () => {
     };
   }, []);
 
+  const regionDisplay = storedRegion ? localizedRegion || storedRegion : t('chooseRegion');
+
   const linkItems = [
     {
-      label: 'Region',
-      description: currentRegion,
+      key: 'region',
+      label: t('regionMenu'),
+      description: regionDisplay,
       onClick: () => navigate('/region/select'),
     },
     {
-      label: 'Inquiry',
-      description: 'Submit a question or report an issue',
+      key: 'inquiry',
+      label: t('inquiryMenu'),
+      description: t('inquiryMenuHint'),
       onClick: () => navigate('/inquiry'),
     },
   ];
@@ -43,20 +48,20 @@ export const Settings: React.FC = () => {
     <div className="min-h-screen bg-white pb-8 safe-area-bottom">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Settings"
+        title={t('settingsTitle')}
       />
 
       <div className="px-4 py-4 space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200">
           {linkItems.map((item) => (
             <button
-              key={item.label}
+              key={item.key}
               type="button"
               onClick={item.onClick}
               className="w-full flex items-center justify-between text-left px-4 py-3"
@@ -92,7 +97,7 @@ export const Settings: React.FC = () => {
             className="w-full px-4 py-3 text-sm font-medium text-white rounded-lg"
             style={{ backgroundColor: '#00A8A3' }}
           >
-            Switch account (log out)
+            {t('switchAccountLogout')}
           </button>
         </div>
       </div>

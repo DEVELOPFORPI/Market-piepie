@@ -16,7 +16,6 @@ import { getChatRoomByOrder } from '@/utils/chatStorage';
 import { syncNotificationsFromDB, syncChatRoomsFromDB } from '@/utils/dbSync';
 import {
   COMPLETION_TITLE_SET,
-  displayNotificationTitle,
   isMeetupNotificationTitle,
   normalizeNotificationTitle,
   NOTIFY_MEETUP_CONFIRMED,
@@ -27,40 +26,31 @@ import {
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
-  NOTIFY_BADGE_UNLOCKED,
-  relativeTimeShort,
 } from '@/locale/enUI';
-import { ACTIVITY_BADGE_DEFINITIONS } from '@/constants/activityBadges';
+import { useLanguage } from '@/hooks/useLanguage';
+import { notifyT } from '@/i18n/notifyMessages';
+import { localizeNotification } from '@/utils/notifyDisplay';
+import type { AppMessageKey } from '@/hooks/useLanguage';
 
 const COMPLETION_TITLES = COMPLETION_TITLE_SET;
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
 const REVIEW_TITLES = new Set([NOTIFY_REVIEW_WRITTEN]);
 const ACCEPT_TITLES = new Set([NOTIFY_OFFER_ACCEPTED]);
 
-const badgeLabelMap: Map<string, string> = new Map(
-  ACTIVITY_BADGE_DEFINITIONS.map((b) => [b.id, b.label] as const)
-);
-
-function getBadgeDisplay(notification: StoredNotification): { title: string; content: string } {
-  if (notification.type !== 'badge') {
-    return {
-      title: displayNotificationTitle(notification.title),
-      content: notification.content,
-    };
-  }
-  // Legacy entries looked like "Badge 04 has been added ..."
-  const legacyText = `${notification.title} ${notification.content}`;
-  const m = legacyText.match(/Badge\s*(\d{2})/i);
-  const badgeId = m?.[1];
-  const badgeTitle = badgeId ? badgeLabelMap.get(badgeId) ?? badgeId : notification.content;
-  return {
-    title: NOTIFY_BADGE_UNLOCKED,
-    content: badgeTitle || '',
-  };
+function relativeTimeLabel(
+  isoDate: string,
+  t: (key: AppMessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
+  if (diff < 1) return t('justNow');
+  if (diff < 60) return t('minutesAgo', { n: diff });
+  if (diff < 1440) return t('hoursAgo', { n: Math.floor(diff / 60) });
+  return t('daysAgo', { n: Math.floor(diff / 1440) });
 }
 
 export const Notifications: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteMode, setDeleteMode] = useState(false);
@@ -135,7 +125,6 @@ export const Notifications: React.FC = () => {
     const order = orderId ? await ensureOrderById(orderId) : null;
     let destinationLink = notification.link;
 
-    // Offer/share request: open chat when room exists (accept/decline there)
     if (
       order &&
       (title === NOTIFY_PURCHASE_OFFER_ARRIVED || title === NOTIFY_FREE_SHARE_REQUEST_ARRIVED)
@@ -148,7 +137,6 @@ export const Notifications: React.FC = () => {
       }
     }
 
-    // Order notifications from chat flow ??open the trade chat room when possible
     if (order && isMeetupNotificationTitle(title)) {
       const room = getChatRoomByOrder(order);
       if (room?.id) {
@@ -159,7 +147,7 @@ export const Notifications: React.FC = () => {
     if (title === NOTIFY_TRADE_COMPLETE_CHECK && order?.status === ORDER_STATUS_VALUE.COMPLETE) {
       const existingReview = orderId ? getReviewByOrderId(orderId) : undefined;
       if (existingReview) {
-        alert('This trade is already complete and you have left a review.');
+        alert(notifyT(lang, 'alertTradeDoneReviewed'));
         navigate(destinationLink);
         return;
       }
@@ -172,7 +160,7 @@ export const Notifications: React.FC = () => {
       const userId = getCurrentUserId();
       const isBuyer = userId && order.buyer?.id === userId;
       if (isBuyer) {
-        alert('Receipt is already confirmed.');
+        alert(notifyT(lang, 'alertReceiptConfirmed'));
       }
       navigate(destinationLink);
       return;
@@ -194,12 +182,12 @@ export const Notifications: React.FC = () => {
       <div className="sticky top-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between h-14 px-2">
           <div className="flex items-center gap-1">
-            <button onClick={() => navigate(-1)} className="p-2" aria-label="Back">
+            <button onClick={() => navigate(-1)} className="p-2" aria-label={notifyT(lang, 'backAria')}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h1 className="text-lg font-bold text-gray-900">Notifications</h1>
+            <h1 className="text-lg font-bold text-gray-900">{notifyT(lang, 'pageTitle')}</h1>
           </div>
           <div className="flex items-center gap-2 pr-2">
             {deleteMode ? (
@@ -209,13 +197,13 @@ export const Notifications: React.FC = () => {
                   className="text-sm font-medium"
                   style={{ color: '#00A8A3' }}
                 >
-                  Select all
+                  {notifyT(lang, 'selectAll')}
                 </button>
                 <button
                   onClick={exitDeleteMode}
                   className="text-sm font-medium text-gray-600"
                 >
-                  Cancel
+                  {notifyT(lang, 'cancel')}
                 </button>
               </>
             ) : (
@@ -229,13 +217,13 @@ export const Notifications: React.FC = () => {
                     className="text-sm font-medium"
                     style={{ color: '#00A8A3' }}
                   >
-                    Mark all read
+                    {notifyT(lang, 'markAllRead')}
                   </button>
                 )}
                 <button
                   onClick={() => setDeleteMode(true)}
                   className="p-2 text-gray-600"
-                  aria-label="Delete"
+                  aria-label={notifyT(lang, 'deleteAria')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -250,11 +238,11 @@ export const Notifications: React.FC = () => {
       <div className="divide-y divide-gray-100">
         {notifications.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No notifications yet.
+            {notifyT(lang, 'noNotifications')}
           </div>
         ) : (
           notifications.map((notification, index) => {
-            const badgeDisplay = getBadgeDisplay(notification);
+            const display = localizeNotification(lang, notification);
             const title = normalizeNotificationTitle(notification.title);
             return (
             <div
@@ -275,7 +263,7 @@ export const Notifications: React.FC = () => {
                       ? 'border-[#00A8A3] bg-[#00A8A3]'
                       : 'border-gray-300 hover:border-[#00A8A3]'
                   }`}
-                  aria-label="Select"
+                  aria-label={notifyT(lang, 'selectAria')}
                 >
                   {selectedIds.has(notification.id) && (
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
@@ -306,7 +294,7 @@ export const Notifications: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="text-sm font-semibold text-gray-900">
-                    {badgeDisplay.title}
+                    {display.title}
                   </h3>
                   {!notification.read && !deleteMode && (
                     <span
@@ -315,10 +303,10 @@ export const Notifications: React.FC = () => {
                     />
                   )}
                 </div>
-                {badgeDisplay.content ? (
-                  <p className="text-sm text-gray-600 mb-1">{badgeDisplay.content}</p>
+                {display.content ? (
+                  <p className="text-sm text-gray-600 mb-1">{display.content}</p>
                 ) : null}
-                <span className="text-xs text-gray-400">{relativeTimeShort(notification.timestamp)}</span>
+                <span className="text-xs text-gray-400">{relativeTimeLabel(notification.timestamp, t)}</span>
               </div>
             </div>
           )})
@@ -328,7 +316,9 @@ export const Notifications: React.FC = () => {
       {deleteMode && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between">
           <span className="text-sm text-gray-600">
-            {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select notifications to delete'}
+            {selectedIds.size > 0
+              ? notifyT(lang, 'nSelected', { n: selectedIds.size })
+              : notifyT(lang, 'selectToDelete')}
           </span>
           <button
             type="button"
@@ -337,7 +327,7 @@ export const Notifications: React.FC = () => {
             className="px-4 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: '#00A8A3' }}
           >
-            Delete selected
+            {notifyT(lang, 'deleteSelected')}
           </button>
         </div>
       )}

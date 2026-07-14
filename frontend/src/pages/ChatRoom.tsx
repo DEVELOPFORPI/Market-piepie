@@ -3,14 +3,12 @@ import { useNavigate, useParams, useSearchParams, useLocation } from 'react-rout
 import type { ChatRoom as ChatRoomType } from '@/types';
 import {
   ChatMessage,
-  BarterOrder,
   Order,
   OrderStatus,
   ORDER_STATUS_VALUE,
   PRODUCT_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
-import { BarterOrderPanel } from '@/components/common/BarterOrderPanel';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -27,25 +25,15 @@ import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profile
 import { API_BASE } from '@/utils/apiConfig';
 import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
-  CHAT_MSG_PRODUCT_RESERVED,
-  CHAT_MSG_SELLER_MEETUP_STARTED,
-  CHAT_BANNER_TRADE_COMPLETE,
-  CHAT_BANNER_LISTING_SOLD,
-  CHAT_BANNER_YOUR_DISPUTE,
-  CHAT_BANNER_THEIR_DISPUTE,
-  CHAT_BANNER_DISPUTE_GENERIC,
-  CHAT_BANNER_DISPUTE_RESOLVED,
-  CHAT_LEAVE_ROOM,
-  CHAT_LEAVE_ROOM_CONFIRM,
-  CHAT_ROOM_ENDED,
-  CHAT_ROOM_ENDED_INPUT,
-  CHAT_NEW_MESSAGES,
-  CHAT_UNREAD_FROM_HERE,
   displayChatMessageContent,
   isMeetupCanceledMessage,
+  isChatSystemKey,
   NOTIFY_OFFER_DECLINED,
 } from '@/locale/enUI';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 const SHIPPING_RECEIVE_OK = new Set<OrderStatus>([
   ORDER_STATUS_VALUE.SHIPPED,
@@ -90,21 +78,28 @@ function findFirstUnreadIndex(
   return msgs.length > 0 ? 0 : -1;
 }
 
-/** Only the newest pending price-offer card should show Accept / Decline */
-function getLatestPendingPriceOfferMessageId(msgs: ChatMessage[]): string | null {
-  let latestId: string | null = null;
-  let latestTs = 0;
+/**
+ * Accept/Decline only on the chronologically newest price_offer, and only while
+ * that offer's order is still PENDING_OFFER.
+ * Previously we picked the newest among *pending* orders only — so an orphan
+ * old pending offer kept showing buttons after a newer offer was already accepted.
+ */
+function getActionablePriceOfferMessageId(msgs: ChatMessage[]): string | null {
+  let newest: ChatMessage | null = null;
+  let newestTs = Number.NEGATIVE_INFINITY;
   for (const m of msgs) {
     if (m.type !== 'price_offer' || !m.orderId) continue;
-    const order = getOrderById(m.orderId);
-    if (!order || order.status !== ORDER_STATUS_VALUE.PENDING_OFFER) continue;
     const ts = new Date(m.timestamp).getTime();
-    if (ts >= latestTs) {
-      latestTs = ts;
-      latestId = m.id;
+    if (Number.isNaN(ts)) continue;
+    if (ts >= newestTs) {
+      newestTs = ts;
+      newest = m;
     }
   }
-  return latestId;
+  if (!newest?.orderId) return null;
+  const order = getOrderById(newest.orderId);
+  if (!order || order.status !== ORDER_STATUS_VALUE.PENDING_OFFER) return null;
+  return newest.id;
 }
 
 function resolveMeetupBannerInfo(
@@ -130,7 +125,7 @@ function resolveMeetupBannerInfo(
     const msg = msgs[i];
     if (msg.type !== 'meetup_confirmed') continue;
     if (new Date(msg.timestamp).getTime() <= latestCancelTs) continue;
-    if (displayChatMessageContent(msg.content) === CHAT_MSG_SELLER_MEETUP_STARTED) continue;
+    if (isChatSystemKey(msg.content, 'msgSellerMeetupStarted')) continue;
     if (msg.meetupPlace && msg.meetupDate && msg.meetupTime) {
       return {
         place: msg.meetupPlace,
@@ -202,30 +197,35 @@ function ChatActionChipRow({ chips }: { chips: ChatChipAction[] }) {
   );
 }
 
-function buildOrderDisputeBannerRows(order: Order): { label: string; to: string }[] {
+function buildOrderDisputeBannerRows(
+  order: Order,
+  t: (key: AppMessageKey, vars?: Record<string, string | number>) => string,
+): { label: string; to: string }[] {
   const myId = getCurrentUserId();
   if (!myId) return [];
   const open = getDisputesByOrderId(order.id).filter((d) => d.status !== 'RESOLVED');
   if (open.length === 0) {
-    return [{ label: CHAT_BANNER_DISPUTE_GENERIC, to: `/dispute/${order.id}` }];
+    return [{ label: t('bannerDisputeGeneric'), to: `/dispute/${order.id}` }];
   }
   const myDispute = open.find((d) => d.openedByUserId === myId);
   const theirDispute = open.find((d) => d.openedByUserId && d.openedByUserId !== myId);
   const rows: { label: string; to: string }[] = [];
   if (myDispute) {
-    rows.push({ label: CHAT_BANNER_YOUR_DISPUTE, to: `/dispute/${order.id}` });
+    rows.push({ label: t('bannerYourDispute'), to: `/dispute/${order.id}` });
   }
   if (theirDispute) {
-    rows.push({ label: CHAT_BANNER_THEIR_DISPUTE, to: `/dispute/${order.id}?view=other` });
+    rows.push({ label: t('bannerTheirDispute'), to: `/dispute/${order.id}?view=other` });
   }
   if (rows.length === 0) {
-    rows.push({ label: CHAT_BANNER_DISPUTE_GENERIC, to: `/dispute/${order.id}` });
+    rows.push({ label: t('bannerDisputeGeneric'), to: `/dispute/${order.id}` });
   }
   return rows;
 }
 
 export const ChatRoom: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
+  const timeLocale = localeForAppLanguage(lang);
   const location = useLocation();
   const { id: roomId } = useParams();
   const [searchParams] = useSearchParams();
@@ -235,7 +235,6 @@ export const ChatRoom: React.FC = () => {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [showBarterPanel, setShowBarterPanel] = useState(false);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [viewImage, setViewImage] = useState<string | null>(null);
@@ -260,8 +259,6 @@ export const ChatRoom: React.FC = () => {
   const initialMessageSeedDoneRef = useRef(false);
   /** Show deleted-listing alert once, then leave */
   const deletedProductPopupShownRef = useRef(false);
-
-  const mockBarterOrder: BarterOrder | null = null;
 
   // Whether listing was deleted
   const [isProductDeleted, setIsProductDeleted] = useState(false);
@@ -319,7 +316,7 @@ export const ChatRoom: React.FC = () => {
     if (!roomId || !isProductDeleted) return;
     if (deletedProductPopupShownRef.current) return;
     deletedProductPopupShownRef.current = true;
-    alert('This listing was removed.');
+    alert(t('listingRemovedAlert'));
     navigate('/chat', { replace: true });
   }, [isProductDeleted, roomId, navigate]);
 
@@ -601,7 +598,7 @@ export const ChatRoom: React.FC = () => {
 
   const displayMessages = messages;
   void ordersRevision;
-  const latestPendingPriceOfferMessageId = getLatestPendingPriceOfferMessageId(displayMessages);
+  const actionablePriceOfferMessageId = getActionablePriceOfferMessageId(displayMessages);
   const meetupBannerInfo = resolveMeetupBannerInfo(currentOrder, displayMessages);
   const meetupCanceled = isMeetupCanceledState(currentOrder, displayMessages);
   const listingProduct = room?.product?.id ? getProductById(room.product.id) : null;
@@ -618,11 +615,11 @@ export const ChatRoom: React.FC = () => {
 
   const completedTradeReviewChips = (orderId: string): ChatChipAction[] => {
     if (getMyReviewForOrder(orderId)) {
-      return [{ key: 'review-done', label: 'Review submitted', disabled: true }];
+      return [{ key: 'review-done', label: t('reviewSubmitted'), disabled: true }];
     }
     return [{
       key: 'review',
-      label: 'Write review',
+      label: t('writeReview'),
       primary: true,
       onClick: () => navigate(`/review/${orderId}`),
     }];
@@ -685,13 +682,13 @@ export const ChatRoom: React.FC = () => {
 
   const handleSellerStartMeetup = () => {
     if (!room?.product) {
-      alert('Could not load listing.');
+      alert(t('couldNotLoadListing'));
       return;
     }
     const product = room.product;
     const buyer = getOtherUser(room);
     if (!buyer?.id) {
-      alert('Could not load chat partner. Try again.');
+      alert(t('couldNotLoadPartner'));
       return;
     }
     void (async () => {
@@ -702,7 +699,7 @@ export const ChatRoom: React.FC = () => {
         }
         const order = await createOrderBySeller({ product, buyer });
         if (!order) {
-          alert('Could not start meetup. Check your connection and try again.');
+          alert(t('couldNotStartMeetup'));
           return;
         }
         await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
@@ -712,7 +709,7 @@ export const ChatRoom: React.FC = () => {
           alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
         } else {
           console.error(e);
-          alert('Could not start meetup scheduling. Try again.');
+          alert(t('couldNotStartMeetupScheduling'));
         }
       }
     })();
@@ -726,13 +723,13 @@ export const ChatRoom: React.FC = () => {
     }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       return canOfferPrice
-        ? [{ key: 'offer', label: 'Send offer', onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
+        ? [{ key: 'offer', label: t('sendOffer'), onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
         : [];
     }
     const chips: ChatChipAction[] = [
       {
         key: 'receive',
-        label: 'Confirm receipt',
+        label: t('confirmReceipt'),
         onClick: () => navigate(`/receive/${currentOrder.id}`),
         disabled: !receiveEnabled,
       },
@@ -740,7 +737,7 @@ export const ChatRoom: React.FC = () => {
     if (!isShareOrder) {
       chips.push({
         key: 'dispute',
-        label: 'Open dispute',
+        label: t('openDispute'),
         onClick: () => navigate(`/dispute/${currentOrder.id}`),
         disabled: !disputeEnabled,
       });
@@ -757,7 +754,7 @@ export const ChatRoom: React.FC = () => {
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       return [{
         key: 'meetup',
-        label: 'Schedule meetup',
+        label: t('scheduleMeetup'),
         onClick: handleSellerStartMeetup,
         disabled: !scheduleMeetupEnabled,
       }];
@@ -766,11 +763,11 @@ export const ChatRoom: React.FC = () => {
     if (currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted) {
       chips.push({
         key: 'complete',
-        label: 'Confirm complete',
+        label: t('confirmComplete'),
         primary: true,
         onClick: () => {
           void (async () => {
-            if (!confirm('Confirm trade completion?')) return;
+            if (!confirm(t('confirmTradeCompletion'))) return;
             const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
             if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
               void addTradeCompletedToChat(updated);
@@ -784,14 +781,14 @@ export const ChatRoom: React.FC = () => {
     }
     chips.push({
       key: 'meetup',
-      label: 'Schedule meetup',
+      label: t('scheduleMeetup'),
       onClick: handleSellerStartMeetup,
       disabled: !scheduleMeetupEnabled,
     });
     if (!isShareOrder) {
       chips.push({
         key: 'dispute',
-        label: 'Open dispute',
+        label: t('openDispute'),
         onClick: () => navigate(`/dispute/${currentOrder.id}`),
         disabled: !disputeEnabled,
       });
@@ -935,7 +932,7 @@ export const ChatRoom: React.FC = () => {
       const urls = await uploadImagesToR2(fileArray, { folder: 'chat' });
       setPreviewImages((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not upload image.');
+      alert(t('couldNotUpload'));
     } finally {
       setUploadingImages(false);
       e.target.value = '';
@@ -978,7 +975,7 @@ export const ChatRoom: React.FC = () => {
         setInput('');
         scrollAfterSend();
       } else {
-        alert('Could not send photos. Check your connection and try again.');
+        alert(t('couldNotSendPhotos'));
       }
       return;
     }
@@ -996,7 +993,7 @@ export const ChatRoom: React.FC = () => {
       setInput('');
       scrollAfterSend();
     } else {
-      alert('Message could not be sent. Check your connection and try again.');
+      alert(t('messageSendFailed'));
     }
   };
 
@@ -1026,7 +1023,7 @@ export const ChatRoom: React.FC = () => {
                     type="button"
                     onClick={goToOtherProfile}
                     className="flex-shrink-0 rounded-full"
-                    aria-label={`View ${displayName}'s profile`}
+                    aria-label={t('viewProfileAria', { name: displayName })}
                   >
                     <AvatarWithBadgeOverlay userId={other.id} sizePx={40}>
                       <UserAvatarImage src={avatarUrl} />
@@ -1041,7 +1038,7 @@ export const ChatRoom: React.FC = () => {
                       {displayName}
                     </h1>
                     {other.kycStatus === 'verified' && (
-                      <img src="/check_1.svg" alt="Verified" className="w-3.5 h-3.5 flex-shrink-0" />
+                      <img src="/check_1.svg" alt={t('verified')} className="w-3.5 h-3.5 flex-shrink-0" />
                     )}
                   </button>
                 </>
@@ -1064,7 +1061,7 @@ export const ChatRoom: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    if (roomId && confirm(CHAT_LEAVE_ROOM_CONFIRM)) {
+                    if (roomId && confirm(t('leaveChatConfirm'))) {
                       void leaveChatRoom(roomId).then((ok) => {
                         if (ok) navigate('/chat', { replace: true });
                       });
@@ -1072,7 +1069,7 @@ export const ChatRoom: React.FC = () => {
                   }}
                   className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
                 >
-                  {CHAT_LEAVE_ROOM}
+                  {t('leaveChat')}
                 </button>
               </div>
             )}
@@ -1090,18 +1087,18 @@ export const ChatRoom: React.FC = () => {
                   <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="text-sm font-medium text-green-800 flex-1">{CHAT_BANNER_DISPUTE_RESOLVED}</p>
+                  <p className="text-sm font-medium text-green-800 flex-1">{t('bannerDisputeResolved')}</p>
                   <button
                     onClick={() => navigate(`/dispute/${currentOrder.id}`)}
                     className="text-xs font-medium text-green-600 underline hover:text-green-700 whitespace-nowrap"
                   >
-                    Details
+                    {t('details')}
                   </button>
                 </div>
               </div>
             );
           }
-          return buildOrderDisputeBannerRows(currentOrder).map((row) => (
+          return buildOrderDisputeBannerRows(currentOrder, t).map((row) => (
             <div key={row.to} className="bg-red-50 border-t border-red-200 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <svg
@@ -1122,7 +1119,7 @@ export const ChatRoom: React.FC = () => {
                   onClick={() => navigate(row.to)}
                   className="text-xs font-medium text-red-600 underline hover:text-red-700 whitespace-nowrap"
                 >
-                  Details
+                  {t('details')}
                 </button>
               </div>
             </div>
@@ -1135,20 +1132,20 @@ export const ChatRoom: React.FC = () => {
               <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm font-medium text-green-800 flex-1">{CHAT_BANNER_TRADE_COMPLETE}</p>
+              <p className="text-sm font-medium text-green-800 flex-1">{t('bannerTradeComplete')}</p>
             </div>
           </div>
         )}
 
         {roomEnded && (
           <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
-            <p className="text-sm font-medium text-gray-600">{CHAT_ROOM_ENDED}</p>
+            <p className="text-sm font-medium text-gray-600">{t('roomEnded')}</p>
           </div>
         )}
 
         {isSoldToOtherParty && (
           <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
-            <p className="text-sm font-medium text-gray-600">{CHAT_BANNER_LISTING_SOLD}</p>
+            <p className="text-sm font-medium text-gray-600">{t('bannerListingSold')}</p>
           </div>
         )}
 
@@ -1160,7 +1157,7 @@ export const ChatRoom: React.FC = () => {
             <div className="flex items-center gap-2 min-w-0">
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
               <p className="text-sm font-medium text-teal-800 flex-1 truncate">
-                {CHAT_MSG_PRODUCT_RESERVED}
+                {t('msgProductReserved')}
                 {' · '}
                 {meetupBannerInfo.place}
                 {' · '}
@@ -1171,7 +1168,7 @@ export const ChatRoom: React.FC = () => {
                 onClick={() => {
                   setMeetupDetailMessage({
                     id: 'banner',
-                    content: CHAT_MSG_PRODUCT_RESERVED,
+                    content: 'This item has been reserved!',
                     senderId: meetupBannerInfo.sellerId,
                     timestamp: new Date().toISOString(),
                     type: 'meetup_confirmed',
@@ -1182,7 +1179,7 @@ export const ChatRoom: React.FC = () => {
                 }}
                 className="text-xs font-medium text-teal-600 underline hover:text-teal-700 whitespace-nowrap"
               >
-                Details
+                {t('details')}
               </button>
             </div>
           </div>
@@ -1191,33 +1188,24 @@ export const ChatRoom: React.FC = () => {
 
       {/* Partner started meetup (realtime popup) */}
       {showMeetupStartedPopup && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-label="Meetup started">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-label={t('meetupStartedAria')}>
           <div className="bg-white rounded-xl shadow-lg max-w-sm w-full p-6 text-center">
-            <p className="text-base font-semibold text-gray-900 mb-1">The other person started scheduling a meetup</p>
-            <p className="text-sm text-gray-600 mb-5">Check the chat for meetup details.</p>
+            <p className="text-base font-semibold text-gray-900 mb-1">{t('meetupStartedTitle')}</p>
+            <p className="text-sm text-gray-600 mb-5">{t('meetupStartedHint')}</p>
             <button
               type="button"
               onClick={() => setShowMeetupStartedPopup(false)}
               className="w-full px-4 py-3 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              OK
+              {t('ok')}
             </button>
           </div>
         </div>
       )}
 
-      {/* Barter Order Panel */}
-      {showBarterPanel && mockBarterOrder && (
-        <BarterOrderPanel
-          order={mockBarterOrder}
-          isUserA={true}
-          onClose={() => setShowBarterPanel(false)}
-        />
-      )}
-
       {/* Listing + buyer/seller actions */}
-      {room?.product && !mockBarterOrder && (
+      {room?.product && (
         <div className="bg-white px-4 py-2.5 shrink-0">
           {isProductDeleted ? (
             <div className="flex items-center gap-2 py-1">
@@ -1226,7 +1214,7 @@ export const ChatRoom: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </div>
-              <p className="text-sm text-gray-400">Listing removed</p>
+              <p className="text-sm text-gray-400">{t('listingRemoved')}</p>
             </div>
           ) : (
             <>
@@ -1234,7 +1222,7 @@ export const ChatRoom: React.FC = () => {
                 type="button"
                 onClick={() => navigate(`/product/${room.product!.id}`)}
                 className="flex gap-3 items-center w-full text-left pb-2.5"
-                aria-label="View listing"
+                aria-label={t('viewListing')}
               >
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                   <img
@@ -1248,7 +1236,7 @@ export const ChatRoom: React.FC = () => {
                   <p className="text-sm font-medium text-gray-900 truncate">{room.product.title}</p>
                   <p className="text-sm font-bold text-gray-900 shrink-0">
                     {room.product.isFreeShare || room.product.price === 0
-                      ? 'Free share'
+                      ? t('freeShare')
                       : `${room.product.price.toLocaleString()} PI`}
                   </p>
                 </div>
@@ -1276,7 +1264,7 @@ export const ChatRoom: React.FC = () => {
           const unreadDivider = showUnreadDivider ? (
             <div className="flex justify-center py-1">
               <span className="text-xs font-medium text-[#00A8A3] px-3 py-1 bg-teal-50 rounded-full">
-                {CHAT_UNREAD_FROM_HERE}
+                {t('unreadFromHere')}
               </span>
             </div>
           ) : null;
@@ -1286,7 +1274,7 @@ export const ChatRoom: React.FC = () => {
                 {unreadDivider}
                 <div className="flex justify-center">
                 <span className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
-                  {displayChatMessageContent(msg.content)}
+                  {displayChatMessageContent(msg.content, lang)}
                 </span>
                 </div>
               </div>
@@ -1294,8 +1282,7 @@ export const ChatRoom: React.FC = () => {
           }
           if (msg.type === 'meetup_confirmed') {
             const isSeller = room && getCurrentUserId() === room.sellerId;
-            const contentLabel = displayChatMessageContent(msg.content);
-            const isSellerScheduling = contentLabel === CHAT_MSG_SELLER_MEETUP_STARTED;
+            const isSellerScheduling = isChatSystemKey(msg.content, 'msgSellerMeetupStarted');
             const orderHasMeetup = !!(
               currentOrder?.meetupPlace &&
               currentOrder?.meetupDate &&
@@ -1304,7 +1291,7 @@ export const ChatRoom: React.FC = () => {
             const useOrderMeetup =
               orderHasMeetup &&
               !isSellerScheduling &&
-              contentLabel === CHAT_MSG_PRODUCT_RESERVED;
+              isChatSystemKey(msg.content, 'msgProductReserved');
             const meetupPlace = msg.meetupPlace ?? (useOrderMeetup ? currentOrder!.meetupPlace : undefined);
             const meetupDate = msg.meetupDate ?? (useOrderMeetup ? currentOrder!.meetupDate : undefined);
             const meetupTime = msg.meetupTime ?? (useOrderMeetup ? currentOrder!.meetupTime : undefined);
@@ -1324,26 +1311,26 @@ export const ChatRoom: React.FC = () => {
                   >
                     <p className="font-semibold mb-2 flex items-center gap-1">
                       {msg.type === 'meetup_confirmed' && <img src="/h.svg" alt="" className="w-4 h-4 inline-block" />}
-                      {displayChatMessageContent(msg.content)}
+                      {displayChatMessageContent(msg.content, lang)}
                     </p>
                     {meetupPlace && (
                       <p className="mb-0.5 text-white/95">
-                        Meetup place
+                        {t('meetupPlace')}
                         <br />
                         <span className="font-bold text-base text-white">{meetupPlace}</span>
                       </p>
                     )}
                     {meetupDate && meetupTime && (
                       <p className="mt-2 text-white/95">
-                        Date {meetupDate} {meetupTime}
+                        {t('dateLine', { when: `${meetupDate} ${meetupTime}` })}
                       </p>
                     )}
                     {!hasDetail && !isSellerScheduling && (
-                      <p className="mt-2 text-white/80 text-xs">Place and time not set yet</p>
+                      <p className="mt-2 text-white/80 text-xs">{t('placeTimeNotSetYet')}</p>
                     )}
                   </div>
                   <p className={`text-xs mt-1 px-1 text-gray-500 ${isSeller ? 'text-right' : 'text-left'}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString('en-US', {
+                    {new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}
@@ -1360,12 +1347,18 @@ export const ChatRoom: React.FC = () => {
               isSeller
               && offerOrder
               && offerOrder.status === ORDER_STATUS_VALUE.PENDING_OFFER
-              && msg.id === latestPendingPriceOfferMessageId;
+              && msg.id === actionablePriceOfferMessageId
+              && !meetupBannerInfo
+              && !(
+                currentOrder
+                && currentOrder.status !== ORDER_STATUS_VALUE.PENDING_OFFER
+                && currentOrder.id !== offerOrder.id
+              );
             // Offer from buyer: align to buyer side
             const isOfferFromMe = getCurrentUserId() === room?.buyerId;
             const d = new Date(msg.timestamp);
             const dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-            const timeStr = new Date(msg.timestamp).toLocaleTimeString('en-US', {
+            const timeStr = new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
               hour: 'numeric',
               minute: '2-digit',
             });
@@ -1383,19 +1376,19 @@ export const ChatRoom: React.FC = () => {
                         : { backgroundColor: '#27AE60' }
                     }
                   >
-                    <p className="font-semibold mb-2">{displayChatMessageContent(msg.content)}</p>
+                    <p className="font-semibold mb-2">{displayChatMessageContent(msg.content, lang)}</p>
                     {isShareOffer ? (
-                      <p className="text-white font-bold text-base mt-0.5">{'\u{1F381}'} Free share request</p>
+                      <p className="text-white font-bold text-base mt-0.5">{'\u{1F381}'} {t('freeShareRequest')}</p>
                     ) : (
                       <>
-                        <p className="text-white/95 text-xs">Was {msg.originalPrice?.toLocaleString() ?? '-'}</p>
+                        <p className="text-white/95 text-xs">{t('wasPrice', { n: msg.originalPrice?.toLocaleString() ?? '-' })}</p>
                         <p className="text-white font-bold text-base mt-0.5">
-                          Offer {msg.proposedPrice?.toLocaleString() ?? '-'}
+                          {t('offerAmount', { n: msg.proposedPrice?.toLocaleString() ?? '-' })}
                         </p>
                       </>
                     )}
                     <p className="text-white/95 text-xs mt-2">
-                      Date {dateStr} {timeStr}
+                      {t('dateLine', { when: `${dateStr} ${timeStr}` })}
                     </p>
                   </div>
                   {showActions && (
@@ -1409,7 +1402,7 @@ export const ChatRoom: React.FC = () => {
                         }}
                         className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
                       >
-                        Accept
+                        {t('accept')}
                       </button>
                       <button
                         type="button"
@@ -1418,7 +1411,9 @@ export const ChatRoom: React.FC = () => {
                           const order = getOrderById(msg.orderId);
                           if (!order?.product) return;
                           const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
-                          if (!confirm(isShare ? `Decline the free share request for "${order.product.title}"?` : `Decline the purchase offer for "${order.product.title}"?`)) return;
+                          if (!confirm(isShare
+                            ? t('declineShareConfirm', { title: order.product.title })
+                            : t('declineOfferConfirm', { title: order.product.title }))) return;
                           addNotification({
                             targetUserId: order.buyer.id,
                             type: 'chat',
@@ -1429,7 +1424,7 @@ export const ChatRoom: React.FC = () => {
                           void addPriceOfferResultToChat(order, 'rejected').then(async () => {
                             const ok = await deleteOrder(order.id);
                             if (!ok) {
-                              alert('Could not decline this offer. Check your connection and try again.');
+                              alert(t('couldNotDeclineOffer'));
                               return;
                             }
                             setMessages(getMessages(roomId!));
@@ -1437,12 +1432,12 @@ export const ChatRoom: React.FC = () => {
                         }}
                         className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
                       >
-                        Decline
+                        {t('decline')}
                       </button>
                     </div>
                   )}
                   <p className={`text-xs mt-1 px-1 text-gray-500 ${isOfferFromMe ? 'text-right' : 'text-left'}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString('en-US', {
+                    {new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}
@@ -1474,10 +1469,10 @@ export const ChatRoom: React.FC = () => {
                         : undefined
                     }
                   >
-                    {displayChatMessageContent(msg.content)}
+                    {displayChatMessageContent(msg.content, lang)}
                   </div>
                   <p className={`text-xs mt-1 px-1 text-gray-500 ${isResultFromMe ? 'text-right' : 'text-left'}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString('en-US', {
+                    {new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}
@@ -1519,7 +1514,7 @@ export const ChatRoom: React.FC = () => {
                     }`}
                     style={isMe ? { backgroundColor: '#00A8A3' } : undefined}
                   >
-                    <p className="text-sm leading-relaxed">{displayChatMessageContent(msg.content)}</p>
+                    <p className="text-sm leading-relaxed">{displayChatMessageContent(msg.content, lang)}</p>
                   </div>
                 )}
                 <div className={`flex items-center gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1532,7 +1527,7 @@ export const ChatRoom: React.FC = () => {
                     ) : null;
                   })()}
                   <span className="text-xs text-gray-500">
-                    {new Date(msg.timestamp).toLocaleTimeString('en-US', {
+                    {new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}
@@ -1553,7 +1548,7 @@ export const ChatRoom: React.FC = () => {
             style={{ backgroundColor: '#00A8A3' }}
           >
             <span aria-hidden>↓</span>
-            {CHAT_NEW_MESSAGES}
+            {t('newMessages')}
             {newMessageCount > 1 ? ` (${newMessageCount})` : ''}
           </button>
         )}
@@ -1565,7 +1560,7 @@ export const ChatRoom: React.FC = () => {
           <div className="flex gap-2 overflow-x-auto">
             {uploadingImages && (
               <div className="w-16 h-16 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] text-gray-500">
-                Uploading...
+                {t('uploading')}
               </div>
             )}
             {previewImages.map((img, idx) => (
@@ -1591,13 +1586,13 @@ export const ChatRoom: React.FC = () => {
       {isProductDeleted ? (
         <div className="shrink-0 border-t border-gray-200 bg-gray-50 pb-[env(safe-area-inset-bottom,0px)]">
           <div className="flex items-center justify-center px-4 py-4">
-            <p className="text-sm text-gray-400">This listing was removed; you cannot send messages.</p>
+            <p className="text-sm text-gray-400">{t('listingRemovedCannotMessage')}</p>
           </div>
         </div>
       ) : roomEnded ? (
         <div className="shrink-0 border-t border-gray-200 bg-gray-50 pb-[env(safe-area-inset-bottom,0px)]">
           <div className="flex items-center justify-center px-4 py-4">
-            <p className="text-sm text-gray-400">{CHAT_ROOM_ENDED_INPUT}</p>
+            <p className="text-sm text-gray-400">{t('roomEndedInput')}</p>
           </div>
         </div>
       ) : (
@@ -1647,7 +1642,7 @@ export const ChatRoom: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && !uploadingImages && handleSend()}
-              placeholder="Type a message"
+              placeholder={t('typeMessage')}
               className="flex-1 min-w-0 px-3 py-2.5 bg-white border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3] focus:border-transparent"
             />
 
@@ -1695,7 +1690,7 @@ export const ChatRoom: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-semibold text-gray-900 mb-3">
-              {displayChatMessageContent(meetupDetailMessage.content)}
+              {displayChatMessageContent(meetupDetailMessage.content, lang)}
             </h3>
             {(() => {
               const place = currentOrder?.meetupPlace ?? meetupDetailMessage.meetupPlace;
@@ -1706,20 +1701,20 @@ export const ChatRoom: React.FC = () => {
                 <>
                   {place ? (
                     <>
-                      <p className="text-sm text-gray-600 mb-1">Meetup place</p>
+                      <p className="text-sm text-gray-600 mb-1">{t('meetupPlace')}</p>
                       <p className="text-gray-900 font-medium mb-3">{place}</p>
                     </>
                   ) : null}
                   {date || time ? (
                     <>
-                      <p className="text-sm text-gray-600 mb-1">Date & time</p>
+                      <p className="text-sm text-gray-600 mb-1">{t('dateAndTime')}</p>
                       <p className="text-gray-900 font-medium">
                         {[date, time].filter(Boolean).join(' ')}
                       </p>
                     </>
                   ) : null}
                   {!hasAny && (
-                    <p className="text-sm text-gray-500">Place and time are not set yet.</p>
+                    <p className="text-sm text-gray-500">{t('placeTimeNotSetYetModal')}</p>
                   )}
                 </>
               );
@@ -1729,7 +1724,7 @@ export const ChatRoom: React.FC = () => {
               className="mt-4 w-full py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
               onClick={() => setMeetupDetailMessage(null)}
             >
-              Close
+              {t('close')}
             </button>
           </div>
         </div>

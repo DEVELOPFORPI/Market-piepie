@@ -1,0 +1,351 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const LANGS = [
+  'en', 'ko', 'zh', 'ja', 'es', 'pt', 'fr', 'de', 'id', 'vi', 'th', 'hi', 'ar', 'ru', 'tr',
+  'it', 'pl', 'nl', 'fil', 'uk', 'bn', 'ms', 'sw', 'fa', 'ur',
+];
+
+/** @type {Record<string, Record<string, string>>} */
+const entries = {
+  orderDetailTitle: {
+    en: 'Order detail', ko: '주문 상세', zh: '订单详情', ja: '注文詳細',
+    es: 'Detalle del pedido', pt: 'Detalhe do pedido', fr: 'Détail de la commande', de: 'Bestelldetails',
+    id: 'Detail pesanan', vi: 'Chi tiết đơn hàng', th: 'รายละเอียดคำสั่งซื้อ', hi: 'ऑर्डर विवरण',
+    ar: 'تفاصيل الطلب', ru: 'Детали заказа', tr: 'Sipariş detayı', it: 'Dettaglio ordine',
+    pl: 'Szczegóły zamówienia', nl: 'Bestelgegevens', fil: 'Detalye ng order', uk: 'Деталі замовлення',
+    bn: 'অর্ডার বিবরণ', ms: 'Butiran pesanan', sw: 'Maelezo ya agizo', fa: 'جزئیات سفارش',
+    ur: 'آرڈر کی تفصیل',
+  },
+  freePrice: {
+    en: 'Free', ko: '무료', zh: '免费', ja: '無料',
+    es: 'Gratis', pt: 'Grátis', fr: 'Gratuit', de: 'Kostenlos',
+    id: 'Gratis', vi: 'Miễn phí', th: 'ฟรี', hi: 'मुफ़्त',
+    ar: 'مجاني', ru: 'Бесплатно', tr: 'Ücretsiz', it: 'Gratis',
+    pl: 'Gratis', nl: 'Gratis', fil: 'Libre', uk: 'Безкоштовно',
+    bn: 'বিনামূল্যে', ms: 'Percuma', sw: 'Bure', fa: 'رایگان',
+    ur: 'مفت',
+  },
+  listingSection: {
+    en: 'Listing', ko: '상품', zh: '商品', ja: '出品',
+    es: 'Anuncio', pt: 'Anúncio', fr: 'Annonce', de: 'Anzeige',
+    id: 'Listing', vi: 'Tin đăng', th: 'ประกาศ', hi: 'लिस्टिंग',
+    ar: 'الإعلان', ru: 'Объявление', tr: 'İlan', it: 'Annuncio',
+    pl: 'Ogłoszenie', nl: 'Advertentie', fil: 'Listing', uk: 'Оголошення',
+    bn: 'লিস্টিং', ms: 'Senarai', sw: 'Tangazo', fa: 'آگهی',
+    ur: 'لسٹنگ',
+  },
+  listingRemovedBySeller: {
+    en: 'The seller removed this listing.',
+    ko: '판매자가 이 상품을 삭제했습니다.',
+    zh: '卖家已删除该商品。',
+    ja: '出品者がこの出品を削除しました。',
+    es: 'El vendedor eliminó este anuncio.',
+    pt: 'O vendedor removeu este anúncio.',
+    fr: 'Le vendeur a supprimé cette annonce.',
+    de: 'Der Verkäufer hat diese Anzeige entfernt.',
+    id: 'Penjual menghapus listing ini.',
+    vi: 'Người bán đã xóa tin đăng này.',
+    th: 'ผู้ขายลบประกาศนี้แล้ว',
+    hi: 'विक्रेता ने यह लिस्टिंग हटा दी।',
+    ar: 'حذف البائع هذا الإعلان.',
+    ru: 'Продавец удалил это объявление.',
+    tr: 'Satıcı bu ilanı kaldırdı.',
+    it: 'Il venditore ha rimosso questo annuncio.',
+    pl: 'Sprzedawca usunął to ogłoszenie.',
+    nl: 'De verkoper heeft deze advertentie verwijderd.',
+    fil: 'Inalis ng seller ang listing na ito.',
+    uk: 'Продавець видалив це оголошення.',
+    bn: 'বিক্রেতা এই লিস্টিং সরিয়েছেন।',
+    ms: 'Penjual telah mengalih keluar senarai ini.',
+    sw: 'Muuzaji ameondoa tangazo hili.',
+    fa: 'فروشنده این آگهی را حذف کرده است.',
+    ur: 'فروخت کنندہ نے یہ لسٹنگ ہٹا دی۔',
+  },
+  noteLabel: {
+    en: 'Note', ko: '메모', zh: '备注', ja: 'メモ',
+    es: 'Nota', pt: 'Nota', fr: 'Note', de: 'Notiz',
+    id: 'Catatan', vi: 'Ghi chú', th: 'หมายเหตุ', hi: 'नोट',
+    ar: 'ملاحظة', ru: 'Заметка', tr: 'Not', it: 'Nota',
+    pl: 'Notatka', nl: 'Notitie', fil: 'Tala', uk: 'Нотатка',
+    bn: 'নোট', ms: 'Nota', sw: 'Dokezo', fa: 'یادداشت',
+    ur: 'نوٹ',
+  },
+  timelineHeading: {
+    en: 'Timeline', ko: '타임라인', zh: '时间线', ja: 'タイムライン',
+    es: 'Cronología', pt: 'Linha do tempo', fr: 'Chronologie', de: 'Zeitverlauf',
+    id: 'Linimasa', vi: 'Dòng thời gian', th: 'ไทม์ไลน์', hi: 'टाइमलाइन',
+    ar: 'الجدول الزمني', ru: 'Хронология', tr: 'Zaman çizelgesi', it: 'Cronologia',
+    pl: 'Oś czasu', nl: 'Tijdlijn', fil: 'Timeline', uk: 'Хронологія',
+    bn: 'টাইমলাইন', ms: 'Garis masa', sw: 'Ratiba', fa: 'جدول زمانی',
+    ur: 'ٹائم لائن',
+  },
+  partiesHeading: {
+    en: 'Parties', ko: '거래 당사자', zh: '交易双方', ja: '当事者',
+    es: 'Partes', pt: 'Partes', fr: 'Parties', de: 'Parteien',
+    id: 'Pihak', vi: 'Các bên', th: 'คู่สัญญา', hi: 'पक्ष',
+    ar: 'الأطراف', ru: 'Стороны', tr: 'Taraflar', it: 'Parti',
+    pl: 'Strony', nl: 'Partijen', fil: 'Mga partido', uk: 'Сторони',
+    bn: 'পক্ষসমূহ', ms: 'Pihak', sw: 'Wahusika', fa: 'طرفین',
+    ur: 'فریقین',
+  },
+  buyerLabel: {
+    en: 'Buyer', ko: '구매자', zh: '买家', ja: '購入者',
+    es: 'Comprador', pt: 'Comprador', fr: 'Acheteur', de: 'Käufer',
+    id: 'Pembeli', vi: 'Người mua', th: 'ผู้ซื้อ', hi: 'खरीदार',
+    ar: 'المشتري', ru: 'Покупатель', tr: 'Alıcı', it: 'Acquirente',
+    pl: 'Kupujący', nl: 'Koper', fil: 'Buyer', uk: 'Покупець',
+    bn: 'ক্রেতা', ms: 'Pembeli', sw: 'Mnunuzi', fa: 'خریدار',
+    ur: 'خریدار',
+  },
+  sellerLabel: {
+    en: 'Seller', ko: '판매자', zh: '卖家', ja: '出品者',
+    es: 'Vendedor', pt: 'Vendedor', fr: 'Vendeur', de: 'Verkäufer',
+    id: 'Penjual', vi: 'Người bán', th: 'ผู้ขาย', hi: 'विक्रेता',
+    ar: 'البائع', ru: 'Продавец', tr: 'Satıcı', it: 'Venditore',
+    pl: 'Sprzedawca', nl: 'Verkoper', fil: 'Seller', uk: 'Продавець',
+    bn: 'বিক্রেতা', ms: 'Penjual', sw: 'Muuzaji', fa: 'فروشنده',
+    ur: 'فروخت کنندہ',
+  },
+  methodLabel: {
+    en: 'Method', ko: '거래 방식', zh: '交易方式', ja: '取引方法',
+    es: 'Método', pt: 'Método', fr: 'Méthode', de: 'Methode',
+    id: 'Metode', vi: 'Phương thức', th: 'วิธี', hi: 'तरीका',
+    ar: 'الطريقة', ru: 'Способ', tr: 'Yöntem', it: 'Metodo',
+    pl: 'Metoda', nl: 'Methode', fil: 'Paraan', uk: 'Спосіб',
+    bn: 'পদ্ধতি', ms: 'Kaedah', sw: 'Njia', fa: 'روش',
+    ur: 'طریقہ',
+  },
+  offerDateLabel: {
+    en: 'Offer date', ko: '제안일', zh: '报价日期', ja: 'オファー日',
+    es: 'Fecha de oferta', pt: 'Data da oferta', fr: 'Date de l’offre', de: 'Angebotsdatum',
+    id: 'Tanggal penawaran', vi: 'Ngày đề nghị', th: 'วันที่เสนอ', hi: 'ऑफ़र तिथि',
+    ar: 'تاريخ العرض', ru: 'Дата предложения', tr: 'Teklif tarihi', it: 'Data offerta',
+    pl: 'Data oferty', nl: 'Datum van bod', fil: 'Petsa ng offer', uk: 'Дата пропозиції',
+    bn: 'অফারের তারিখ', ms: 'Tarikh tawaran', sw: 'Tarehe ya ofa', fa: 'تاریخ پیشنهاد',
+    ur: 'پیشکش کی تاریخ',
+  },
+  tlFreeShareRequest: {
+    en: 'Free share request', ko: '나눔 요청', zh: '免费分享请求', ja: '無料譲渡リクエスト',
+    es: 'Solicitud de regalo', pt: 'Pedido de doação', fr: 'Demande de don', de: 'Verschenk-Anfrage',
+    id: 'Permintaan berbagi gratis', vi: 'Yêu cầu chia sẻ miễn phí', th: 'คำขอแจกฟรี', hi: 'मुफ़्त शेयर अनुरोध',
+    ar: 'طلب مشاركة مجانية', ru: 'Запрос на бесплатную передачу', tr: 'Ücretsiz paylaşım isteği', it: 'Richiesta regalo',
+    pl: 'Prośba o darmowe oddanie', nl: 'Gratis deelverzoek', fil: 'Kahilingan sa libreng share', uk: 'Запит на безоплатну передачу',
+    bn: 'ফ্রি শেয়ার অনুরোধ', ms: 'Permintaan kongsi percuma', sw: 'Ombi la kushiriki bila malipo', fa: 'درخواست اشتراک رایگان',
+    ur: 'مفت شیئر کی درخواست',
+  },
+  tlPurchaseOffer: {
+    en: '{n} Pi purchase offer', ko: '{n} Pi 구매 제안', zh: '{n} Pi 购买报价', ja: '{n} Pi 購入オファー',
+    es: 'Oferta de compra de {n} Pi', pt: 'Oferta de compra de {n} Pi', fr: 'Offre d’achat de {n} Pi', de: 'Kaufangebot über {n} Pi',
+    id: 'Penawaran beli {n} Pi', vi: 'Đề nghị mua {n} Pi', th: 'ข้อเสนอซื้อ {n} Pi', hi: '{n} Pi खरीद ऑफ़र',
+    ar: 'عرض شراء {n} Pi', ru: 'Предложение покупки {n} Pi', tr: '{n} Pi satın alma teklifi', it: 'Offerta di acquisto {n} Pi',
+    pl: 'Oferta zakupu {n} Pi', nl: 'Koopbod van {n} Pi', fil: 'Purchase offer na {n} Pi', uk: 'Пропозиція купівлі {n} Pi',
+    bn: '{n} Pi ক্রয় অফার', ms: 'Tawaran belian {n} Pi', sw: 'Ofa ya kununua {n} Pi', fa: 'پیشنهاد خرید {n} Pi',
+    ur: '{n} Pi خرید پیشکش',
+  },
+  tlInPersonFreeShare: {
+    en: 'In-person free share', ko: '직거래 나눔', zh: '当面免费分享', ja: '対面の無料譲渡',
+    es: 'Regalo en persona', pt: 'Doação presencial', fr: 'Don en personne', de: 'Persönliches Verschenken',
+    id: 'Berbagi gratis tatap muka', vi: 'Chia sẻ miễn phí trực tiếp', th: 'แจกฟรีแบบพบกัน', hi: 'व्यक्तिगत मुफ़्त शेयर',
+    ar: 'مشاركة مجانية شخصيًا', ru: 'Личная бесплатная передача', tr: 'Yüz yüze ücretsiz paylaşım', it: 'Regalo di persona',
+    pl: 'Osobiste darmowe oddanie', nl: 'Gratis delen face-to-face', fil: 'In-person free share', uk: 'Особиста безоплатна передача',
+    bn: 'সাক্ষাৎ ফ্রি শেয়ার', ms: 'Kongsi percuma bersemuka', sw: 'Ugawaji bila malipo ana kwa ana', fa: 'اشتراک رایگان حضوری',
+    ur: 'روبرو مفت شیئر',
+  },
+  tlInPersonTradeAt: {
+    en: 'In-person trade at {n} Pi', ko: '{n} Pi 직거래', zh: '{n} Pi 当面交易', ja: '{n} Pi の対面取引',
+    es: 'Trato en persona por {n} Pi', pt: 'Negócio presencial por {n} Pi', fr: 'Échange en personne à {n} Pi', de: 'Persönlicher Handel für {n} Pi',
+    id: 'Transaksi tatap muka {n} Pi', vi: 'Giao dịch trực tiếp {n} Pi', th: 'ซื้อขายพบกัน {n} Pi', hi: '{n} Pi पर व्यक्तिगत लेन-देन',
+    ar: 'صفقة شخصية بـ {n} Pi', ru: 'Личная сделка за {n} Pi', tr: '{n} Pi yüz yüze ticaret', it: 'Scambio di persona a {n} Pi',
+    pl: 'Transakcja osobista za {n} Pi', nl: 'Face-to-face handel voor {n} Pi', fil: 'In-person trade sa {n} Pi', uk: 'Особиста угода за {n} Pi',
+    bn: '{n} Pi সাক্ষাৎ লেনদেন', ms: 'Dagangan bersemuka {n} Pi', sw: 'Biashara ana kwa ana kwa {n} Pi', fa: 'معامله حضوری با {n} Pi',
+    ur: '{n} Pi روبرو لین دین',
+  },
+  tlMeetupConfirmed: {
+    en: 'Meetup confirmed', ko: '약속 확정', zh: '见面已确认', ja: '待ち合わせ確定',
+    es: 'Quedada confirmada', pt: 'Encontro confirmado', fr: 'Rendez-vous confirmé', de: 'Treffen bestätigt',
+    id: 'Temu dikonfirmasi', vi: 'Đã xác nhận hẹn', th: 'ยืนยันนัดพบแล้ว', hi: 'मुलाकात पुष्टि',
+    ar: 'تم تأكيد اللقاء', ru: 'Встреча подтверждена', tr: 'Buluşma onaylandı', it: 'Incontro confermato',
+    pl: 'Spotkanie potwierdzone', nl: 'Afspraak bevestigd', fil: 'Kumpirmado ang meetup', uk: 'Зустріч підтверджено',
+    bn: 'মিলনের নিশ্চিতকরণ', ms: 'Perjumpaan disahkan', sw: 'Mkutano umethibitishwa', fa: 'ملاقات تأیید شد',
+    ur: 'ملاقات کی تصدیق',
+  },
+  tlBuyerAcceptedMeetup: {
+    en: 'Buyer accepted the meetup', ko: '구매자가 약속을 수락했습니다', zh: '买家已接受见面', ja: '購入者が待ち合わせを承認',
+    es: 'El comprador aceptó la quedada', pt: 'O comprador aceitou o encontro', fr: 'L’acheteur a accepté le rendez-vous', de: 'Käufer hat das Treffen angenommen',
+    id: 'Pembeli menerima temu', vi: 'Người mua chấp nhận cuộc hẹn', th: 'ผู้ซื้อยอมรับนัดพบ', hi: 'खरीदार ने मुलाकात स्वीकार की',
+    ar: 'قبل المشتري اللقاء', ru: 'Покупатель принял встречу', tr: 'Alıcı buluşmayı kabul etti', it: 'L’acquirente ha accettato l’incontro',
+    pl: 'Kupujący zaakceptował spotkanie', nl: 'Koper accepteerde de afspraak', fil: 'Tinanggap ng buyer ang meetup', uk: 'Покупець прийняв зустріч',
+    bn: 'ক্রেতা মিলন গ্রহণ করেছেন', ms: 'Pembeli menerima perjumpaan', sw: 'Mnunuzi amekubali mkutano', fa: 'خریدار ملاقات را پذیرفت',
+    ur: 'خریدار نے ملاقات قبول کی',
+  },
+  tlMeetupCanceled: {
+    en: 'Meetup canceled', ko: '약속 취소됨', zh: '见面已取消', ja: '待ち合わせキャンセル',
+    es: 'Quedada cancelada', pt: 'Encontro cancelado', fr: 'Rendez-vous annulé', de: 'Treffen abgesagt',
+    id: 'Temu dibatalkan', vi: 'Đã hủy hẹn', th: 'ยกเลิกนัดพบแล้ว', hi: 'मुलाकात रद्द',
+    ar: 'أُلغي اللقاء', ru: 'Встреча отменена', tr: 'Buluşma iptal edildi', it: 'Incontro annullato',
+    pl: 'Spotkanie anulowane', nl: 'Afspraak geannuleerd', fil: 'Nakansela ang meetup', uk: 'Зустріч скасовано',
+    bn: 'মিলন বাতিল', ms: 'Perjumpaan dibatalkan', sw: 'Mkutano umeghairiwa', fa: 'ملاقات لغو شد',
+    ur: 'ملاقات منسوخ',
+  },
+  tlBuyerConfirmedComplete: {
+    en: 'Buyer confirmed trade complete', ko: '구매자가 거래 완료를 확인했습니다', zh: '买家确认交易完成', ja: '購入者が取引完了を確認',
+    es: 'El comprador confirmó el fin del trato', pt: 'Comprador confirmou a conclusão', fr: 'L’acheteur a confirmé la fin de l’échange', de: 'Käufer bestätigte Abschluss',
+    id: 'Pembeli mengonfirmasi selesai', vi: 'Người mua xác nhận hoàn tất', th: 'ผู้ซื้อยืนยันเสร็จสิ้น', hi: 'खरीदार ने लेन-देन पूर्ण की पुष्टि की',
+    ar: 'أكد المشتري اكتمال الصفقة', ru: 'Покупатель подтвердил завершение', tr: 'Alıcı tamamlamayı onayladı', it: 'L’acquirente ha confermato il completamento',
+    pl: 'Kupujący potwierdził zakończenie', nl: 'Koper bevestigde afronding', fil: 'Kinumpirma ng buyer ang tapos', uk: 'Покупець підтвердив завершення',
+    bn: 'ক্রেতা লেনদেন সম্পন্ন নিশ্চিত করেছেন', ms: 'Pembeli sahkan selesai', sw: 'Mnunuzi amethibitisha kukamilika', fa: 'خریدار تکمیل معامله را تأیید کرد',
+    ur: 'خریدار نے لین دین کی تکمیل کی تصدیق کی',
+  },
+  tlSellerConfirmedComplete: {
+    en: 'Seller confirmed trade complete', ko: '판매자가 거래 완료를 확인했습니다', zh: '卖家确认交易完成', ja: '出品者が取引完了を確認',
+    es: 'El vendedor confirmó el fin del trato', pt: 'Vendedor confirmou a conclusão', fr: 'Le vendeur a confirmé la fin de l’échange', de: 'Verkäufer bestätigte Abschluss',
+    id: 'Penjual mengonfirmasi selesai', vi: 'Người bán xác nhận hoàn tất', th: 'ผู้ขายยืนยันเสร็จสิ้น', hi: 'विक्रेता ने लेन-देन पूर्ण की पुष्टि की',
+    ar: 'أكد البائع اكتمال الصفقة', ru: 'Продавец подтвердил завершение', tr: 'Satıcı tamamlamayı onayladı', it: 'Il venditore ha confermato il completamento',
+    pl: 'Sprzedawca potwierdził zakończenie', nl: 'Verkoper bevestigde afronding', fil: 'Kinumpirma ng seller ang tapos', uk: 'Продавець підтвердив завершення',
+    bn: 'বিক্রেতা লেনদেন সম্পন্ন নিশ্চিত করেছেন', ms: 'Penjual sahkan selesai', sw: 'Muuzaji amethibitisha kukamilika', fa: 'فروشنده تکمیل معامله را تأیید کرد',
+    ur: 'فروخت کنندہ نے لین دین کی تکمیل کی تصدیق کی',
+  },
+  tlTradeCompleted: {
+    en: 'Trade completed', ko: '거래 완료', zh: '交易完成', ja: '取引完了',
+    es: 'Trato completado', pt: 'Negócio concluído', fr: 'Échange terminé', de: 'Handel abgeschlossen',
+    id: 'Transaksi selesai', vi: 'Giao dịch hoàn tất', th: 'การซื้อขายเสร็จสิ้น', hi: 'लेन-देन पूरा',
+    ar: 'اكتملت الصفقة', ru: 'Сделка завершена', tr: 'Ticaret tamamlandı', it: 'Scambio completato',
+    pl: 'Transakcja zakończona', nl: 'Handel afgerond', fil: 'Tapos na ang trade', uk: 'Угоду завершено',
+    bn: 'লেনদেন সম্পন্ন', ms: 'Dagangan selesai', sw: 'Biashara imekamilika', fa: 'معامله کامل شد',
+    ur: 'لین دین مکمل',
+  },
+  tlReceiptConfirmed: {
+    en: 'Receipt confirmed', ko: '수령 확인', zh: '已确认收货', ja: '受領確認',
+    es: 'Recepción confirmada', pt: 'Recebimento confirmado', fr: 'Réception confirmée', de: 'Erhalt bestätigt',
+    id: 'Penerimaan dikonfirmasi', vi: 'Đã xác nhận nhận hàng', th: 'ยืนยันการรับแล้ว', hi: 'प्राप्ति की पुष्टि',
+    ar: 'تم تأكيد الاستلام', ru: 'Получение подтверждено', tr: 'Teslimat onaylandı', it: 'Ricezione confermata',
+    pl: 'Odbiór potwierdzony', nl: 'Ontvangst bevestigd', fil: 'Kumpirmado ang pagtanggap', uk: 'Отримання підтверджено',
+    bn: 'প্রাপ্তি নিশ্চিত', ms: 'Penerimaan disahkan', sw: 'Upokeaji umethibitishwa', fa: 'دریافت تأیید شد',
+    ur: 'وصولی کی تصدیق',
+  },
+  tlBuyerShippingDetails: {
+    en: 'Buyer submitted shipping details', ko: '구매자가 배송 정보를 제출했습니다', zh: '买家已提交收货信息', ja: '購入者が配送情報を送信',
+    es: 'El comprador envió los datos de envío', pt: 'Comprador enviou dados de envio', fr: 'L’acheteur a envoyé les infos d’expédition', de: 'Käufer übermittelte Versanddaten',
+    id: 'Pembeli mengirim detail pengiriman', vi: 'Người mua gửi thông tin giao hàng', th: 'ผู้ซื้อส่งข้อมูลจัดส่งแล้ว', hi: 'खरीदार ने शिपिंग विवरण भेजे',
+    ar: 'أرسل المشتري تفاصيل الشحن', ru: 'Покупатель отправил данные доставки', tr: 'Alıcı kargo bilgilerini gönderdi', it: 'L’acquirente ha inviato i dettagli di spedizione',
+    pl: 'Kupujący przesłał dane wysyłki', nl: 'Koper stuurde verzendgegevens', fil: 'Nagsumite ang buyer ng shipping details', uk: 'Покупець надіслав дані доставки',
+    bn: 'ক্রেতা শিপিং বিবরণ জমা দিয়েছেন', ms: 'Pembeli hantar butiran penghantaran', sw: 'Mnunuzi amewasilisha maelezo ya usafirishaji', fa: 'خریدار جزئیات ارسال را فرستاد',
+    ur: 'خریدار نے شپنگ تفصیلات جمع کرائیں',
+  },
+  tlShippedVia: {
+    en: 'Shipped via {company}', ko: '{company}(으)로 발송', zh: '已通过{company}发货', ja: '{company}で発送',
+    es: 'Enviado por {company}', pt: 'Enviado via {company}', fr: 'Expédié via {company}', de: 'Versendet mit {company}',
+    id: 'Dikirim via {company}', vi: 'Đã gửi qua {company}', th: 'จัดส่งผ่าน {company}', hi: '{company} से भेजा गया',
+    ar: 'شُحن عبر {company}', ru: 'Отправлено через {company}', tr: '{company} ile gönderildi', it: 'Spedito tramite {company}',
+    pl: 'Wysłano przez {company}', nl: 'Verzonden via {company}', fil: 'Na-ship via {company}', uk: 'Відправлено через {company}',
+    bn: '{company} দিয়ে পাঠানো', ms: 'Dihantar melalui {company}', sw: 'Imesafirishwa kupitia {company}', fa: 'ارسال‌شده با {company}',
+    ur: '{company} کے ذریعے بھیجا گیا',
+  },
+  tlPurchaseOfferCreated: {
+    en: 'Purchase offer created', ko: '구매 제안 생성', zh: '已创建购买报价', ja: '購入オファー作成',
+    es: 'Oferta de compra creada', pt: 'Oferta de compra criada', fr: 'Offre d’achat créée', de: 'Kaufangebot erstellt',
+    id: 'Penawaran beli dibuat', vi: 'Đã tạo đề nghị mua', th: 'สร้างข้อเสนอซื้อแล้ว', hi: 'खरीद ऑफ़र बनाई गई',
+    ar: 'تم إنشاء عرض الشراء', ru: 'Создано предложение покупки', tr: 'Satın alma teklifi oluşturuldu', it: 'Offerta di acquisto creata',
+    pl: 'Utworzono ofertę zakupu', nl: 'Koopbod aangemaakt', fil: 'Nagawa ang purchase offer', uk: 'Створено пропозицію купівлі',
+    bn: 'ক্রয় অফার তৈরি', ms: 'Tawaran belian dicipta', sw: 'Ofa ya kununua imeundwa', fa: 'پیشنهاد خرید ایجاد شد',
+    ur: 'خرید پیشکش بنائی گئی',
+  },
+  tlOfferAccepted: {
+    en: 'Offer accepted', ko: '제안 수락', zh: '已接受报价', ja: 'オファー承認',
+    es: 'Oferta aceptada', pt: 'Oferta aceita', fr: 'Offre acceptée', de: 'Angebot angenommen',
+    id: 'Penawaran diterima', vi: 'Đã chấp nhận đề nghị', th: 'ยอมรับข้อเสนอแล้ว', hi: 'ऑफ़र स्वीकार',
+    ar: 'تم قبول العرض', ru: 'Предложение принято', tr: 'Teklif kabul edildi', it: 'Offerta accettata',
+    pl: 'Oferta zaakceptowana', nl: 'Bod geaccepteerd', fil: 'Tinanggap ang offer', uk: 'Пропозицію прийнято',
+    bn: 'অফার গৃহীত', ms: 'Tawaran diterima', sw: 'Ofa imekubaliwa', fa: 'پیشنهاد پذیرفته شد',
+    ur: 'پیشکش قبول',
+  },
+  tlAwaitingShipping: {
+    en: 'Awaiting shipping details', ko: '배송정보 대기', zh: '等待收货信息', ja: '配送情報待ち',
+    es: 'Esperando datos de envío', pt: 'Aguardando dados de envio', fr: 'En attente des infos d’expédition', de: 'Warte auf Versanddaten',
+    id: 'Menunggu detail pengiriman', vi: 'Đang chờ thông tin giao hàng', th: 'รอข้อมูลจัดส่ง', hi: 'शिपिंग विवरण की प्रतीक्षा',
+    ar: 'بانتظار تفاصيل الشحن', ru: 'Ожидание данных доставки', tr: 'Kargo bilgileri bekleniyor', it: 'In attesa dei dettagli di spedizione',
+    pl: 'Oczekiwanie na dane wysyłki', nl: 'Wachten op verzendgegevens', fil: 'Naghihintay ng shipping details', uk: 'Очікування даних доставки',
+    bn: 'শিপিং বিবরণের অপেক্ষা', ms: 'Menunggu butiran penghantaran', sw: 'Inasubiri maelezo ya usafirishaji', fa: 'در انتظار جزئیات ارسال',
+    ur: 'شپنگ تفصیلات کا انتظار',
+  },
+  tlMarkedShipped: {
+    en: 'Marked as shipped', ko: '발송 처리됨', zh: '已标记发货', ja: '発送済みに設定',
+    es: 'Marcado como enviado', pt: 'Marcado como enviado', fr: 'Marqué comme expédié', de: 'Als versendet markiert',
+    id: 'Ditandai sudah dikirim', vi: 'Đã đánh dấu gửi hàng', th: 'ทำเครื่องหมายว่าจัดส่งแล้ว', hi: 'भेजा गया चिह्नित',
+    ar: 'تم التعليم كمشحون', ru: 'Отмечено как отправлено', tr: 'Gönderildi olarak işaretlendi', it: 'Segnato come spedito',
+    pl: 'Oznaczono jako wysłane', nl: 'Gemarkeerd als verzonden', fil: 'Minarkahan bilang shipped', uk: 'Позначено як відправлено',
+    bn: 'পাঠানো চিহ্নিত', ms: 'Ditanda dihantar', sw: 'Imewekwa alama kuwa imesafirishwa', fa: 'به‌عنوان ارسال‌شده علامت خورد',
+    ur: 'بھیجا گیا نشان زد',
+  },
+  tlMarkedDelivered: {
+    en: 'Marked as delivered', ko: '배송 완료 처리됨', zh: '已标记送达', ja: '配達完了に設定',
+    es: 'Marcado como entregado', pt: 'Marcado como entregue', fr: 'Marqué comme livré', de: 'Als zugestellt markiert',
+    id: 'Ditandai sudah diterima', vi: 'Đã đánh dấu giao hàng', th: 'ทำเครื่องหมายว่าส่งถึงแล้ว', hi: 'डिलीवर चिह्नित',
+    ar: 'تم التعليم كمُسلَّم', ru: 'Отмечено как доставлено', tr: 'Teslim edildi olarak işaretlendi', it: 'Segnato come consegnato',
+    pl: 'Oznaczono jako doręczone', nl: 'Gemarkeerd als bezorgd', fil: 'Minarkahan bilang delivered', uk: 'Позначено як доставлено',
+    bn: 'ডেলিভার চিহ্নিত', ms: 'Ditanda dihantar sampai', sw: 'Imewekwa alama kuwa imetolewa', fa: 'به‌عنوان تحویل‌شده علامت خورد',
+    ur: 'ڈیلیور نشان زد',
+  },
+  tlDisputeOpened: {
+    en: 'Dispute opened', ko: '분쟁 접수', zh: '已发起争议', ja: '紛争開始',
+    es: 'Disputa abierta', pt: 'Disputa aberta', fr: 'Litige ouvert', de: 'Streitfall eröffnet',
+    id: 'Sengketa dibuka', vi: 'Đã mở tranh chấp', th: 'เปิดข้อพิพาทแล้ว', hi: 'विवाद खोला गया',
+    ar: 'فُتح النزاع', ru: 'Спор открыт', tr: 'Anlaşmazlık açıldı', it: 'Controversia aperta',
+    pl: 'Otwarto spór', nl: 'Geschil geopend', fil: 'Binuksan ang dispute', uk: 'Спір відкрито',
+    bn: 'বিবাদ খোলা', ms: 'Pertikaian dibuka', sw: 'Mzozo umefunguliwa', fa: 'اختلاف باز شد',
+    ur: 'تنازعہ کھولا گیا',
+  },
+};
+
+const keys = Object.keys(entries);
+for (const k of keys) {
+  for (const lang of LANGS) {
+    if (!entries[k][lang]) {
+      console.error(`Missing ${lang} for ${k}`);
+      process.exit(1);
+    }
+  }
+}
+
+let out = `/* Auto-generated by scripts/gen-order-detail-i18n.mjs */
+import type { AppLanguage } from '@/utils/languageStorage';
+
+export type OrderDetailMessageKey =
+${keys.map((k) => `  | '${k}'`).join('\n')};
+
+const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, string>> = {\n`;
+
+for (const lang of LANGS) {
+  out += `  ${lang}: {\n`;
+  for (const k of keys) {
+    const v = entries[k][lang]
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
+    out += `    ${k}: '${v}',\n`;
+  }
+  out += `  },\n`;
+}
+out += `};
+
+export function orderDetailT(
+  lang: AppLanguage,
+  key: OrderDetailMessageKey,
+  vars?: Record<string, string | number>,
+): string {
+  const raw = ORDER_DETAIL_MESSAGES[lang]?.[key] ?? ORDER_DETAIL_MESSAGES.en[key] ?? key;
+  if (!vars) return raw;
+  return Object.entries(vars).reduce(
+    (s, [k, v]) => s.split('{' + k + '}').join(String(v)),
+    raw,
+  );
+}
+`;
+
+fs.writeFileSync(path.join(__dirname, '../src/i18n/orderDetailMessages.ts'), out, 'utf8');
+console.log('Wrote orderDetailMessages.ts', keys.length, 'keys');

@@ -3,27 +3,31 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { getUnreadChatCount } from '@/utils/chatStorage';
 import { getUnreadCount } from '@/utils/notificationStorage';
 import { guestGuard } from '@/utils/guestGate';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { HomeMessageKey } from '@/i18n/homeMessages';
 
 interface TabItem {
   id: string;
-  label: string;
+  labelKey: HomeMessageKey | null;
   iconSrc: string | null;
   path: string;
 }
 
 const tabs: TabItem[] = [
-  { id: 'home', label: 'home', iconSrc: '/icon_1.svg', path: '/' },
-  { id: 'community', label: 'Community', iconSrc: '/icon_2.svg', path: '/community' },
-  { id: 'register', label: 'Sell', iconSrc: null, path: '/register' },
-  { id: 'chat', label: 'chat', iconSrc: '/icon_3.svg', path: '/chat' },
-  { id: 'my', label: 'profile', iconSrc: '/icon_4.svg', path: '/my' },
+  { id: 'home', labelKey: 'navHome', iconSrc: '/icon_1.svg', path: '/' },
+  { id: 'community', labelKey: 'navCommunity', iconSrc: '/icon_2.svg', path: '/community' },
+  { id: 'register', labelKey: null, iconSrc: null, path: '/register' },
+  { id: 'chat', labelKey: 'navChat', iconSrc: '/icon_3.svg', path: '/chat' },
+  { id: 'my', labelKey: 'navProfile', iconSrc: '/icon_4.svg', path: '/my' },
 ];
 
 export const BottomTab: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang, t } = useLanguage();
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const isRtl = lang === 'ar' || lang === 'fa' || lang === 'ur';
 
   useEffect(() => {
     const refresh = () => {
@@ -54,9 +58,14 @@ export const BottomTab: React.FC = () => {
   }, [location.pathname]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" style={{ fontFamily: "'StunningSans', sans-serif" }}>
+    <div
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom"
+      style={{ fontFamily: "'StunningSans', sans-serif" }}
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {
+          const label = tab.labelKey ? t(tab.labelKey) : tab.id;
           const isActive =
             location.pathname === tab.path ||
             (tab.path === '/' && location.pathname === '/home') ||
@@ -103,7 +112,7 @@ export const BottomTab: React.FC = () => {
                 <span className="relative inline-block">
                   <img
                     src={tab.iconSrc}
-                    alt={tab.label}
+                    alt={label}
                     className={`h-[18px] w-[18px] object-contain ${!isActive ? 'opacity-50 grayscale' : ''}`}
                   />
                   {tab.id === 'chat' && unreadChatCount > 0 && (
@@ -124,7 +133,14 @@ export const BottomTab: React.FC = () => {
                   )}
                 </span>
               )}
-              <span className="mt-1 ml-0 mr-0 text-[10px] leading-tight" style={isActive ? { color: '#00A8A3' } : undefined}>{tab.label}</span>
+              <span
+                className={`mt-1 mx-0 max-w-full whitespace-nowrap leading-tight ${
+                  label.length > 10 ? 'text-[8px]' : label.length > 7 ? 'text-[9px]' : 'text-[10px]'
+                }`}
+                style={isActive ? { color: '#00A8A3' } : undefined}
+              >
+                {label}
+              </span>
             </button>
           );
         })}

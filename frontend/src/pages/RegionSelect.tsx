@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { saveRegion } from '@/utils/regionStorage';
 import { detectLocation } from '@/utils/geoLocation';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export const RegionSelect: React.FC = () => {
   const navigate = useNavigate();
+  const { t, lang } = useLanguage();
   const [customRegionInput, setCustomRegionInput] = useState('');
   const [autoDetectLoading, setAutoDetectLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -15,10 +17,10 @@ export const RegionSelect: React.FC = () => {
     const value = customRegionInput.trim();
     if (!value || saving) return;
     setSaving(true);
-    const ok = await saveRegion(value);
+    const ok = await saveRegion(value, null);
     setSaving(false);
     if (!ok) {
-      alert('Could not save region. Check your connection and try again.');
+      alert(t('saveRegionFailed'));
       return;
     }
     setTimeout(() => navigate(-1), 100);
@@ -28,19 +30,19 @@ export const RegionSelect: React.FC = () => {
     setAutoDetectError(null);
     setAutoDetectLoading(true);
     try {
-      const location = await detectLocation();
+      const location = await detectLocation(lang);
       if (location?.region) {
-        const ok = await saveRegion(location.region);
+        const ok = await saveRegion(location.region, location.coords ?? null);
         if (!ok) {
-          setAutoDetectError('Could not save region. Check your connection and try again.');
+          setAutoDetectError(t('saveRegionFailed'));
           return;
         }
         navigate(-1);
       } else {
-        setAutoDetectError('Could not detect location. Enter your area manually.');
+        setAutoDetectError(t('detectLocationFailed'));
       }
     } catch {
-      setAutoDetectError('Could not detect location. Enter your area manually.');
+      setAutoDetectError(t('detectLocationFailed'));
     } finally {
       setAutoDetectLoading(false);
     }
@@ -56,11 +58,10 @@ export const RegionSelect: React.FC = () => {
             </svg>
           </button>
         }
-        title="Choose region"
+        title={t('chooseRegion')}
       />
 
       <div className="px-4 py-4">
-        {/* Auto-detect location */}
         <div className="mb-6">
           <button
             type="button"
@@ -75,7 +76,7 @@ export const RegionSelect: React.FC = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <span>Detecting location…</span>
+                <span>{t('detectingLocation')}</span>
               </>
             ) : (
               <>
@@ -83,7 +84,7 @@ export const RegionSelect: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span>Use current location</span>
+                <span>{t('useCurrentLocation')}</span>
               </>
             )}
           </button>
@@ -91,20 +92,20 @@ export const RegionSelect: React.FC = () => {
             <p className="mt-2 text-sm text-red-600">{autoDetectError}</p>
           )}
           <p className="mt-2 text-xs text-gray-500">
-            We use GPS or IP to suggest your area.
+            {t('gpsHint')}
           </p>
         </div>
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Enter manually
+            {t('enterManually')}
           </label>
           <div className="flex gap-2">
             <input
               type="text"
               value={customRegionInput}
               onChange={(e) => setCustomRegionInput(e.target.value)}
-              placeholder="e.g. Yeongtong-gu, Suwon or Manhattan, NY"
+              placeholder={t('regionPlaceholder')}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleApplyCustom();
@@ -116,11 +117,11 @@ export const RegionSelect: React.FC = () => {
               className="px-6 py-3 text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Apply
+              {t('apply')}
             </button>
           </div>
           <p className="mt-2 text-xs text-gray-500">
-            Type your area if it does not appear above.
+            {t('regionHint')}
           </p>
         </div>
       </div>

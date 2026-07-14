@@ -7,6 +7,8 @@ import { getUserPosts, deleteUserPost } from '@/utils/communityStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncMyPostsFromDB } from '@/utils/dbSync';
+import { useLanguage } from '@/hooks/useLanguage';
+import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 
 type CategoryFilter = PostCategory | 'all';
 
@@ -19,13 +21,9 @@ const CATEGORY_TABS: CategoryFilter[] = [
   POST_CATEGORY_VALUE.SWAP,
 ];
 
-function tabLabel(category: CategoryFilter): string {
-  if (category === 'all') return 'All';
-  return labelPostCategory(category);
-}
-
 export const MyPosts: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [posts, setPosts] = useState<Post[]>([]);
   const [filterCategory, setFilterCategory] = useState<CategoryFilter>('all');
 
@@ -49,23 +47,28 @@ export const MyPosts: React.FC = () => {
   }, [posts, filterCategory]);
 
   const handleDelete = (post: Post) => {
-    if (confirm(`Delete "${post.title}"?`)) {
+    if (confirm(t('deleteConfirm', { title: post.title }))) {
       deleteUserPost(post.id);
       loadPosts();
     }
+  };
+
+  const tabLabel = (category: CategoryFilter): string => {
+    if (category === 'all') return t('chipAll');
+    return labelPostCategory(category);
   };
 
   return (
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="My posts"
+        title={t('myPosts')}
       />
 
       {posts.length > 0 && (
@@ -107,18 +110,18 @@ export const MyPosts: React.FC = () => {
                 d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
               />
             </svg>
-            <p className="text-gray-500">No posts yet.</p>
+            <p className="text-gray-500">{t('noPostsYet')}</p>
             <button
               onClick={() => navigate('/community/write')}
               className="mt-4 px-6 py-2 rounded-lg text-white text-sm font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Write post
+              {t('writePost')}
             </button>
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-sm text-gray-500">No posts in this category.</p>
+            <p className="text-sm text-gray-500">{t('noPostsInCategory')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -127,7 +130,6 @@ export const MyPosts: React.FC = () => {
                 key={post.id}
                 className="p-4 border border-gray-200 rounded-lg"
               >
-                {/* Post Content - clickable */}
                 <div
                   onClick={() => navigate(`/community/post/${post.id}`)}
                   className="cursor-pointer"
@@ -140,7 +142,9 @@ export const MyPosts: React.FC = () => {
                       {labelPostCategory(post.category)}
                     </span>
                     {post.region && (
-                      <span className="text-xs text-gray-500">{post.region}</span>
+                      <span className="text-xs text-gray-500">
+                        <LocalizedRegionText region={post.region} latitude={post.latitude} longitude={post.longitude} />
+                      </span>
                     )}
                     <span className="text-xs text-gray-400 ml-auto">{relativeTimeShort(post.createdAt)}</span>
                   </div>
@@ -169,24 +173,23 @@ export const MyPosts: React.FC = () => {
 
                   <div className="text-xs text-gray-400 flex items-center gap-1">
                     <img src="/post/chat.svg" alt="" className="w-3.5 h-3.5" />
-                    {post.commentCount} comments
+                    {t('commentsCount', { n: post.commentCount })}
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
                   <button
                     onClick={() => navigate(`/community/edit/${post.id}`)}
                     className="px-4 py-1.5 text-xs font-medium rounded-lg border"
                     style={{ borderColor: '#00A8A3', color: '#00A8A3' }}
                   >
-                    Edit
+                    {t('edit')}
                   </button>
                   <button
                     onClick={() => handleDelete(post)}
                     className="px-4 py-1.5 text-xs font-medium text-red-500 border border-red-300 rounded-lg"
                   >
-                    Delete
+                    {t('delete')}
                   </button>
                 </div>
               </div>

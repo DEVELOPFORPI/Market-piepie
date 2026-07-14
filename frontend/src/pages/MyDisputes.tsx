@@ -5,22 +5,15 @@ import { Badge } from '@/components/common/Badge';
 import { DisputeStatus } from '@/types';
 import { getDisputes, Dispute } from '@/utils/disputeStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
-import {
-  DISPUTE_LIST_RECEIVED,
-  DISPUTE_LIST_SENT,
-  DISPUTE_STATUS_ACTIVE,
-  DISPUTE_STATUS_RESOLVED,
-} from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
+import { labelDisputeStoredValue } from '@/utils/disputeLabels';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 type FilterStatus = 'all' | 'active' | 'resolved';
 type FilterDirection = 'all' | 'sent' | 'received';
 
 function isDisputeActive(status: DisputeStatus): boolean {
   return status === 'OPEN' || status === 'IN_REVIEW';
-}
-
-function disputeStatusLabel(status: DisputeStatus): string {
-  return status === 'RESOLVED' ? DISPUTE_STATUS_RESOLVED : DISPUTE_STATUS_ACTIVE;
 }
 
 function disputeStatusVariant(status: DisputeStatus): 'warning' | 'success' {
@@ -34,6 +27,7 @@ function disputeDetailPath(dispute: Dispute, myId: string): string {
 
 export const MyDisputes: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [filterDirection, setFilterDirection] = useState<FilterDirection>('all');
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -64,28 +58,31 @@ export const MyDisputes: React.FC = () => {
     return true;
   });
 
+  const disputeStatusLabel = (status: DisputeStatus): string =>
+    status === 'RESOLVED' ? t('disputeResolved') : t('disputeActive');
+
   const filterOptions: { value: FilterStatus; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'active', label: DISPUTE_STATUS_ACTIVE },
-    { value: 'resolved', label: DISPUTE_STATUS_RESOLVED },
+    { value: 'all', label: t('chipAll') },
+    { value: 'active', label: t('disputeActive') },
+    { value: 'resolved', label: t('disputeResolved') },
   ];
 
   const directionOptions: { value: Exclude<FilterDirection, 'all'>; label: string }[] = [
-    { value: 'sent', label: DISPUTE_LIST_SENT },
-    { value: 'received', label: DISPUTE_LIST_RECEIVED },
+    { value: 'sent', label: t('disputeSent') },
+    { value: 'received', label: t('disputeReceived') },
   ];
 
   return (
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Disputes"
+        title={t('disputes')}
         rightContent={
           disputes.length > 0 ? (
             <span className="text-sm text-gray-500">{disputes.length}</span>
@@ -142,8 +139,8 @@ export const MyDisputes: React.FC = () => {
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <p className="text-gray-500">No disputes.</p>
-            <p className="text-xs text-gray-400 mt-1">Here is to smooth trades.</p>
+            <p className="text-gray-500">{t('noDisputes')}</p>
+            <p className="text-xs text-gray-400 mt-1">{t('noDisputesHint')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -152,7 +149,7 @@ export const MyDisputes: React.FC = () => {
               .map((dispute) => {
                 const myId = getCurrentUserId();
                 const isSent = Boolean(myId && dispute.openedByUserId === myId);
-                const directionLabel = isSent ? DISPUTE_LIST_SENT : DISPUTE_LIST_RECEIVED;
+                const directionLabel = isSent ? t('disputeSent') : t('disputeReceived');
 
                 return (
                   <div
@@ -181,7 +178,7 @@ export const MyDisputes: React.FC = () => {
                           {dispute.proposedPrice.toLocaleString()} Pi
                         </p>
                         <p className="text-xs text-gray-600">
-                          Reason: {dispute.reason}
+                          {t('reasonLabel')} {labelDisputeStoredValue(lang, dispute.reason)}
                         </p>
                       </div>
                     </div>
@@ -192,7 +189,7 @@ export const MyDisputes: React.FC = () => {
                           {directionLabel}
                         </span>
                         {' · '}
-                        {new Date(dispute.createdAt).toLocaleDateString('en-US')}
+                        {new Date(dispute.createdAt).toLocaleDateString(localeForAppLanguage(lang))}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -202,7 +199,7 @@ export const MyDisputes: React.FC = () => {
                           }}
                           className="px-3 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg"
                         >
-                          Order
+                          {t('orderButton')}
                         </button>
                       </div>
                     </div>

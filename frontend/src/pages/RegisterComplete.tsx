@@ -4,10 +4,12 @@ import { TopBar } from '@/components/common/TopBar';
 import { Product, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelTradeMethod } from '@/locale/enUI';
 import { getMyUser } from '@/utils/profileStorage';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export const RegisterComplete: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
   const productId = location.state?.productId || 'new-product-123'; // Real flow: ID from API after publish
 
   useEffect(() => {
@@ -16,7 +18,7 @@ export const RegisterComplete: React.FC = () => {
 
   const mockProduct: Product = {
     id: productId,
-    title: location.state?.title || 'Your listing',
+    title: location.state?.title || t('yourListingFallback'),
     price: Number(location.state?.price) || 0,
     images: location.state?.images || ['/placeholder.jpg'],
     category: location.state?.category || '',
@@ -27,6 +29,7 @@ export const RegisterComplete: React.FC = () => {
     seller: getMyUser(),
     tradeMethods: location.state?.tradeMethods || [],
     todayTradeAvailable: location.state?.todayTradeAvailable || false,
+    isFreeShare: Boolean(location.state?.isFreeShare),
     liked: false,
   };
 
@@ -34,28 +37,25 @@ export const RegisterComplete: React.FC = () => {
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate('/')} className="p-2">
+          <button onClick={() => navigate('/')} className="p-2" aria-label={t('close')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         }
-        title="Published"
+        title={t('publishedTitle')}
       />
 
       <div className="flex flex-col items-center px-4 pt-6 pb-12">
-        {/* Success Icon */}
         <div className="mb-6">
-          <img src="/check.svg" alt="Done" className="w-12 h-12 object-contain" />
+          <img src="/check.svg" alt={t('doneAlt')} className="w-12 h-12 object-contain" />
         </div>
 
-        {/* Success Message */}
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Listing published</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('listingPublished')}</h1>
         <p className="text-sm text-gray-600 mb-8 text-center">
-          Your listing is visible in the marketplace.
+          {t('listingVisibleHint')}
         </p>
 
-        {/* Product Preview */}
         <div className="w-full max-w-sm mb-8">
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="relative aspect-square bg-gray-200">
@@ -72,7 +72,7 @@ export const RegisterComplete: React.FC = () => {
               {mockProduct.isFreeShare || mockProduct.price === 0 ? (
                 <p className="text-base font-bold text-green-600 mb-2 flex items-center gap-1">
                   <span>🎁</span>
-                  <span>Free share</span>
+                  <span>{t('freeShare')}</span>
                 </p>
               ) : (
                 <p className="text-base font-bold text-gray-900 mb-2">
@@ -90,7 +90,7 @@ export const RegisterComplete: React.FC = () => {
                 ))}
                 {mockProduct.todayTradeAvailable && (
                   <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">
-                    Same-day OK
+                    {t('sameDayOk')}
                   </span>
                 )}
               </div>
@@ -98,36 +98,34 @@ export const RegisterComplete: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="w-full max-w-sm space-y-3">
           <button
             onClick={() => navigate(`/product/${productId}`)}
             className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium hover:opacity-90"
           >
-            View listing
+            {t('viewListing')}
           </button>
           <button
             onClick={() => navigate('/my/products')}
             className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
           >
-            My listings
+            {t('myListings')}
           </button>
           <button
             onClick={() => navigate('/')}
             className="w-full px-4 py-3 text-gray-600 rounded-lg font-medium hover:text-gray-900"
           >
-            Home
+            {t('navHome')}
           </button>
         </div>
 
-        {/* Tips */}
         <div className="mt-8 w-full max-w-sm">
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">💡 Tips</h4>
+            <h4 className="text-sm font-medium text-blue-900 mb-2">💡 {t('tipsHeading')}</h4>
             <ul className="text-xs text-blue-800 space-y-1">
-              <li>• Clear photos get more views</li>
-              <li>• Accurate descriptions close deals faster</li>
-              <li>• Same-day trade can attract more interest</li>
+              <li>• {t('tipClearPhotos')}</li>
+              <li>• {t('tipAccurateDesc')}</li>
+              <li>• {t('tipSameDay')}</li>
             </ul>
           </div>
         </div>
@@ -135,4 +133,3 @@ export const RegisterComplete: React.FC = () => {
     </div>
   );
 };
-

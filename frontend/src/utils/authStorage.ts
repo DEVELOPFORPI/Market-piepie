@@ -7,6 +7,7 @@ import { API_BASE } from '@/utils/apiConfig';
 
 const AUTH_KEY = 'currentUserId';
 const SESSION_TOKEN_KEY = 'marketpiepie_session_token';
+export const HOME_PROMO_SHOWN_SESSION_KEY = 'marketpiepie_home_popup_shown_this_session';
 /** After explicit log out: skip auto guest login until user taps Log in on welcome. */
 const SKIP_IMPLICIT_SESSION_KEY = 'marketpiepie_skip_implicit_session';
 /** Production: anonymous device id in localStorage (shared across tabs) */
@@ -23,6 +24,8 @@ export const getCurrentUserId = (): string | null => {
 /** Log in */
 export const login = (userId: string, isPiUser = false) => {
   sessionStorage.setItem(AUTH_KEY, userId);
+  // Each successful login starts a new popup-viewing session.
+  sessionStorage.removeItem(HOME_PROMO_SHOWN_SESSION_KEY);
   if (isPiUser) {
     try { localStorage.setItem(PI_USER_KEY, userId); } catch { /* ignore */ }
   }

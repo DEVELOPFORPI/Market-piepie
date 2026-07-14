@@ -1,9 +1,5 @@
 import React from 'react';
-import {
-  labelProfileStatDisputes,
-  labelProfileStatShares,
-  labelProfileStatTrades,
-} from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
 
 interface ProfileStatsRowProps {
   rating: number;
@@ -74,6 +70,7 @@ export const ProfileStatsRow: React.FC<ProfileStatsRowProps> = ({
   ratingAccessory,
   centered = false,
 }) => {
+  const { t } = useLanguage();
   const textClass = size === 'md' ? 'text-sm' : 'text-xs';
   const starClass = size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5';
   const padClass = size === 'md' ? 'px-3 py-1.5' : 'px-2.5 py-1';
@@ -90,17 +87,17 @@ export const ProfileStatsRow: React.FC<ProfileStatsRowProps> = ({
   );
 
   const tradesPill = (
-    <CountPill value={tradeCount} label={labelProfileStatTrades()} className={mainPillClass} />
+    <CountPill value={tradeCount} label={t('statTrades')} className={mainPillClass} />
   );
 
   const sharesPill = (
-    <CountPill value={shareCount} label={labelProfileStatShares()} className={mainPillClass} />
+    <CountPill value={shareCount} label={t('statShares')} className={mainPillClass} />
   );
 
   const disputePill = showDisputes && disputeCount > 0 ? (
     <CountPill
       value={disputeCount}
-      label={labelProfileStatDisputes()}
+      label={t('statDisputes')}
       className={disputePillClass}
       valueClassName="font-semibold text-gray-700"
     />
@@ -125,12 +122,12 @@ export const ProfileStatsRow: React.FC<ProfileStatsRowProps> = ({
           {ratingAccessory}
         </div>
         <div className={statsRowClass}>
-          <CountPill value={tradeCount} label={labelProfileStatTrades()} className={ownMainPill} />
-          <CountPill value={shareCount} label={labelProfileStatShares()} className={ownMainPill} />
+          <CountPill value={tradeCount} label={t('statTrades')} className={ownMainPill} />
+          <CountPill value={shareCount} label={t('statShares')} className={ownMainPill} />
           {showDisputes && disputeCount > 0 && (
             <CountPill
               value={disputeCount}
-              label={labelProfileStatDisputes()}
+              label={t('statDisputes')}
               className={ownDisputePill}
               valueClassName="font-semibold text-gray-700"
             />

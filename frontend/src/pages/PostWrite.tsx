@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
-import { labelPostCategory } from '@/locale/enUI';
+import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { addUserPost, getPostById, ensurePostById, updateUserPost, updateDisputePost, COMMUNITY_QUOTA_EXCEEDED_MESSAGE } from '@/utils/communityStorage';
 import { syncPostsFromDB } from '@/utils/dbSync';
 import { getMyProducts } from '@/utils/productStorage';
@@ -15,8 +15,17 @@ import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
 import { isGuest } from '@/utils/guestGate';
 
+const CAT_KEY: Record<PostCategory, AppMessageKey> = {
+  [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
+  [POST_CATEGORY_VALUE.INFO]: 'catInfo',
+  [POST_CATEGORY_VALUE.LOOKING_FOR]: 'catLookingFor',
+  [POST_CATEGORY_VALUE.DISPUTE]: 'catDispute',
+  [POST_CATEGORY_VALUE.SWAP]: 'catSwap',
+};
+
 export const PostWrite: React.FC = () => {
   const _nav = useNavigate();
+  const { t } = useLanguage();
   useEffect(() => {
     if (isGuest()) _nav('/welcome', { replace: true });
   }, [_nav]);
@@ -55,7 +64,7 @@ export const PostWrite: React.FC = () => {
       if (cancelled) return;
       if (existing) {
         if (existing.category === POST_CATEGORY_VALUE.DISPUTE && existing.orderId) {
-          alert('Posts created from a trade dispute cannot be edited.');
+          alert(t('cannotEditDispute'));
           navigate('/community', { replace: true });
           return;
         }
@@ -65,18 +74,18 @@ export const PostWrite: React.FC = () => {
         setImages(existing.images || []);
         setAttachedProduct(existing.attachedProduct || null);
       } else {
-        alert('Post not found.');
+        alert(t('postNotFound'));
         navigate('/community', { replace: true });
       }
     })();
     return () => { cancelled = true; };
-  }, [postId, navigate]);
+  }, [postId, navigate, t]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     if (images.length + files.length > 5) {
-      alert('You can upload up to 5 images.');
+      alert(t('upTo5ImagesAlert'));
       return;
     }
     setUploadingImages(true);
@@ -84,7 +93,7 @@ export const PostWrite: React.FC = () => {
       const urls = await uploadImagesToR2(files, { folder: 'posts' });
       setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not upload image.');
+      alert(t('couldNotUpload'));
     } finally {
       setUploadingImages(false);
       e.target.value = '';
@@ -93,13 +102,13 @@ export const PostWrite: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) {
-      alert('Enter a title and body.');
+      alert(t('enterTitleBody'));
       return;
     }
 
     try {
       if (hasSensitiveContent(content)) {
-        const proceed = confirm('Your text includes external links or contact info. Continue?');
+        const proceed = confirm(t('sensitiveConfirm'));
         if (!proceed) return;
       }
     } catch { /* ignore */ }
@@ -132,31 +141,31 @@ export const PostWrite: React.FC = () => {
       if (isEdit) {
         if (existingForEdit?.category === POST_CATEGORY_VALUE.DISPUTE && existingForEdit?.orderId) {
           updateDisputePost(post);
-          alert('Post updated.');
+          alert(t('postUpdated'));
         } else {
           const ok = await updateUserPost(post);
           if (!ok) {
-            alert('Could not save the post. Try again.');
+            alert(t('couldNotSave'));
             return;
           }
           await syncPostsFromDB();
-          alert('Post updated.');
+          alert(t('postUpdated'));
         }
       } else {
         const ok = await addUserPost(post);
         if (!ok) {
-          alert('Could not save the post. Try again.');
+          alert(t('couldNotSave'));
           return;
         }
         await syncPostsFromDB();
-        alert('Post published.');
+        alert(t('postPublished'));
       }
       navigate('/community', { replace: true });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
         alert(COMMUNITY_QUOTA_EXCEEDED_MESSAGE);
       } else {
-        alert('Could not save the post. Try again.');
+        alert(t('couldNotSave'));
       }
     } finally {
       setIsSubmitting(false);
@@ -173,14 +182,14 @@ export const PostWrite: React.FC = () => {
             </svg>
           </button>
         }
-        title={isEdit ? 'Edit post' : 'New post'}
+        title={isEdit ? t('editPost') : t('newPost')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
         {/* Category Selection */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Category <span className="text-red-500">*</span>
+            {t('categoryLabel')} <span className="text-red-500">*</span>
           </label>
           <div className="flex flex-wrap gap-2">
             {categories.map((cat) => (
@@ -194,7 +203,7 @@ export const PostWrite: React.FC = () => {
                 }`}
                 style={category === cat ? { borderColor: '#00A8A3', backgroundColor: '#00A8A3' } : undefined}
               >
-                {labelPostCategory(cat)}
+                {t(CAT_KEY[cat])}
               </button>
             ))}
           </div>
@@ -203,13 +212,13 @@ export const PostWrite: React.FC = () => {
         {/* Title */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Title <span className="text-red-500">*</span>
+            {t('titleLabel')} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title"
+            placeholder={t('titlePlaceholder')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
           />
         </div>
@@ -217,12 +226,12 @@ export const PostWrite: React.FC = () => {
         {/* Content */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Body <span className="text-red-500">*</span>
+            {t('bodyLabel')} <span className="text-red-500">*</span>
           </label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Write your post"
+            placeholder={t('bodyPlaceholder')}
             rows={8}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3] resize-none"
           />
@@ -230,7 +239,7 @@ export const PostWrite: React.FC = () => {
 
         {/* Images */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Images (optional)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('imagesOptional')}</label>
           <div className="grid grid-cols-3 gap-2 mb-2">
             {images.map((img, idx) => (
               <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
@@ -260,24 +269,24 @@ export const PostWrite: React.FC = () => {
               </label>
             )}
           </div>
-          <p className="text-xs text-gray-500">Up to 5 images.</p>
+          <p className="text-xs text-gray-500">{t('upTo5Images')}</p>
         </div>
 
         {category === POST_CATEGORY_VALUE.LOOKING_FOR && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Attach listing <span className="text-gray-400 font-normal">(optional)</span>
+              {t('attachListingOptional')}
             </label>
-            <p className="text-xs text-gray-500 mb-2">You may attach a reference listing, or skip.</p>
+            <p className="text-xs text-gray-500 mb-2">{t('attachListingHint')}</p>
             {attachedProduct ? (
               <div className="p-4 border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-gray-600">Attached listing</span>
+                  <span className="text-sm text-gray-600">{t('attachedListing')}</span>
                   <button
                     onClick={() => setAttachedProduct(null)}
                     className="text-sm text-red-500"
                   >
-                    Remove
+                    {t('remove')}
                   </button>
                 </div>
                 <ListingCard product={attachedProduct} layout="list" />
@@ -288,14 +297,14 @@ export const PostWrite: React.FC = () => {
                   onClick={() => setShowProductSelect(true)}
                   className="flex-1 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-[#00A8A3] hover:text-[#00A8A3]"
                 >
-                  + Attach listing
+                  {t('attachListing')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAttachedProduct(null)}
                   className="flex-1 px-4 py-3 border border-gray-200 rounded-lg text-gray-500 text-sm bg-gray-50 hover:bg-gray-100"
                 >
-                  Skip attach
+                  {t('skipAttach')}
                 </button>
               </div>
             )}
@@ -308,7 +317,7 @@ export const PostWrite: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/40 flex flex-col items-center justify-center" aria-busy="true">
           <div className="bg-white rounded-xl px-6 py-5 flex flex-col items-center gap-3 shadow-lg">
             <div className="w-10 h-10 border-4 border-[#00A8A3] border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-medium text-gray-700">{isEdit ? 'Saving...' : 'Publishing...'}</p>
+            <p className="text-sm font-medium text-gray-700">{isEdit ? t('saving') : t('publishing')}</p>
           </div>
         </div>
       )}
@@ -321,7 +330,7 @@ export const PostWrite: React.FC = () => {
           className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
           style={title.trim() && content.trim() && !isSubmitting && !uploadingImages ? { backgroundColor: '#00A8A3' } : undefined}
         >
-          {uploadingImages ? 'Uploading...' : isSubmitting ? (isEdit ? 'Saving...' : 'Publishing...') : isEdit ? 'Save changes' : 'Publish'}
+          {uploadingImages ? t('uploading') : isSubmitting ? (isEdit ? t('saving') : t('publishing')) : isEdit ? t('saveChanges') : t('publish')}
         </button>
       </div>
 
@@ -330,7 +339,7 @@ export const PostWrite: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
           <div className="bg-white rounded-t-2xl w-full max-h-[80vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Choose your listing</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{t('chooseYourListing')}</h3>
               <button
                 onClick={() => setShowProductSelect(false)}
                 className="p-2 text-gray-600"
@@ -343,7 +352,7 @@ export const PostWrite: React.FC = () => {
             <div className="p-4 space-y-3">
               {myProducts.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 text-sm">
-                  <p>No listings yet.</p>
+                  <p>{t('noListings')}</p>
                   <button
                     onClick={() => {
                       setShowProductSelect(false);
@@ -352,7 +361,7 @@ export const PostWrite: React.FC = () => {
                     className="mt-3 px-4 py-2 rounded-lg text-white text-sm font-medium"
                     style={{ backgroundColor: '#00A8A3' }}
                   >
-                    Create listing
+                    {t('createListing')}
                   </button>
                 </div>
               ) : (

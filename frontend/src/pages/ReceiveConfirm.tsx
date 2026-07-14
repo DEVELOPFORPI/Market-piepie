@@ -5,10 +5,12 @@ import { getOrderById, ensureOrderById, updateOrderStatus, completeShareOrderOnR
 import { addReceiptConfirmedToChat, addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/types';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export const ReceiveConfirm: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const { t } = useLanguage();
   const [confirmed, setConfirmed] = useState(false);
   const [condition, setCondition] = useState<'good' | 'normal' | 'bad' | ''>('');
   const [notes, setNotes] = useState('');
@@ -37,7 +39,7 @@ export const ReceiveConfirm: React.FC = () => {
         return;
       }
       if (o.status === ORDER_STATUS_VALUE.DISPUTE) {
-        alert('You cannot confirm receipt while a dispute is open.');
+        alert(t('cannotConfirmDuringDispute'));
         navigate(`/dispute/${orderId}`, { replace: true });
         return;
       }
@@ -54,21 +56,21 @@ export const ReceiveConfirm: React.FC = () => {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [orderId, navigate]);
+  }, [orderId, navigate, t]);
 
   const handleSubmit = async () => {
     if (!isBuyer) {
-      alert('Only the buyer can confirm receipt.');
+      alert(t('onlyBuyerCanConfirm'));
       return;
     }
     if (!confirmed) {
-      alert('Confirm that you received the item.');
+      alert(t('confirmYouReceived'));
       return;
     }
     if (!orderId) return;
     const o = getOrderById(orderId);
     if (o?.status === ORDER_STATUS_VALUE.DISPUTE) {
-      alert('You cannot confirm receipt while a dispute is open.');
+      alert(t('cannotConfirmDuringDispute'));
       return;
     }
 
@@ -81,15 +83,15 @@ export const ReceiveConfirm: React.FC = () => {
     if (isShare) {
       const completed = await completeShareOrderOnReceive(orderId);
       if (completed) void addTradeCompletedToChat(completed);
-      alert('Receipt confirmed. You can leave a review.');
+      alert(t('receiptConfirmedLeaveReview'));
       navigate(`/review/${orderId}`, { replace: true });
     } else {
       if (completedOrder?.status === ORDER_STATUS_VALUE.COMPLETE) {
         void addTradeCompletedToChat(completedOrder);
-        alert('Receipt confirmed. You can leave a review.');
+        alert(t('receiptConfirmedLeaveReview'));
         navigate(`/review/${orderId}`, { replace: true });
       } else {
-        alert('Receipt confirmed. Waiting for seller to confirm delivery.');
+        alert(t('receiptConfirmedWaitSeller'));
         navigate(`/order/${orderId}`, { replace: true });
       }
     }
@@ -98,7 +100,7 @@ export const ReceiveConfirm: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <p className="text-gray-600">Loading…</p>
+        <p className="text-gray-600">{t('loading')}</p>
       </div>
     );
   }
@@ -107,48 +109,48 @@ export const ReceiveConfirm: React.FC = () => {
     <div className="min-h-screen bg-white pb-24">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Confirm receipt"
+        title={t('confirmReceipt')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
         {!isBuyer && (
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
             <p className="text-sm text-gray-700">
-              Sellers cannot confirm receipt. Wait for the buyer.
+              {t('sellersCannotConfirm')}
             </p>
           </div>
         )}
         {/* Order Summary */}
         <div className="p-4 border border-gray-200 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Trade details</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">{t('tradeDetails')}</h3>
           <div className="flex gap-3 mb-3">
             <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
               <img
                 src={orderImage || '/placeholder.jpg'}
-                alt={orderTitle || 'Listing'}
+                alt={orderTitle || t('listingSection')}
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="flex-1">
               <h4 className="text-sm font-medium text-gray-900 mb-1">
-                {orderTitle || 'Loading…'}
+                {orderTitle || t('loading')}
               </h4>
               <p className="text-base font-bold text-gray-900">
-                {price === 0 ? 'Free share' : `${price.toLocaleString()} Pi`}
+                {price === 0 ? t('freeShare') : `${price.toLocaleString()} Pi`}
               </p>
             </div>
           </div>
           {tradeMethod === TRADE_METHOD_VALUE.IN_PERSON && meetupPlace && meetupDate && meetupTime && (
             <div className="pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-600 mb-1">Meetup place</p>
+              <p className="text-xs text-gray-600 mb-1">{t('meetupPlace')}</p>
               <p className="text-sm text-gray-900">{meetupPlace}</p>
-              <p className="text-xs text-gray-600 mt-2 mb-1">Meetup time</p>
+              <p className="text-xs text-gray-600 mt-2 mb-1">{t('meetupTimeLabel')}</p>
               <p className="text-sm text-gray-900">
                 {meetupDate} {meetupTime}
               </p>
@@ -159,7 +161,7 @@ export const ReceiveConfirm: React.FC = () => {
         {price !== 0 && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              Item condition
+              {t('itemCondition')}
             </label>
             <div className="space-y-3">
               <button
@@ -173,8 +175,8 @@ export const ReceiveConfirm: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <img src="/3 ICON/1.svg" alt="" className="w-5 h-5 flex-shrink-0" />
                   <div className="ml-2 flex-1 min-w-0">
-                    <p className="text-base font-medium">Good</p>
-                    <p className="text-xs text-gray-500">Matches the description.</p>
+                    <p className="text-base font-medium">{t('conditionGood')}</p>
+                    <p className="text-xs text-gray-500">{t('conditionGoodHint')}</p>
                   </div>
                 </div>
               </button>
@@ -189,8 +191,8 @@ export const ReceiveConfirm: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <img src="/3 ICON/2.svg" alt="" className="w-5 h-5 flex-shrink-0" />
                   <div className="ml-2 flex-1 min-w-0">
-                    <p className="text-base font-medium">OK</p>
-                    <p className="text-xs text-gray-500">Mostly matches the description.</p>
+                    <p className="text-base font-medium">{t('conditionOk')}</p>
+                    <p className="text-xs text-gray-500">{t('conditionOkHint')}</p>
                   </div>
                 </div>
               </button>
@@ -205,8 +207,8 @@ export const ReceiveConfirm: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <img src="/3 ICON/3.svg" alt="" className="w-5 h-5 flex-shrink-0" />
                   <div className="ml-2 flex-1 min-w-0">
-                    <p className="text-base font-medium">Poor</p>
-                    <p className="text-xs text-gray-500">Does not match or has issues.</p>
+                    <p className="text-base font-medium">{t('conditionPoor')}</p>
+                    <p className="text-xs text-gray-500">{t('conditionPoorHint')}</p>
                   </div>
                 </div>
               </button>
@@ -217,12 +219,12 @@ export const ReceiveConfirm: React.FC = () => {
         {price !== 0 && condition && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notes (optional)
+              {t('notesOptional')}
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add details about the condition"
+              placeholder={t('notesConditionPh')}
               rows={4}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
@@ -254,10 +256,10 @@ export const ReceiveConfirm: React.FC = () => {
             </span>
           </span>
           <span className="text-sm text-gray-700">
-            I confirm I received the item and the trade can proceed.
+            {t('confirmReceiptCheckbox')}
             {condition === 'bad' && (
               <span className="block mt-1 text-xs text-red-600">
-                {price === 0 ? 'Free shares cannot open a dispute. Message the giver in chat.' : 'You can open a dispute if there is a serious issue.'}
+                {price === 0 ? t('freeShareNoDisputeInline') : t('canOpenDisputeInline')}
               </span>
             )}
           </span>
@@ -265,18 +267,18 @@ export const ReceiveConfirm: React.FC = () => {
 
         {condition === 'bad' && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-800 font-medium mb-1">⚠️ Heads up</p>
+            <p className="text-sm text-red-800 font-medium mb-1">⚠️ {t('headsUp')}</p>
             <p className="text-sm text-red-700">
               {price === 0
-                ? 'Free shares cannot use disputes. Use chat to resolve issues.'
-                : 'Open a dispute before confirming receipt if there is a problem. After confirmation, refunds may be harder.'}
+                ? t('freeShareUseChat')
+                : t('disputeBeforeConfirmHint')}
             </p>
             {price !== 0 && (
               <button
                 onClick={() => navigate(`/dispute/${orderId}`)}
                 className="mt-3 w-full px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100"
               >
-                Open dispute
+                {t('openDispute')}
               </button>
             )}
           </div>
@@ -290,10 +292,9 @@ export const ReceiveConfirm: React.FC = () => {
           disabled={!isBuyer || !confirmed}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          Submit receipt confirmation
+          {t('submitReceiptConfirm')}
         </button>
       </div>
     </div>
   );
 };
-

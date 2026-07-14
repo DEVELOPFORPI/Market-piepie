@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
-import { isFreeShareListing, labelFreeShareMenu, labelProductStatus } from '@/locale/enUI';
+import { isFreeShareListing } from '@/locale/enUI';
 import { getMyProducts, deleteProduct } from '@/utils/productStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
 
 type FilterStatus = 'all' | 'free' | ProductStatus;
 
 export const MyProducts: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -29,7 +32,7 @@ export const MyProducts: React.FC = () => {
   }, []);
 
   const handleDelete = (productId: string, productTitle: string) => {
-    if (confirm(`Delete "${productTitle}"?`)) {
+    if (confirm(t('deleteConfirm', { title: productTitle }))) {
       deleteProduct(productId);
       loadProducts();
       window.dispatchEvent(new Event('productRegistered'));
@@ -42,30 +45,30 @@ export const MyProducts: React.FC = () => {
     return products.filter((p) => p.status === filterStatus);
   })();
 
-  const filterTabs: { value: FilterStatus; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'free', label: labelFreeShareMenu() },
-    { value: PRODUCT_STATUS_VALUE.FOR_SALE, label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
-    { value: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
-    { value: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatus(PRODUCT_STATUS_VALUE.SOLD) },
+  const filterTabs: { value: FilterStatus; labelKey: AppMessageKey }[] = [
+    { value: 'all', labelKey: 'chipAll' },
+    { value: 'free', labelKey: 'free' },
+    { value: PRODUCT_STATUS_VALUE.FOR_SALE, labelKey: 'forSale' },
+    { value: PRODUCT_STATUS_VALUE.RESERVED, labelKey: 'trading' },
+    { value: PRODUCT_STATUS_VALUE.SOLD, labelKey: 'sold' },
   ];
 
   return (
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="My listings"
+        title={t('myListings')}
       />
 
       {/* Filter Tabs */}
       <div className="flex gap-2 px-4 py-3 border-b border-gray-200 overflow-x-auto">
-        {filterTabs.map(({ value, label }) => (
+        {filterTabs.map(({ value, labelKey }) => (
           <button
             key={value}
             onClick={() => setFilterStatus(value)}
@@ -76,7 +79,7 @@ export const MyProducts: React.FC = () => {
             }`}
             style={filterStatus === value ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
@@ -85,13 +88,13 @@ export const MyProducts: React.FC = () => {
       <div className="px-4 py-4">
         {filteredProducts.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 mb-4">No listings yet.</p>
+            <p className="text-gray-500 mb-4">{t('noListings')}</p>
             <button
               onClick={() => navigate('/register')}
               className="px-4 py-2 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Create listing
+              {t('createListing')}
             </button>
           </div>
         ) : (
@@ -110,13 +113,15 @@ export const MyProducts: React.FC = () => {
                 </div>
                 {product.adminHidden ? (
                   <div className="border-t border-gray-200 bg-gray-100 px-4 py-2 text-xs text-gray-600">
-                    This listing was hidden by admin.
-                    {product.adminHiddenReason ? ` Reason: ${product.adminHiddenReason}` : ''}
+                    {t('adminHidden')}
+                    {product.adminHiddenReason ? ` ${product.adminHiddenReason}` : ''}
                   </div>
                 ) : null}
                 <div className="flex border-t border-gray-200">
                   {hasProductActiveDispute(product.id) ? (
-                    <p className="flex-1 py-2.5 text-center text-sm text-gray-500">You cannot edit or delete during a dispute.</p>
+                    <p className="flex-1 py-2.5 text-center text-sm text-gray-500">
+                      {t('cannotEditDeleteDispute')}
+                    </p>
                   ) : (
                     <>
                       {!product.adminHidden && product.status !== PRODUCT_STATUS_VALUE.SOLD && (
@@ -128,7 +133,7 @@ export const MyProducts: React.FC = () => {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                            Edit
+                            {t('edit')}
                           </button>
                           <div className="w-px bg-gray-200" />
                         </>
@@ -140,7 +145,7 @@ export const MyProducts: React.FC = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                        Delete
+                        {t('delete')}
                       </button>
                     </>
                   )}
@@ -156,7 +161,7 @@ export const MyProducts: React.FC = () => {
         onClick={() => navigate('/register')}
         className="fixed bottom-24 right-4 w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity z-40"
         style={{ backgroundColor: '#00A8A3' }}
-        aria-label="Create listing"
+        aria-label={t('createListing')}
       >
         <span className="relative flex h-full w-full items-center justify-center">
           <img src="/main.svg" alt="" className="h-7 w-7 object-contain" />

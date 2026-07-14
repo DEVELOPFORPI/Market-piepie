@@ -19,8 +19,11 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
-import { labelTradeMethod, DISPUTE_VIEW_OTHER_READONLY, DISPUTE_OTHER_PARTY, DISPUTE_STATUS_ACTIVE, DISPUTE_STATUS_RESOLVED } from '@/locale/enUI';
+import { labelTradeMethod } from '@/locale/enUI';
 import { Order, User } from '@/types';
+import { useLanguage } from '@/hooks/useLanguage';
+import { labelDisputeStoredValue } from '@/utils/disputeLabels';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -57,6 +60,8 @@ function resolveDisputeOpenerUserId(
 
 export const Dispute: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
+  const dateLocale = localeForAppLanguage(lang);
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
   const viewOtherParty = searchParams.get('view') === 'other';
@@ -141,11 +146,11 @@ export const Dispute: React.FC = () => {
     if (order) {
       const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
       if (isShare) {
-        alert('Free shares cannot be disputed.');
+        alert(t('freeShareNoDispute'));
         navigate(orderId ? `/order/${orderId}` : '/my/orders', { replace: true });
       }
     }
-  }, [order, orderId, navigate]);
+  }, [order, orderId, navigate, t]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -155,7 +160,7 @@ export const Dispute: React.FC = () => {
       const urls = await uploadImagesToR2(files, { folder: 'disputes' });
       setEvidence((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not upload images.');
+      alert(t('couldNotUpload'));
     } finally {
       setUploadingEvidence(false);
       e.target.value = '';
@@ -171,7 +176,7 @@ export const Dispute: React.FC = () => {
         ? await uploadImageReferencesToR2(evidence, { folder: 'disputes' })
         : [];
     } catch {
-      alert('Could not upload images.');
+      alert(t('couldNotUpload'));
       return;
     }
     const currentUserId = getCurrentUserId();
@@ -194,7 +199,7 @@ export const Dispute: React.FC = () => {
       evidence: evidenceToSave,
     });
     if (!newDispute) {
-      alert('Could not file dispute. Check your connection and try again.');
+      alert(t('couldNotFileDispute'));
       return;
     }
 
@@ -216,8 +221,6 @@ export const Dispute: React.FC = () => {
       id: disputePostId,
       title: `[Dispute] ${order.product.title} - ${reason}`,
       content: [
-        `Listing: ${order.product.title}`,
-        `Amount: ${order.proposedPrice.toLocaleString()} Pi`,
         `Reason: ${reason}`,
         ...(actionToSave ? [`Requested action: ${actionToSave}`] : []),
         description ? `\nDetails:\n${description}` : '',
@@ -225,12 +228,13 @@ export const Dispute: React.FC = () => {
       category: POST_CATEGORY_VALUE.DISPUTE,
       author,
       images: evidenceToSave.length > 0 ? evidenceToSave : undefined,
+      attachedProduct: order.product,
       commentCount: 0,
       createdAt: new Date().toISOString(),
       orderId,
     });
     if (!postSaved) {
-      alert('Dispute was filed, but the community post could not be published. Check your connection.');
+      alert(t('disputeFiledButPostFailed'));
     } else {
       addNotification({
         targetUserId: otherUser.id,
@@ -249,13 +253,13 @@ export const Dispute: React.FC = () => {
     if (!dispute) return;
     const uid = getCurrentUserId();
     if (!dispute.openedByUserId || dispute.openedByUserId !== uid) {
-      alert('Only the party who filed this dispute can mark it resolved.');
+      alert(t('onlyOpenerCanResolve'));
       return;
     }
-    if (!confirm('Mark this dispute as resolved?')) return;
+    if (!confirm(t('markResolvedConfirm'))) return;
     const ok = await updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
     if (!ok) {
-      alert('Could not update dispute status. Check your connection and try again.');
+      alert(t('couldNotUpdateDisputeStatus'));
       return;
     }
     setDispute({
@@ -273,9 +277,9 @@ export const Dispute: React.FC = () => {
   };
 
   const statusLabel = {
-    OPEN: DISPUTE_STATUS_ACTIVE,
-    IN_REVIEW: DISPUTE_STATUS_ACTIVE,
-    RESOLVED: DISPUTE_STATUS_RESOLVED,
+    OPEN: t('disputeActive'),
+    IN_REVIEW: t('disputeActive'),
+    RESOLVED: t('disputeResolved'),
   };
 
   const currentUserId = getCurrentUserId();
@@ -290,7 +294,7 @@ export const Dispute: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <p className="text-gray-600">Loading…</p>
+        <p className="text-gray-600">{t('loading')}</p>
       </div>
     );
   }
@@ -298,7 +302,7 @@ export const Dispute: React.FC = () => {
   if (!order) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <p className="text-gray-600">Order not found.</p>
+        <p className="text-gray-600">{t('orderNotFound')}</p>
       </div>
     );
   }
@@ -307,36 +311,36 @@ export const Dispute: React.FC = () => {
     <div className="min-h-screen bg-white pb-24">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title={dispute ? 'Dispute details' : 'Open dispute'}
+        title={dispute ? t('disputeDetailsTitle') : t('openDisputeTitle')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
         {viewOtherParty && dispute && (
           <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            <p className="text-sm text-gray-600">{DISPUTE_VIEW_OTHER_READONLY}</p>
+            <p className="text-sm text-gray-600">{t('viewOtherReadonly')}</p>
           </div>
         )}
 
         {dispute && (
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Status</span>
+              <span className="text-sm text-gray-600">{t('statusHeading')}</span>
               <Badge variant={statusVariant[dispute.status]}>
                 {statusLabel[dispute.status]}
               </Badge>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Filed: {new Date(dispute.createdAt).toLocaleString('en-US')}
+              {t('filedAt', { when: new Date(dispute.createdAt).toLocaleString(dateLocale) })}
             </p>
             {dispute.resolvedAt && (
               <p className="text-xs text-green-600 mt-1">
-                Resolved: {new Date(dispute.resolvedAt).toLocaleString('en-US')}
+                {t('resolvedAt', { when: new Date(dispute.resolvedAt).toLocaleString(dateLocale) })}
               </p>
             )}
           </div>
@@ -344,7 +348,7 @@ export const Dispute: React.FC = () => {
 
         {counterparty && (
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-2">{DISPUTE_OTHER_PARTY}</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{t('otherParty')}</h3>
             <SellerMiniCard
               seller={counterparty}
               onClick={() => navigate(`/seller/${counterparty.id}`)}
@@ -357,7 +361,7 @@ export const Dispute: React.FC = () => {
             className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50"
             onClick={() => navigate(`/order/${orderId}`)}
           >
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Order</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('orderSection')}</h3>
             <div className="flex gap-3">
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
                 <img
@@ -377,13 +381,13 @@ export const Dispute: React.FC = () => {
 
         {!order && !dispute && (
           <div className="text-center py-8 text-gray-500">
-            <p>Order not found.</p>
+            <p>{t('orderNotFound')}</p>
           </div>
         )}
 
         {!dispute && order && viewOtherParty && (
           <div className="text-center py-8 text-gray-500">
-            <p>The other party has not filed a dispute for this order.</p>
+            <p>{t('noDisputeFromOther')}</p>
           </div>
         )}
 
@@ -391,7 +395,7 @@ export const Dispute: React.FC = () => {
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reason <span className="text-red-500">*</span>
+                {t('reasonLabel')} <span className="text-red-500">*</span>
               </label>
               <div className="space-y-2">
                 {disputeReasonOptions.map((r) => (
@@ -405,7 +409,7 @@ export const Dispute: React.FC = () => {
                     }`}
                     style={reason === r ? { borderColor: '#00A8A3', backgroundColor: '#00A8A3' } : undefined}
                   >
-                    {r}
+                    {labelDisputeStoredValue(lang, r)}
                   </button>
                 ))}
               </div>
@@ -414,7 +418,7 @@ export const Dispute: React.FC = () => {
             {!isSellerOpening && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Requested action <span className="text-red-500">*</span>
+                {t('requestedAction')} <span className="text-red-500">*</span>
               </label>
               <div className="space-y-2">
                 {buyerDisputeActions.map((a) => (
@@ -428,15 +432,14 @@ export const Dispute: React.FC = () => {
                     }`}
                     style={action === a ? { borderColor: '#00A8A3', backgroundColor: '#00A8A3' } : undefined}
                   >
-                    {a}
+                    {labelDisputeStoredValue(lang, a)}
                   </button>
                 ))}
               </div>
               <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-xs text-yellow-800 font-medium mb-1">Refund notice</p>
+                <p className="text-xs text-yellow-800 font-medium mb-1">{t('refundNoticeTitle')}</p>
                 <p className="text-xs text-yellow-700">
-                  Refunds are arranged privately between you and the seller (e.g. Pi transfer). The platform cannot
-                  force a refund; dispute outcomes may affect seller trust or access.
+                  {t('refundNoticeBody')}
                 </p>
               </div>
             </div>
@@ -444,23 +447,23 @@ export const Dispute: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Details <span className="text-red-500">*</span>
+                {t('detailsLabel')} <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe what happened in detail"
+                placeholder={t('detailsPlaceholder')}
                 rows={5}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3] resize-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Evidence</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('evidence')}</label>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 {evidence.map((img, idx) => (
                   <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
-                    <img src={getDisplayImageUrl(img)} alt={`Evidence ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={getDisplayImageUrl(img)} alt={t('evidenceAlt', { n: idx + 1 })} className="w-full h-full object-cover" />
                     <button
                       onClick={() => setEvidence(evidence.filter((_, i) => i !== idx))}
                       className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white"
@@ -491,16 +494,16 @@ export const Dispute: React.FC = () => {
         {dispute && (
           <>
             <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">Dispute summary</h3>
+              <h3 className="text-sm font-medium text-gray-700">{t('disputeSummary')}</h3>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Reason</span>
-                  <span className="text-gray-900 font-medium">{dispute.reason}</span>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500 shrink-0">{t('reasonLabel')}</span>
+                  <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.reason)}</span>
                 </div>
                 {showRequestedActionSummary && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Requested action</span>
-                  <span className="text-gray-900 font-medium">{dispute.action}</span>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500 shrink-0">{t('requestedAction')}</span>
+                  <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.action)}</span>
                 </div>
                 )}
               </div>
@@ -513,11 +516,11 @@ export const Dispute: React.FC = () => {
 
             {dispute.evidence && dispute.evidence.length > 0 && (
               <div className="p-4 border border-gray-200 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Evidence</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">{t('evidence')}</h3>
                 <div className="grid grid-cols-3 gap-2">
                   {dispute.evidence.map((img, idx) => (
                     <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-gray-200">
-                      <img src={getDisplayImageUrl(img)} alt={`Evidence ${idx + 1}`} className="w-full h-full object-cover" />
+                      <img src={getDisplayImageUrl(img)} alt={t('evidenceAlt', { n: idx + 1 })} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>
@@ -526,32 +529,32 @@ export const Dispute: React.FC = () => {
 
             {dispute.status === 'OPEN' && (
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h3 className="text-sm font-medium text-yellow-900 mb-2">Dispute received</h3>
+                <h3 className="text-sm font-medium text-yellow-900 mb-2">{t('disputeReceived')}</h3>
                 <p className="text-sm text-yellow-800">
-                  {isDisputeOpener
-                    ? 'Try to resolve with the other party. When resolved, tap the button below.'
-                    : 'The other party filed this dispute. Resolve together in chat; only they can mark it closed.'}
+                  {isDisputeOpener ? t('resolveHintOpener') : t('resolveHintCounterparty')}
                 </p>
               </div>
             )}
 
             {dispute.status === 'IN_REVIEW' && (
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-900 mb-2">Under review</h3>
+                <h3 className="text-sm font-medium text-blue-900 mb-2">{t('underReview')}</h3>
                 <p className="text-sm text-blue-800 mb-2">
-                  {dispute.adminResponse || 'We will respond within 3 business days.'}
+                  {dispute.adminResponse || t('reviewResponseDefault')}
                 </p>
                 <p className="text-xs text-blue-700">
-                  Outcomes may affect the seller (trust score, restrictions).
+                  {t('reviewOutcomesHint')}
                 </p>
               </div>
             )}
 
             {dispute.status === 'RESOLVED' && (
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h3 className="text-sm font-medium text-green-900 mb-2">Dispute resolved</h3>
+                <h3 className="text-sm font-medium text-green-900 mb-2">{t('disputeResolvedTitle')}</h3>
                 <p className="text-sm text-green-800">
-                  {dispute.adminResponse || 'This dispute is closed.'}
+                  {dispute.adminResponse && dispute.adminResponse !== 'Resolved by mutual agreement.'
+                    ? dispute.adminResponse
+                    : t('disputeClosedDefault')}
                 </p>
               </div>
             )}
@@ -567,7 +570,7 @@ export const Dispute: React.FC = () => {
             className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
             style={reason && (isSellerOpening || action) && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
           >
-            {uploadingEvidence ? 'Uploading...' : 'Submit dispute'}
+            {uploadingEvidence ? t('uploading') : t('submitDispute')}
           </button>
         ) : dispute && (dispute.status === 'OPEN' || dispute.status === 'IN_REVIEW') && isDisputeOpener ? (
           <button
@@ -575,7 +578,7 @@ export const Dispute: React.FC = () => {
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
             style={{ backgroundColor: '#00A8A3' }}
           >
-            Mark resolved
+            {t('markResolved')}
           </button>
         ) : dispute ? (
           <button
@@ -583,7 +586,7 @@ export const Dispute: React.FC = () => {
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
             style={{ backgroundColor: '#00A8A3' }}
           >
-            Back to orders
+            {t('backToOrders')}
           </button>
         ) : null}
       </div>

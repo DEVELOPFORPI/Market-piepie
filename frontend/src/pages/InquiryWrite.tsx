@@ -4,13 +4,24 @@ import { api } from '@/utils/api';
 import { TopBar } from '@/components/common/TopBar';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
 
-const CATEGORIES = ['General', 'Bug Report', 'Account', 'Trade', 'Suggestion', 'Other'];
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
 
+const CATEGORY_DEFS: { id: string; labelKey: AppMessageKey }[] = [
+  { id: 'General', labelKey: 'inqCatGeneral' },
+  { id: 'Bug Report', labelKey: 'inqCatBugReport' },
+  { id: 'Account', labelKey: 'inqCatAccount' },
+  { id: 'Trade', labelKey: 'inqCatTrade' },
+  { id: 'Suggestion', labelKey: 'inqCatSuggestion' },
+  { id: 'Other', labelKey: 'inqCatOther' },
+];
+
 export const InquiryWrite: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState('General');
   const [title, setTitle] = useState('');
@@ -33,7 +44,7 @@ export const InquiryWrite: React.FC = () => {
       const urls = await uploadImagesToR2(picks, { folder: 'inquiries' });
       setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert('Could not upload image.');
+      alert(t('uploadImageFailed'));
     } finally {
       setUploadingImages(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -57,7 +68,7 @@ export const InquiryWrite: React.FC = () => {
     });
     setSending(false);
     if (!res.ok) {
-      alert(res.error || 'Failed to submit. Please try again.');
+      alert(res.error || t('submitInquiryFailed'));
       return;
     }
     setDone(true);
@@ -68,13 +79,13 @@ export const InquiryWrite: React.FC = () => {
       <div className="min-h-screen bg-white flex flex-col">
         <TopBar
           leftContent={
-            <button onClick={() => navigate(-1)} className="p-2">
+            <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           }
-          title="Inquiry"
+          title={t('inquiryFormTitle')}
         />
         <div className="flex-1 flex flex-col items-center justify-center px-6">
           <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
@@ -82,16 +93,16 @@ export const InquiryWrite: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 mb-2">Submitted!</h2>
-          <p className="text-sm text-gray-500 text-center mb-8">Your inquiry has been sent. We'll get back to you shortly.</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-2">{t('inquirySubmitted')}</h2>
+          <p className="text-sm text-gray-500 text-center mb-8">{t('inquirySubmittedHint')}</p>
           <div className="flex gap-2">
             <button onClick={() => navigate('/my/inquiries')}
               className="px-6 py-2.5 text-sm text-white font-medium rounded-lg" style={{ backgroundColor: TEAL }}>
-              View My Inquiries
+              {t('viewMyInquiries')}
             </button>
             <button onClick={() => navigate(-1)}
               className="px-6 py-2.5 text-sm text-gray-700 font-medium rounded-lg border border-gray-300">
-              Go Back
+              {t('goBack')}
             </button>
           </div>
         </div>
@@ -103,49 +114,49 @@ export const InquiryWrite: React.FC = () => {
     <div className="min-h-screen bg-white pb-8 safe-area-bottom">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Inquiry"
+        title={t('inquiryFormTitle')}
       />
 
       <div className="px-4 py-4 space-y-5">
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-2 block">Category</label>
+          <label className="text-sm font-medium text-gray-700 mb-2 block">{t('labelCategory')}</label>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <button key={c} onClick={() => setCategory(c)}
+            {CATEGORY_DEFS.map(({ id, labelKey }) => (
+              <button key={id} onClick={() => setCategory(id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  category === c ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  category === id ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
-                style={category === c ? { backgroundColor: TEAL } : undefined}>
-                {c}
+                style={category === id ? { backgroundColor: TEAL } : undefined}>
+                {t(labelKey)}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Title</label>
+          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelTitle')}</label>
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-            placeholder="Brief summary of your inquiry"
+            placeholder={t('inquiryTitlePh')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Content</label>
+          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelContent')}</label>
           <textarea value={content} onChange={(e) => setContent(e.target.value)}
-            placeholder="Describe your issue or question in detail"
+            placeholder={t('inquiryContentPh')}
             rows={6}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
         <div>
           <label className="text-sm font-medium text-gray-700 mb-1 block">
-            Images <span className="text-gray-400 font-normal">({images.length}/{MAX_IMAGES})</span>
+            {t('imagesCount', { n: images.length, max: MAX_IMAGES })}
           </label>
           <div className="flex flex-wrap gap-2">
             {images.map((img, idx) => (
@@ -153,7 +164,7 @@ export const InquiryWrite: React.FC = () => {
                 <img src={img} alt="" className="w-full h-full object-cover" />
                 <button type="button" onClick={() => removeImage(idx)}
                   className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center"
-                  aria-label="Remove image">
+                  aria-label={t('removeImage')}>
                   ×
                 </button>
               </div>
@@ -164,7 +175,7 @@ export const InquiryWrite: React.FC = () => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                <span className="text-[10px] mt-1">Add</span>
+                <span className="text-[10px] mt-1">{t('add')}</span>
               </button>
             )}
           </div>
@@ -173,15 +184,15 @@ export const InquiryWrite: React.FC = () => {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Email <span className="text-gray-400 font-normal">(optional)</span></label>
+          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('emailOptional')}</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="For reply notification"
+            placeholder={t('emailPlaceholder')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
         <button onClick={handleSubmit} disabled={sending || uploadingImages || !title.trim() || !content.trim()}
           className="w-full py-3 text-sm text-white font-medium rounded-lg disabled:opacity-50 transition-colors" style={{ backgroundColor: TEAL }}>
-          {uploadingImages ? 'Uploading...' : sending ? 'Submitting...' : 'Submit Inquiry'}
+          {uploadingImages ? t('uploading') : sending ? t('submitting') : t('submitInquiry')}
         </button>
       </div>
     </div>

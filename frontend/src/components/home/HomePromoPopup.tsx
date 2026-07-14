@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { HomePopupView } from '@/utils/homePopupStorage';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const TEAL = '#00A8A3';
 
@@ -12,6 +13,7 @@ type Props = {
 
 export const HomePromoPopup: React.FC<Props> = ({ popup, onClose }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { title, heroImage, noticeId } = popup;
   const hasDetail = !!noticeId;
 
@@ -30,7 +32,7 @@ export const HomePromoPopup: React.FC<Props> = ({ popup, onClose }) => {
       <button
         type="button"
         className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
-        aria-label="Close overlay"
+        aria-label={t('close')}
         onClick={onClose}
       />
       <div className="relative z-[1] flex w-[500px] max-h-[calc(100vh-1.5rem)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl bg-white shadow-xl">
@@ -50,7 +52,7 @@ export const HomePromoPopup: React.FC<Props> = ({ popup, onClose }) => {
               <img src={heroImage} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center px-6 text-center text-sm text-gray-400">
-                이미지 없음
+                {t('popupNoImage')}
               </div>
             )}
           </div>
@@ -64,7 +66,7 @@ export const HomePromoPopup: React.FC<Props> = ({ popup, onClose }) => {
               className="min-h-[48px] flex-1 rounded-2xl text-sm font-semibold text-white transition-opacity hover:opacity-95"
               style={{ backgroundColor: TEAL }}
             >
-              자세히 보기
+              {t('details')}
             </button>
           ) : null}
           <button
@@ -74,7 +76,7 @@ export const HomePromoPopup: React.FC<Props> = ({ popup, onClose }) => {
               hasDetail ? 'flex-1' : 'w-full'
             }`}
           >
-            닫기
+            {t('close')}
           </button>
         </div>
       </div>

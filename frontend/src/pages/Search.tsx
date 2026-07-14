@@ -5,9 +5,20 @@ import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { Product } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
+import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
+
+const FILTER_CATEGORIES: { value: string; labelKey: AppMessageKey }[] = [
+  { value: 'Electronics', labelKey: 'catElectronics' },
+  { value: 'Furniture', labelKey: 'catFurniture' },
+  { value: 'Clothes', labelKey: 'catClothes' },
+  { value: 'Hobby', labelKey: 'catHobby' },
+  { value: 'Books', labelKey: 'catBooks' },
+  { value: 'Other', labelKey: 'catOther' },
+];
 
 export const Search: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
   const [minPrice, setMinPrice] = useState('');
@@ -43,9 +54,8 @@ export const Search: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white pb-20">
-      <TopBar title="Search" />
+      <TopBar title={t('searchTitle')} />
 
-      {/* Search Bar */}
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex gap-2">
           <div className="flex-1 relative">
@@ -53,7 +63,7 @@ export const Search: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Listing, area, or seller"
+              placeholder={t('searchQueryPh')}
               className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <svg
@@ -69,17 +79,16 @@ export const Search: React.FC = () => {
             onClick={() => setShowFilter(true)}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            Filter
+            {t('filter')}
           </button>
         </div>
       </div>
 
       {!searchQuery && (
         <div className="px-4 py-6">
-          {/* Recent Searches */}
           {recentSearches.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Recent</h3>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t('recent')}</h3>
               <div className="flex flex-wrap gap-2">
                 {recentSearches.map((term) => (
                   <button
@@ -94,9 +103,8 @@ export const Search: React.FC = () => {
             </div>
           )}
 
-          {/* Recommended */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Suggested</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('suggested')}</h3>
             <div className="flex flex-wrap gap-2">
               {recommendedSearches.map((term) => (
                 <button
@@ -112,12 +120,11 @@ export const Search: React.FC = () => {
         </div>
       )}
 
-      {/* Results */}
       {searchQuery && (
         <div className="px-4 py-4">
           {filteredProducts.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              No results for "{searchQuery}"
+              {t('noResultsFor', { q: searchQuery })}
             </div>
           ) : (
             <div className="space-y-4">
@@ -134,38 +141,35 @@ export const Search: React.FC = () => {
         </div>
       )}
 
-      {/* Filter BottomSheet */}
       <BottomSheet
         isOpen={showFilter}
         onClose={() => setShowFilter(false)}
-        title="Filters"
+        title={t('filtersTitle')}
       >
         <div className="px-4 py-6 space-y-6">
-          {/* Category */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Category</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('category')}</h3>
             <div className="flex flex-wrap gap-2">
-              {['Electronics', 'Furniture', 'Clothes', 'Hobby', 'Books', 'Other'].map((cat) => (
+              {FILTER_CATEGORIES.map(({ value, labelKey }) => (
                 <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium ${selectedCategory === cat ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  key={value}
+                  onClick={() => setSelectedCategory(selectedCategory === value ? '' : value)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium ${selectedCategory === value ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
-                  {cat}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Price Range */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Price range</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('priceRange')}</h3>
             <div className="flex items-center gap-1">
               <input
                 type="number"
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
-                placeholder="Min"
+                placeholder={t('min')}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
               />
               <span className="text-gray-500 shrink-0">~</span>
@@ -173,14 +177,13 @@ export const Search: React.FC = () => {
                 type="number"
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
-                placeholder="Max"
+                placeholder={t('max')}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
               />
               <span className="text-sm text-gray-500 shrink-0">Pi</span>
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => {
@@ -190,14 +193,14 @@ export const Search: React.FC = () => {
               }}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"
             >
-              Reset
+              {t('reset')}
             </button>
             <button
               onClick={() => setShowFilter(false)}
               className="flex-1 px-4 py-3 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Apply
+              {t('apply')}
             </button>
           </div>
         </div>
@@ -205,6 +208,3 @@ export const Search: React.FC = () => {
     </div>
   );
 };
-
-
-

@@ -18,12 +18,13 @@ import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId, isGuestUser } from '@/utils/authStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderStorage';
-import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
 import { KYCBadge } from '@/components/common/KYCBadge';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export const ProfileEdit: React.FC = () => {
+  const { t } = useLanguage();
   const myUser = getMyUser();
   const initialData = {
     kycStatus: myUser.kycStatus,
@@ -74,7 +75,7 @@ export const ProfileEdit: React.FC = () => {
       setProfileImage(url);
       setHasChanges(true);
     } catch {
-      alert('Could not upload image.');
+      alert(t('couldNotUpload'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
@@ -82,12 +83,12 @@ export const ProfileEdit: React.FC = () => {
   };
 
   const handleSave = () => {
-    (async () => {
+    void (async () => {
       let img = profileImage;
       try {
         img = await uploadImageReferenceToR2(profileImage, { folder: 'profiles' });
       } catch {
-        alert('Could not upload image.');
+        alert(t('couldNotUpload'));
         return;
       }
       const profileData = {
@@ -98,7 +99,7 @@ export const ProfileEdit: React.FC = () => {
       };
       const ok = await saveProfile(profileData);
       if (!ok) {
-        alert('Could not save profile to server. Check your connection and try again.');
+        alert(t('couldNotSaveProfile'));
         return;
       }
       navigate('/my');
@@ -107,7 +108,7 @@ export const ProfileEdit: React.FC = () => {
 
   const handleCancel = () => {
     if (hasChanges) {
-      if (confirm('You have unsaved changes. Discard them?')) {
+      if (confirm(t('discardUnsavedConfirm'))) {
         navigate('/my');
       }
     } else {
@@ -119,20 +120,20 @@ export const ProfileEdit: React.FC = () => {
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={handleCancel} className="p-2">
+          <button onClick={handleCancel} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Edit profile"
+        title={t('editProfile')}
         rightContent={
           <button
             onClick={handleSave}
             disabled={!hasChanges || uploadingImage}
             className="px-3 py-1.5 text-sm font-medium text-primary disabled:text-gray-400"
           >
-            {uploadingImage ? 'Uploading...' : 'Save'}
+            {uploadingImage ? t('uploading') : t('save')}
           </button>
         }
       />
@@ -152,7 +153,7 @@ export const ProfileEdit: React.FC = () => {
                 ) : (
                   <img
                     src={profileImage}
-                    alt="Profile"
+                    alt={t('profileAlt')}
                     className={profileAvatarObjectClass(profileImage)}
                     onError={() => setAvatarLoadFailed(true)}
                   />
@@ -197,10 +198,9 @@ export const ProfileEdit: React.FC = () => {
 
         {/* Editable Fields */}
         <div className="space-y-5">
-          {/* Nickname */}
           <div>
             <label className="block text-sm font-semibold text-gray-800 mb-2">
-              Nickname
+              {t('nicknameLabel')}
             </label>
             <div className="relative">
               <input
@@ -210,7 +210,7 @@ export const ProfileEdit: React.FC = () => {
                   setNickname(e.target.value);
                   setHasChanges(true);
                 }}
-                placeholder="Enter nickname"
+                placeholder={t('nicknamePlaceholder')}
                 maxLength={20}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00A8A3] focus:border-transparent bg-gray-50 text-sm"
               />
@@ -220,10 +220,9 @@ export const ProfileEdit: React.FC = () => {
             </div>
           </div>
 
-          {/* Bio */}
           <div>
             <label className="block text-sm font-semibold text-gray-800 mb-2">
-              Bio
+              {t('bioLabel')}
             </label>
             <div className="relative">
               <textarea
@@ -232,7 +231,7 @@ export const ProfileEdit: React.FC = () => {
                   setBio(e.target.value);
                   setHasChanges(true);
                 }}
-                placeholder="Tell others about yourself"
+                placeholder={t('bioPlaceholder')}
                 rows={4}
                 maxLength={200}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00A8A3] focus:border-transparent bg-gray-50 text-sm resize-none"
@@ -245,7 +244,7 @@ export const ProfileEdit: React.FC = () => {
 
           <div>
             <label className="block text-sm font-semibold text-gray-800 mb-2">
-              Region
+              {t('regionLabel')}
             </label>
             <button
               type="button"
@@ -254,16 +253,16 @@ export const ProfileEdit: React.FC = () => {
               style={{ borderColor: activityRegion ? '#00A8A3' : '#e5e7eb' }}
             >
               <span className="text-sm text-gray-700">
-                {activityRegion || UI_REGION_PLACEHOLDER}
+                {activityRegion || t('regionPlaceholder')}
               </span>
               <span className="text-sm font-medium" style={{ color: '#00A8A3' }}>
-                {activityRegion ? 'Change' : 'Set'}
+                {activityRegion ? t('change') : t('setRegion')}
               </span>
             </button>
             {activityRegion && (
               <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: '#00A8A3' }}>
-                <img src="/check_1.svg" alt="Verified" className="w-3 h-3" />
-                Verified
+                <img src="/check_1.svg" alt={t('verified')} className="w-3 h-3" />
+                {t('verified')}
               </p>
             )}
           </div>
@@ -273,5 +272,3 @@ export const ProfileEdit: React.FC = () => {
     </div>
   );
 };
-
-

@@ -5,10 +5,10 @@ import { saveProfile } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isDeviceProfileOnce, setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
-import { UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { suggestPiePieNickname } from '@/utils/nickname';
 import { saveMyProfileToDB } from '@/utils/dbSync';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const TEAL = '#00A8A3';
 
@@ -32,6 +32,7 @@ function clearDraft() {
 /** Sign-up: nickname, bio, region, profile photo */
 export const SignupProfile: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const draft = loadDraft();
   const [nickname, setNickname] = useState(draft?.nickname || '');
   const [bio, setBio] = useState(draft?.bio ?? '');
@@ -85,7 +86,7 @@ export const SignupProfile: React.FC = () => {
     try {
       setProfileImage(await uploadImageToR2(file, { folder: 'profiles' }));
     } catch {
-      alert('Could not upload image.');
+      alert(t('couldNotUpload'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
@@ -95,11 +96,11 @@ export const SignupProfile: React.FC = () => {
   const handleSubmit = async () => {
     const n = nickname.trim();
     if (n.length < 2) {
-      alert('Nickname must be at least 2 characters.');
+      alert(t('nicknameMin2'));
       return;
     }
     if (n.length > 20) {
-      alert('Nickname must be 20 characters or fewer.');
+      alert(t('nicknameMax20'));
       return;
     }
     const region = activityRegion.trim() || getRegion() || '';
@@ -108,14 +109,14 @@ export const SignupProfile: React.FC = () => {
       try {
         uploadedProfileImage = await uploadImageReferenceToR2(uploadedProfileImage, { folder: 'profiles' });
       } catch {
-        alert('Could not upload image.');
+        alert(t('couldNotUpload'));
         return;
       }
     }
 
     const profileData = {
       nickname: n,
-      bio: bio.trim() || 'I value safe, quick trades.',
+      bio: bio.trim() || t('defaultBio'),
       activityRegion: region,
       profileImage: uploadedProfileImage ?? '/default-avatar.jpg',
     };
@@ -127,7 +128,7 @@ export const SignupProfile: React.FC = () => {
       const ok = await saveMyProfileToDB(uid, profileData);
       setSavingProfile(false);
       if (!ok) {
-        alert('Could not save profile to server. Check your connection and try again.');
+        alert(t('couldNotSaveProfile'));
         return;
       }
     }
@@ -142,26 +143,26 @@ export const SignupProfile: React.FC = () => {
     <div className="min-h-screen bg-white pb-28">
       <TopBar
         leftContent={
-          <button type="button" onClick={() => navigate('/welcome')} className="p-2">
+          <button type="button" onClick={() => navigate('/welcome')} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Create profile"
+        title={t('createProfile')}
       />
 
       <div className="px-5 pt-6 space-y-6 max-w-lg mx-auto">
         <div className="flex flex-col items-center">
           <p className="text-sm text-gray-500 text-center mb-6 px-2 leading-relaxed">
-            Set up the profile you will use in piepie.
+            {t('setupProfileHint')}
           </p>
 
           <label
             htmlFor="signup-profile-file"
             className="relative w-[110px] h-[110px] shrink-0 cursor-pointer block"
           >
-            <span className="sr-only">Choose profile photo</span>
+            <span className="sr-only">{t('chooseProfilePhoto')}</span>
             <div className="w-full h-full rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
               {profileImage ? (
                 <img src={profileImage} alt="" className="w-full h-full object-cover pointer-events-none" />
@@ -193,27 +194,27 @@ export const SignupProfile: React.FC = () => {
               onChange={handleImage}
             />
           </label>
-          <span className="text-xs text-gray-400 mt-3">Profile photo (optional)</span>
+          <span className="text-xs text-gray-400 mt-3">{t('profilePhotoOptional')}</span>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Nickname *</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2">{t('nicknameLabel')} *</label>
           <input
             type="text"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
-            placeholder="2–20 characters"
+            placeholder={t('nicknameLengthPh')}
             maxLength={20}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#00A8A3] focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Bio</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2">{t('bioLabel')}</label>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            placeholder="One-line bio (optional)"
+            placeholder={t('bioOptionalPh')}
             rows={3}
             maxLength={200}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:outline-none resize-none"
@@ -221,13 +222,13 @@ export const SignupProfile: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Area</label>
+          <label className="block text-sm font-semibold text-gray-800 mb-2">{t('areaLabel')}</label>
           <button
             type="button"
             onClick={() => { saveDraft({ nickname, bio, profileImage }); navigate('/region/select'); }}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-left text-gray-800 flex justify-between items-center"
           >
-            <span>{activityRegion || getRegion() || UI_REGION_PLACEHOLDER}</span>
+            <span>{activityRegion || getRegion() || t('regionPlaceholder')}</span>
             <span className="text-gray-400">›</span>
           </button>
         </div>
@@ -236,12 +237,12 @@ export const SignupProfile: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 p-4 pb-8 bg-white border-t border-gray-100">
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           disabled={uploadingImage || savingProfile}
           className="w-full py-4 rounded-full text-white text-base font-bold"
           style={{ backgroundColor: TEAL }}
         >
-          {uploadingImage ? 'Uploading...' : savingProfile ? 'Saving...' : 'Get started'}
+          {uploadingImage ? t('uploading') : savingProfile ? t('saving') : t('getStarted')}
         </button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
-import { labelProductAvailability, isFreeShareListing, relativeTimeShort } from '@/locale/enUI';
+import { isFreeShareListing } from '@/locale/enUI';
 import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
 import { getOrdersByProductId } from '@/utils/orderStorage';
@@ -10,6 +10,9 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
+import { useLanguage } from '@/hooks/useLanguage';
+import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
+import type { HomeMessageKey } from '@/i18n/homeMessages';
 
 interface ListingCardProps {
   product: Product;
@@ -17,24 +20,38 @@ interface ListingCardProps {
   onClick?: () => void;
 }
 
+function relativeTimeLocalized(
+  isoDate: string,
+  t: (key: HomeMessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
+  if (diff < 1) return t('justNow');
+  if (diff < 60) return t('minutesAgo', { n: diff });
+  if (diff < 1440) return t('hoursAgo', { n: Math.floor(diff / 60) });
+  return t('daysAgo', { n: Math.floor(diff / 1440) });
+}
+
 function ListingCardMeta({
   product,
   likeCount,
   chatCount,
   productDisputeCount,
+  timeLabel,
 }: {
   product: Product;
   likeCount: number;
   chatCount: number;
   productDisputeCount: number;
+  timeLabel: string;
 }) {
+  const localizedRegion = useLocalizedRegion(product.region);
   const hasStats = likeCount > 0 || chatCount > 0 || productDisputeCount > 0;
 
   return (
     <>
       <div className="flex items-center justify-between gap-2 text-xs text-gray-400 mb-1">
-        <span className="truncate min-w-0">{product.region}</span>
-        <span className="flex-shrink-0">{relativeTimeShort(product.createdAt)}</span>
+        <span className="truncate min-w-0">{localizedRegion}</span>
+        <span className="flex-shrink-0">{timeLabel}</span>
       </div>
       {hasStats && (
         <div className="flex items-center gap-3 text-xs text-gray-400">
@@ -80,15 +97,24 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   layout = 'grid',
   onClick,
 }) => {
+  const { t } = useLanguage();
   const statusVariant: Record<ProductStatus, 'success' | 'warning' | 'default'> = {
     [PRODUCT_STATUS_VALUE.FOR_SALE]: 'success',
     [PRODUCT_STATUS_VALUE.RESERVED]: 'warning',
     [PRODUCT_STATUS_VALUE.SOLD]: 'default',
   };
 
-  const statusLabel = labelProductAvailability(product);
   const isFreeListing = isFreeShareListing(product);
+  const statusLabel =
+    isFreeListing && product.status === PRODUCT_STATUS_VALUE.FOR_SALE
+      ? t('free')
+      : product.status === PRODUCT_STATUS_VALUE.RESERVED
+        ? t('trading')
+        : product.status === PRODUCT_STATUS_VALUE.SOLD
+          ? t('sold')
+          : t('forSale');
   const disputeDisplay = getProductDisputeDisplay(product.id);
+  const timeLabel = relativeTimeLocalized(product.createdAt, t);
 
   const [liked, setLiked] = useState(() => isFavorite(product.id));
   const [likeCount, setLikeCount] = useState(() => getLikeCount(product.id));
@@ -169,7 +195,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           <div className="absolute top-2 left-2 flex flex-wrap gap-1">
             {disputeDisplay ? (
               <Badge variant={disputeDisplay === 'resolved' ? 'default' : 'danger'} size="sm">
-                {disputeDisplay === 'resolved' ? 'Dispute resolved' : 'In dispute'}
+                {disputeDisplay === 'resolved' ? t('sold') : t('inDispute')}
               </Badge>
             ) : (
               <>
@@ -189,7 +215,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           {product.isFreeShare || product.price === 0 ? (
             <p className="text-base font-bold text-green-600 mb-1 flex items-center gap-1">
               <span>🎁</span>
-              <span>Free</span>
+              <span>{t('free')}</span>
             </p>
           ) : (
             <p className="text-base font-bold text-gray-900 mb-1">
@@ -201,6 +227,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             likeCount={likeCount}
             chatCount={chatCount}
             productDisputeCount={productDisputeCount}
+            timeLabel={timeLabel}
           />
           {seller?.id && (
             <div className="flex items-center gap-2 mt-2">
@@ -270,7 +297,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end">
           {disputeDisplay ? (
             <Badge variant={disputeDisplay === 'resolved' ? 'default' : 'danger'} size="sm">
-              {disputeDisplay === 'resolved' ? 'Dispute resolved' : 'In dispute'}
+              {disputeDisplay === 'resolved' ? t('sold') : t('inDispute')}
             </Badge>
           ) : (
             <>
@@ -284,7 +311,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         </div>
         {(product.isFreeShare || product.price === 0) && (
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">
-            🎁 Free
+            🎁 {t('free')}
           </div>
         )}
       </div>
@@ -292,7 +319,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         {product.title}
       </h3>
       {product.isFreeShare || product.price === 0 ? (
-        <p className="text-base font-bold text-green-600 mb-1 truncate">Free</p>
+        <p className="text-base font-bold text-green-600 mb-1 truncate">{t('free')}</p>
       ) : (
         <p className="text-base font-bold text-gray-900 mb-1 truncate">
           {product.price.toLocaleString()} PI
@@ -303,6 +330,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         likeCount={likeCount}
         chatCount={chatCount}
         productDisputeCount={productDisputeCount}
+        timeLabel={timeLabel}
       />
     </div>
   );

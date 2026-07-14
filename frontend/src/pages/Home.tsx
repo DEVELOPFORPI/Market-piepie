@@ -3,21 +3,44 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
+import { LanguageButton } from '@/components/common/LanguageButton';
 import { HomeFeedChip, Product, HOME_FEED_CHIP_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { getLikeCount } from '@/utils/favoriteStorage';
 import { getRegion } from '@/utils/regionStorage';
-import { isFreeShareListing, labelFreeShareMenu, labelHomeFeedChip, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
+import { isFreeShareListing, UI_REGION_PLACEHOLDER } from '@/locale/enUI';
 import { fetchActiveHomePopup, type HomePopupView } from '@/utils/homePopupStorage';
 import { HomePromoPopup } from '@/components/home/HomePromoPopup';
 import { usePiPrice } from '@/utils/piPrice';
 import { syncProductsFromDB } from '@/utils/dbSync';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { HomeMessageKey } from '@/i18n/homeMessages';
+import { HOME_PROMO_SHOWN_SESSION_KEY } from '@/utils/authStorage';
 
 const defaultMockProducts: Product[] = [];
-const HOME_PROMO_SHOWN_SESSION_KEY = 'marketpiepie_home_popup_shown_this_session';
 const PRODUCT_CATEGORIES = ['Electronics', 'Furniture', 'Clothes', 'Hobby', 'Books', 'Other'] as const;
+
+const CHIP_I18N: Record<HomeFeedChip, HomeMessageKey> = {
+  [HOME_FEED_CHIP_VALUE.ALL]: 'chipAll',
+  [HOME_FEED_CHIP_VALUE.LATEST]: 'chipLatest',
+  [HOME_FEED_CHIP_VALUE.FREE]: 'chipFree',
+  [HOME_FEED_CHIP_VALUE.FOR_SALE]: 'chipForSale',
+  [HOME_FEED_CHIP_VALUE.POPULAR]: 'chipPopular',
+  [HOME_FEED_CHIP_VALUE.PRICE_LOW]: 'chipPriceLow',
+  [HOME_FEED_CHIP_VALUE.PRICE_HIGH]: 'chipPriceHigh',
+  [HOME_FEED_CHIP_VALUE.OLDEST]: 'chipOldest',
+};
+
+const CATEGORY_I18N: Record<(typeof PRODUCT_CATEGORIES)[number], HomeMessageKey> = {
+  Electronics: 'catElectronics',
+  Furniture: 'catFurniture',
+  Clothes: 'catClothes',
+  Hobby: 'catHobby',
+  Books: 'catBooks',
+  Other: 'catOther',
+};
 
 const feedChips: HomeFeedChip[] = [
   HOME_FEED_CHIP_VALUE.ALL,
@@ -71,6 +94,7 @@ function sortHomeProducts(products: Product[], chip: HomeFeedChip): Product[] {
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
   const [activeChip, setActiveChip] = useState<HomeFeedChip>(HOME_FEED_CHIP_VALUE.ALL);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
@@ -101,7 +125,6 @@ export const Home: React.FC = () => {
       setHomePromo({ show: false, popup });
       return;
     }
-    sessionStorage.setItem(HOME_PROMO_SHOWN_SESSION_KEY, '1');
     setHomePromo({ show: popup.enabled, popup });
   }, []);
 
@@ -124,6 +147,7 @@ export const Home: React.FC = () => {
   }, [refreshHomePromo]);
 
   const closeHomePromo = () => {
+    sessionStorage.setItem(HOME_PROMO_SHOWN_SESSION_KEY, '1');
     setHomePromo((s) => ({ ...s, show: false }));
   };
 
@@ -250,9 +274,13 @@ export const Home: React.FC = () => {
             onClick={() => navigate('/region/select')}
             className="flex items-center gap-1 text-sm font-medium text-gray-900"
           >
-            {selectedRegion} <span className="text-gray-400">▾</span>
+            {selectedRegion === UI_REGION_PLACEHOLDER ? t('chooseRegion') : selectedRegion}{' '}
+            <span className="text-gray-400">▾</span>
           </button>
-          <NotificationBellButton />
+          <div className="flex items-center gap-0.5">
+            <LanguageButton />
+            <NotificationBellButton />
+          </div>
         </div>
       </div>
 
@@ -265,7 +293,7 @@ export const Home: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Search title, region, seller"
+              placeholder={t('searchPlaceholder')}
               className="w-full px-4 py-3 pl-11 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3] bg-gray-50"
             />
             <svg
@@ -290,9 +318,9 @@ export const Home: React.FC = () => {
           <button
             onClick={() => setShowFilter(true)}
             className="p-3 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 bg-white"
-            aria-label="Filter"
+            aria-label={t('filter')}
           >
-            <img src="/b_1.svg" alt="Filter" className="w-5 h-5 object-contain" />
+            <img src="/b_1.svg" alt={t('filter')} className="w-5 h-5 object-contain" />
           </button>
         </div>
       </div>
@@ -312,7 +340,7 @@ export const Home: React.FC = () => {
             }`}
             style={activeChip === chip ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {labelHomeFeedChip(chip)}
+            {t(CHIP_I18N[chip])}
           </button>
         ))}
       </div>
@@ -320,7 +348,7 @@ export const Home: React.FC = () => {
       {/* Product grid */}
       {filteredProducts.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          {searchQuery ? 'No results.' : 'No listings yet.'}
+          {searchQuery ? t('noResults') : t('noListings')}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 px-4 py-4">
@@ -351,7 +379,7 @@ export const Home: React.FC = () => {
             type="button"
             onClick={(e) => { e.stopPropagation(); setPiExpanded(false); }}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-            aria-label="Collapse"
+            aria-label={t('collapse')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -371,7 +399,7 @@ export const Home: React.FC = () => {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-gray-500 font-medium">PI Network</span>
+              <span className="text-[10px] text-gray-500 font-medium">{t('piNetwork')}</span>
             </div>
           </div>
         </div>
@@ -383,7 +411,7 @@ export const Home: React.FC = () => {
           className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 flex-shrink-0 overflow-hidden transition-all duration-300 hover:bg-gray-50 ${
             piExpanded ? 'opacity-0 w-0 min-w-0 p-0 pointer-events-none' : ''
           }`}
-          aria-label="Expand PI price"
+          aria-label={t('expandPi')}
         >
           <img src="/pi_logo.svg" alt="PI" className="w-6 h-6 object-contain flex-shrink-0" />
           <div className="flex items-center gap-0.5">
@@ -406,11 +434,11 @@ export const Home: React.FC = () => {
       <BottomSheet
         isOpen={showFilter}
         onClose={() => setShowFilter(false)}
-        title="Filter"
+        title={t('filter')}
       >
         <div className="px-4 py-6 space-y-6">
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Listing type</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('listingType')}</h3>
             <button
               type="button"
               onClick={() => {
@@ -428,12 +456,12 @@ export const Home: React.FC = () => {
               }`}
               style={freeOnly ? { backgroundColor: '#00A8A3' } : undefined}
             >
-              {labelFreeShareMenu()} only
+              {t('freeOnly')}
             </button>
           </div>
 
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Category</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('category')}</h3>
             <div className="flex flex-wrap gap-2">
               {PRODUCT_CATEGORIES.map((cat) => (
                 <button
@@ -445,20 +473,20 @@ export const Home: React.FC = () => {
                   }`}
                   style={selectedCategory === cat ? { backgroundColor: '#00A8A3' } : undefined}
                 >
-                  {cat}
+                  {t(CATEGORY_I18N[cat])}
                 </button>
               ))}
             </div>
           </div>
 
           <div className={freeOnly ? 'opacity-50' : undefined}>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Price range</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('priceRange')}</h3>
             <div className="flex items-center gap-1">
               <input
                 type="number"
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
-                placeholder="Min"
+                placeholder={t('min')}
                 disabled={freeOnly}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
@@ -467,7 +495,7 @@ export const Home: React.FC = () => {
                 type="number"
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
-                placeholder="Max"
+                placeholder={t('max')}
                 disabled={freeOnly}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
@@ -486,14 +514,14 @@ export const Home: React.FC = () => {
               }}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"
             >
-              Reset
+              {t('reset')}
             </button>
             <button
               onClick={() => setShowFilter(false)}
               className="flex-1 px-4 py-3 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Apply
+              {t('apply')}
             </button>
           </div>
         </div>

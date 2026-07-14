@@ -5,10 +5,12 @@ import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { createOrder } from '@/utils/orderStorage';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export const Offer: React.FC = () => {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const { t } = useLanguage();
   const [product, setProduct] = useState<Product | null>(null);
   const [price, setPrice] = useState('');
 
@@ -17,14 +19,14 @@ export const Offer: React.FC = () => {
     const found = allProducts.find((p) => p.id === productId);
     if (found) {
       if (found.status === PRODUCT_STATUS_VALUE.SOLD) {
-        alert('You cannot offer on a sold listing.');
+        alert(t('cannotOfferSold'));
         navigate(-1);
         return;
       }
       setProduct(found);
       setPrice(String(found.price));
     }
-  }, [productId, navigate]);
+  }, [productId, navigate, t]);
 
   const handleSubmit = async () => {
     if (!product || !price) return;
@@ -35,11 +37,11 @@ export const Offer: React.FC = () => {
       tradeMethod: TRADE_METHOD_VALUE.IN_PERSON,
     });
     if (!order) {
-      alert('Could not send offer. Check your connection and try again.');
+      alert(t('couldNotSendOffer'));
       return;
     }
 
-    alert('Offer sent.');
+    alert(t('offerSent'));
     navigate(`/order/${order.id}`, { replace: true });
   };
 
@@ -49,17 +51,16 @@ export const Offer: React.FC = () => {
     <div className="min-h-screen bg-white pb-24">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Make offer"
+        title={t('makeOffer')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
-        {/* Product Info */}
         {product && (
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex gap-3">
@@ -80,18 +81,16 @@ export const Offer: React.FC = () => {
           </div>
         )}
 
-        {/* Seller Info */}
         {product && (
           <div>
-            <h2 className="text-sm font-medium text-gray-700 mb-3">Seller</h2>
+            <h2 className="text-sm font-medium text-gray-700 mb-3">{t('sellerLabel')}</h2>
             <SellerMiniCard seller={product.seller} />
           </div>
         )}
 
-        {/* Price */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Your offer (Pi)
+            {t('yourOfferPi')}
           </label>
           <input
             type="number"
@@ -102,28 +101,28 @@ export const Offer: React.FC = () => {
           />
           {product && Number(price) !== product.price && Number(price) > 0 && (
             <p className="text-xs text-gray-500 mt-1">
-              List price: {product.price.toLocaleString()} Pi
+              {t('listPriceLine', { price: product.price.toLocaleString() })}
               {Number(price) < product.price && (
                 <span className="text-red-500 ml-1">
-                  ({Math.round(((product.price - Number(price)) / product.price) * 100)}% below list)
+                  {t('belowListPct', {
+                    pct: Math.round(((product.price - Number(price)) / product.price) * 100),
+                  })}
                 </span>
               )}
             </p>
           )}
         </div>
 
-        {/* Policy Notice */}
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-          <p className="text-sm font-medium text-blue-900">Trade notes</p>
+          <p className="text-sm font-medium text-blue-900">{t('tradeNotes')}</p>
           <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-            <li>The platform does not handle payment</li>
-            <li>You arrange payment directly with the seller</li>
-            <li>Use disputes if there is a problem</li>
+            <li>{t('tradeNoteNoPayment')}</li>
+            <li>{t('tradeNoteArrangeDirect')}</li>
+            <li>{t('tradeNoteDisputes')}</li>
           </ul>
         </div>
       </div>
 
-      {/* Submit Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
           onClick={handleSubmit}
@@ -131,7 +130,7 @@ export const Offer: React.FC = () => {
           className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
           style={canSubmit ? { backgroundColor: '#00A8A3' } : undefined}
         >
-          Send offer
+          {t('sendOffer')}
         </button>
       </div>
     </div>

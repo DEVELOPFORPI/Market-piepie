@@ -1,0 +1,504 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const LANGS = [
+  'en', 'ko', 'zh', 'ja', 'es', 'pt', 'fr', 'de', 'id', 'vi', 'th', 'hi', 'ar', 'ru', 'tr',
+  'it', 'pl', 'nl', 'fil', 'uk', 'bn', 'ms', 'sw', 'fa', 'ur',
+];
+
+/** @type {Record<string, Record<string, string>>} */
+const entries = {
+  reviewSubmitted: {
+    en: 'Review submitted', ko: '리뷰 작성 완료', zh: '已提交评价', ja: 'レビュー投稿済み',
+    es: 'Reseña enviada', pt: 'Avaliação enviada', fr: 'Avis envoyé', de: 'Bewertung gesendet',
+    id: 'Ulasan dikirim', vi: 'Đã gửi đánh giá', th: 'ส่งรีวิวแล้ว', hi: 'समीक्षा भेजी गई',
+    ar: 'تم إرسال التقييم', ru: 'Отзыв отправлен', tr: 'Yorum gönderildi', it: 'Recensione inviata',
+    pl: 'Opinia wysłana', nl: 'Review verzonden', fil: 'Naipasa ang review', uk: 'Відгук надіслано',
+    bn: 'রিভিউ পাঠানো হয়েছে', ms: 'Ulasan dihantar', sw: 'Hakiki imetumwa', fa: 'نظر ارسال شد',
+    ur: 'جائزہ بھیج دیا گیا',
+  },
+  writeReview: {
+    en: 'Write review', ko: '리뷰 쓰기', zh: '写评价', ja: 'レビューを書く',
+    es: 'Escribir reseña', pt: 'Escrever avaliação', fr: 'Écrire un avis', de: 'Bewertung schreiben',
+    id: 'Tulis ulasan', vi: 'Viết đánh giá', th: 'เขียนรีวิว', hi: 'समीक्षा लिखें',
+    ar: 'كتابة تقييم', ru: 'Написать отзыв', tr: 'Yorum yaz', it: 'Scrivi recensione',
+    pl: 'Napisz opinię', nl: 'Review schrijven', fil: 'Sumulat ng review', uk: 'Написати відгук',
+    bn: 'রিভিউ লিখুন', ms: 'Tulis ulasan', sw: 'Andika hakiki', fa: 'نوشتن نظر',
+    ur: 'جائزہ لکھیں',
+  },
+  sendOffer: {
+    en: 'Send offer', ko: '제안하기', zh: '出价', ja: 'オファーを送る',
+    es: 'Enviar oferta', pt: 'Enviar oferta', fr: 'Envoyer une offre', de: 'Angebot senden',
+    id: 'Kirim penawaran', vi: 'Gửi đề nghị', th: 'ส่งข้อเสนอ', hi: 'ऑफ़र भेजें',
+    ar: 'إرسال عرض', ru: 'Отправить предложение', tr: 'Teklif gönder', it: 'Invia offerta',
+    pl: 'Wyślij ofertę', nl: 'Bod sturen', fil: 'Magpadala ng offer', uk: 'Надіслати пропозицію',
+    bn: 'অফার পাঠান', ms: 'Hantar tawaran', sw: 'Tuma ofa', fa: 'ارسال پیشنهاد',
+    ur: 'پیشکش بھیجیں',
+  },
+  confirmReceipt: {
+    en: 'Confirm receipt', ko: '수령 확인', zh: '确认收货', ja: '受領を確認',
+    es: 'Confirmar recepción', pt: 'Confirmar recebimento', fr: 'Confirmer la réception', de: 'Erhalt bestätigen',
+    id: 'Konfirmasi penerimaan', vi: 'Xác nhận nhận hàng', th: 'ยืนยันการรับ', hi: 'प्राप्ति की पुष्टि',
+    ar: 'تأكيد الاستلام', ru: 'Подтвердить получение', tr: 'Teslimatı onayla', it: 'Conferma ricezione',
+    pl: 'Potwierdź odbiór', nl: 'Ontvangst bevestigen', fil: 'Kumpirmahin ang pagtanggap', uk: 'Підтвердити отримання',
+    bn: 'প্রাপ্তি নিশ্চিত করুন', ms: 'Sahkan penerimaan', sw: 'Thibitisha upokeaji', fa: 'تأیید دریافت',
+    ur: 'وصولی کی تصدیق',
+  },
+  openDispute: {
+    en: 'Open dispute', ko: '분쟁 열기', zh: '发起争议', ja: '紛争を開く',
+    es: 'Abrir disputa', pt: 'Abrir disputa', fr: 'Ouvrir un litige', de: 'Streitfall öffnen',
+    id: 'Buka sengketa', vi: 'Mở tranh chấp', th: 'เปิดข้อพิพาท', hi: 'विवाद खोलें',
+    ar: 'فتح نزاع', ru: 'Открыть спор', tr: 'Anlaşmazlık aç', it: 'Apri controversia',
+    pl: 'Otwórz spór', nl: 'Geschil openen', fil: 'Magbukas ng dispute', uk: 'Відкрити спір',
+    bn: 'বিবাদ খুলুন', ms: 'Buka pertikaian', sw: 'Fungua mzozo', fa: 'باز کردن اختلاف',
+    ur: 'تنازعہ کھولیں',
+  },
+  scheduleMeetup: {
+    en: 'Schedule meetup', ko: '약속 잡기', zh: '安排见面', ja: '待ち合わせを設定',
+    es: 'Programar quedada', pt: 'Agendar encontro', fr: 'Planifier un rendez-vous', de: 'Treffen planen',
+    id: 'Jadwalkan temu', vi: 'Hẹn gặp', th: 'นัดพบ', hi: 'मिलने का समय तय करें',
+    ar: 'جدولة لقاء', ru: 'Назначить встречу', tr: 'Buluşma planla', it: 'Programma incontro',
+    pl: 'Umów spotkanie', nl: 'Afspraak plannen', fil: 'Mag-iskedyul ng meetup', uk: 'Запланувати зустріч',
+    bn: 'দেখা করার সময় নির্ধারণ', ms: 'Jadualkan perjumpaan', sw: 'Panga mkutano', fa: 'زمان‌بندی ملاقات',
+    ur: 'ملاقات شیڈول کریں',
+  },
+  confirmComplete: {
+    en: 'Confirm complete', ko: '완료 확인', zh: '确认完成', ja: '完了を確認',
+    es: 'Confirmar finalización', pt: 'Confirmar conclusão', fr: 'Confirmer la fin', de: 'Abschluss bestätigen',
+    id: 'Konfirmasi selesai', vi: 'Xác nhận hoàn tất', th: 'ยืนยันเสร็จสิ้น', hi: 'पूर्ण की पुष्टि',
+    ar: 'تأكيد الإكمال', ru: 'Подтвердить завершение', tr: 'Tamamlamayı onayla', it: 'Conferma completamento',
+    pl: 'Potwierdź zakończenie', nl: 'Afronden bevestigen', fil: 'Kumpirmahin ang tapos', uk: 'Підтвердити завершення',
+    bn: 'সম্পন্ন নিশ্চিত করুন', ms: 'Sahkan selesai', sw: 'Thibitisha ukamilifu', fa: 'تأیید تکمیل',
+    ur: 'تکمیل کی تصدیق',
+  },
+  confirmTradeCompletion: {
+    en: 'Confirm trade completion?', ko: '거래를 완료할까요?', zh: '确认交易完成？', ja: '取引完了を確認しますか？',
+    es: '¿Confirmar finalización del trato?', pt: 'Confirmar conclusão da troca?', fr: 'Confirmer la fin de l’échange ?', de: 'Geschäftsabschluss bestätigen?',
+    id: 'Konfirmasi penyelesaian transaksi?', vi: 'Xác nhận hoàn tất giao dịch?', th: 'ยืนยันว่าการซื้อขายเสร็จแล้ว?', hi: 'लेन-देन पूरा करें?',
+    ar: 'تأكيد إكمال الصفقة؟', ru: 'Подтвердить завершение сделки?', tr: 'Ticaret tamamlamayı onayla?', it: 'Confermare completamento scambio?',
+    pl: 'Potwierdzić zakończenie transakcji?', nl: 'Afronden van de handel bevestigen?', fil: 'Kumpirmahin ang pagtatapos ng trade?', uk: 'Підтвердити завершення угоди?',
+    bn: 'লেনদেন সম্পন্ন নিশ্চিত করবেন?', ms: 'Sahkan penyiapan dagangan?', sw: 'Thibitisha kukamilika kwa biashara?', fa: 'تکمیل معامله را تأیید می‌کنید؟',
+    ur: 'لین دین کی تکمیل کی تصدیق؟',
+  },
+  couldNotLoadListing: {
+    en: 'Could not load listing.', ko: '상품을 불러오지 못했습니다.', zh: '无法加载商品。', ja: '出品を読み込めませんでした。',
+    es: 'No se pudo cargar el anuncio.', pt: 'Não foi possível carregar o anúncio.', fr: 'Impossible de charger l’annonce.', de: 'Anzeige konnte nicht geladen werden.',
+    id: 'Tidak dapat memuat listing.', vi: 'Không tải được tin đăng.', th: 'โหลดประกาศไม่ได้', hi: 'लिस्टिंग लोड नहीं हो सकी।',
+    ar: 'تعذر تحميل الإعلان.', ru: 'Не удалось загрузить объявление.', tr: 'İlan yüklenemedi.', it: 'Impossibile caricare l’annuncio.',
+    pl: 'Nie udało się wczytać ogłoszenia.', nl: 'Advertentie kon niet worden geladen.', fil: 'Hindi ma-load ang listing.', uk: 'Не вдалося завантажити оголошення.',
+    bn: 'লিস্টিং লোড করা যায়নি।', ms: 'Tidak dapat memuatkan senarai.', sw: 'Imeshindwa kupakia tangazo.', fa: 'بارگذاری آگهی ممکن نشد.',
+    ur: 'لسٹنگ لوڈ نہ ہو سکی۔',
+  },
+  couldNotLoadPartner: {
+    en: 'Could not load chat partner. Try again.', ko: '상대방을 불러오지 못했습니다. 다시 시도해 주세요.', zh: '无法加载聊天对象，请重试。', ja: '相手を読み込めませんでした。もう一度お試しください。',
+    es: 'No se pudo cargar el interlocutor. Inténtalo de nuevo.', pt: 'Não foi possível carregar o parceiro. Tente novamente.', fr: 'Impossible de charger le correspondant. Réessayez.', de: 'Chatpartner konnte nicht geladen werden. Erneut versuchen.',
+    id: 'Tidak dapat memuat mitra chat. Coba lagi.', vi: 'Không tải được đối tác chat. Thử lại.', th: 'โหลดคู่สนทนาไม่ได้ ลองอีกครั้ง', hi: 'चैट साथी लोड नहीं हुआ। फिर कोशिश करें।',
+    ar: 'تعذر تحميل الطرف الآخر. حاول مرة أخرى.', ru: 'Не удалось загрузить собеседника. Повторите.', tr: 'Sohbet partneri yüklenemedi. Tekrar deneyin.', it: 'Impossibile caricare l’interlocutore. Riprova.',
+    pl: 'Nie udało się wczytać rozmówcy. Spróbuj ponownie.', nl: 'Chatpartner kon niet worden geladen. Probeer opnieuw.', fil: 'Hindi ma-load ang kausap. Subukan ulit.', uk: 'Не вдалося завантажити співрозмовника. Спробуйте ще.',
+    bn: 'চ্যাট পার্টনার লোড হয়নি। আবার চেষ্টা করুন।', ms: 'Tidak dapat memuatkan rakan sembang. Cuba lagi.', sw: 'Imeshindwa kupakia mwenzi wa gumzo. Jaribu tena.', fa: 'بارگذاری طرف مقابل ممکن نشد. دوباره تلاش کنید.',
+    ur: 'چیٹ پارٹنر لوڈ نہ ہو سکا۔ دوبارہ کوشش کریں۔',
+  },
+  couldNotStartMeetup: {
+    en: 'Could not start meetup. Check your connection and try again.', ko: '약속을 시작하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.', zh: '无法开始见面，请检查网络后重试。', ja: '待ち合わせを開始できませんでした。接続を確認して再試行してください。',
+    es: 'No se pudo iniciar la quedada. Comprueba la conexión e inténtalo de nuevo.', pt: 'Não foi possível iniciar o encontro. Verifique a conexão e tente novamente.', fr: 'Impossible de démarrer le rendez-vous. Vérifiez la connexion et réessayez.', de: 'Treffen konnte nicht gestartet werden. Verbindung prüfen und erneut versuchen.',
+    id: 'Tidak dapat memulai temu. Periksa koneksi dan coba lagi.', vi: 'Không bắt đầu được cuộc hẹn. Kiểm tra kết nối và thử lại.', th: 'เริ่มนัดพบไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่', hi: 'मुलाकात शुरू नहीं हुई। कनेक्शन जांचें।',
+    ar: 'تعذر بدء اللقاء. تحقق من الاتصال وحاول مرة أخرى.', ru: 'Не удалось начать встречу. Проверьте соединение.', tr: 'Buluşma başlatılamadı. Bağlantınızı kontrol edin.', it: 'Impossibile avviare l’incontro. Controlla la connessione.',
+    pl: 'Nie udało się rozpocząć spotkania. Sprawdź połączenie.', nl: 'Afspraak kon niet worden gestart. Controleer je verbinding.', fil: 'Hindi masimulan ang meetup. Suriin ang koneksyon.', uk: 'Не вдалося розпочати зустріч. Перевірте з’єднання.',
+    bn: 'মिटআপ শুরু যায়নি। সংযোগ পরীক্ষা করুন।', ms: 'Tidak dapat mulakan perjumpaan. Semak sambungan.', sw: 'Imeshindwa kuanza mkutano. Angalia muunganisho.', fa: 'شروع ملاقات ممکن نشد. اتصال را بررسی کنید.',
+    ur: 'ملاقات شروع نہ ہو سکی۔ کنکشن چیک کریں۔',
+  },
+  couldNotStartMeetupScheduling: {
+    en: 'Could not start meetup scheduling. Try again.', ko: '약속 잡기를 시작하지 못했습니다. 다시 시도해 주세요.', zh: '无法开始安排见面，请重试。', ja: '待ち合わせの調整を開始できませんでした。もう一度お試しください。',
+    es: 'No se pudo iniciar la programación. Inténtalo de nuevo.', pt: 'Não foi possível iniciar o agendamento. Tente novamente.', fr: 'Impossible de démarrer la planification. Réessayez.', de: 'Planung konnte nicht gestartet werden. Erneut versuchen.',
+    id: 'Tidak dapat memulai penjadwalan. Coba lagi.', vi: 'Không bắt đầu được lịch hẹn. Thử lại.', th: 'เริ่มจัดนัดพบไม่ได้ ลองอีกครั้ง', hi: 'शेड्यूलिंग शुरू नहीं हुई। फिर कोशिश करें।',
+    ar: 'تعذر بدء الجدولة. حاول مرة أخرى.', ru: 'Не удалось начать планирование. Повторите.', tr: 'Planlama başlatılamadı. Tekrar deneyin.', it: 'Impossibile avviare la pianificazione. Riprova.',
+    pl: 'Nie udało się rozpocząć planowania. Spróbuj ponownie.', nl: 'Plannen kon niet worden gestart. Probeer opnieuw.', fil: 'Hindi masimulan ang pag-iskedyul. Subukan ulit.', uk: 'Не вдалося почати планування. Спробуйте ще.',
+    bn: 'শিডিউলিং শুরু যায়নি। আবার চেষ্টা করুন।', ms: 'Tidak dapat mulakan penjadualan. Cuba lagi.', sw: 'Imeshindwa kuanza upangaji. Jaribu tena.', fa: 'شروع زمان‌بندی ممکن نشد. دوباره تلاش کنید.',
+    ur: 'شیڈولنگ شروع نہ ہو سکی۔ دوبارہ کوشش کریں۔',
+  },
+  details: {
+    en: 'Details', ko: '상세', zh: '详情', ja: '詳細',
+    es: 'Detalles', pt: 'Detalhes', fr: 'Détails', de: 'Details',
+    id: 'Detail', vi: 'Chi tiết', th: 'รายละเอียด', hi: 'विवरण',
+    ar: 'التفاصيل', ru: 'Подробнее', tr: 'Ayrıntılar', it: 'Dettagli',
+    pl: 'Szczegóły', nl: 'Details', fil: 'Detalye', uk: 'Подробиці',
+    bn: 'বিস্তারিত', ms: 'Butiran', sw: 'Maelezo', fa: 'جزئیات',
+    ur: 'تفصیل',
+  },
+  meetupStartedAria: {
+    en: 'Meetup started', ko: '약속 잡기 시작됨', zh: '已开始安排见面', ja: '待ち合わせの調整が開始されました',
+    es: 'Quedada iniciada', pt: 'Encontro iniciado', fr: 'Rendez-vous démarré', de: 'Treffen gestartet',
+    id: 'Temu dimulai', vi: 'Đã bắt đầu hẹn', th: 'เริ่มนัดพบแล้ว', hi: 'मुलाकात शुरू',
+    ar: 'بدأ اللقاء', ru: 'Встреча начата', tr: 'Buluşma başladı', it: 'Incontro avviato',
+    pl: 'Spotkanie rozpoczęte', nl: 'Afspraak gestart', fil: 'Nagsimula ang meetup', uk: 'Зустріч розпочато',
+    bn: 'মিটআপ শুরু', ms: 'Perjumpaan bermula', sw: 'Mkutano umeanza', fa: 'ملاقات شروع شد',
+    ur: 'ملاقات شروع',
+  },
+  meetupStartedTitle: {
+    en: 'The other person started scheduling a meetup', ko: '상대방이 약속 잡기를 시작했습니다', zh: '对方已开始安排见面', ja: '相手が待ち合わせの調整を開始しました',
+    es: 'La otra persona empezó a programar una quedada', pt: 'A outra pessoa começou a agendar um encontro', fr: 'L’autre personne a commencé à planifier un rendez-vous', de: 'Die andere Person hat die Treffenplanung gestartet',
+    id: 'Pihak lain mulai menjadwalkan temu', vi: 'Đối phương đã bắt đầu hẹn gặp', th: 'อีกฝ่ายเริ่มจัดนัดพบแล้ว', hi: 'दूसरे पक्ष ने मुलाकात तय करना शुरू किया',
+    ar: 'بدأ الطرف الآخر جدولة لقاء', ru: 'Собеседник начал назначать встречу', tr: 'Karşı taraf buluşma planlamaya başladı', it: 'L’altra persona ha iniziato a programmare un incontro',
+    pl: 'Druga strona zaczęła planować spotkanie', nl: 'De andere persoon is een afspraak gaan plannen', fil: 'Nagsimulang mag-iskedyul ang kabilang partido', uk: 'Інша сторона почала планувати зустріч',
+    bn: 'অন্য পক্ষ মিটআপ শিডিউল শুরু করেছে', ms: 'Pihak lain mula menjadualkan perjumpaan', sw: 'Mtu mwingine ameanza kupanga mkutano', fa: 'طرف مقابل زمان‌بندی ملاقات را شروع کرد',
+    ur: 'دوسری فریق نے ملاقات شیڈول شروع کی',
+  },
+  meetupStartedHint: {
+    en: 'Check the chat for meetup details.', ko: '채팅에서 약속 정보를 확인해 주세요.', zh: '请在聊天中查看见面详情。', ja: 'チャットで待ち合わせ詳細を確認してください。',
+    es: 'Revisa el chat para ver los detalles.', pt: 'Veja no chat os detalhes do encontro.', fr: 'Consultez le chat pour les détails.', de: 'Prüfe den Chat auf Treffen-Details.',
+    id: 'Periksa chat untuk detail temu.', vi: 'Xem chat để biết chi tiết hẹn.', th: 'ดูรายละเอียดนัดในแชท', hi: 'चैट में मुलाकात विवरण देखें।',
+    ar: 'تحقق من الدردشة لتفاصيل اللقاء.', ru: 'Смотрите детали встречи в чате.', tr: 'Buluşma ayrıntıları için sohbeti kontrol edin.', it: 'Controlla la chat per i dettagli.',
+    pl: 'Sprawdź szczegóły spotkania na czacie.', nl: 'Bekijk de chat voor afspraakdetails.', fil: 'Tingnan ang chat para sa detalye.', uk: 'Перегляньте деталі зустрічі в чаті.',
+    bn: 'চ্যাটে মিটআপের বিস্তারিত দেখুন।', ms: 'Semak sembang untuk butiran.', sw: 'Angalia gumzo kwa maelezo ya mkutano.', fa: 'جزئیات ملاقات را در چت ببینید.',
+    ur: 'ملاقات کی تفصیل کے لیے چیٹ دیکھیں۔',
+  },
+  listingRemoved: {
+    en: 'Listing removed', ko: '삭제된 상품', zh: '商品已删除', ja: '出品は削除されました',
+    es: 'Anuncio eliminado', pt: 'Anúncio removido', fr: 'Annonce supprimée', de: 'Anzeige entfernt',
+    id: 'Listing dihapus', vi: 'Tin đăng đã xóa', th: 'ประกาศถูกลบ', hi: 'लिस्टिंग हटाई गई',
+    ar: 'تم حذف الإعلان', ru: 'Объявление удалено', tr: 'İlan kaldırıldı', it: 'Annuncio rimosso',
+    pl: 'Ogłoszenie usunięte', nl: 'Advertentie verwijderd', fil: 'Inalis ang listing', uk: 'Оголошення видалено',
+    bn: 'লিস্টিং সরানো হয়েছে', ms: 'Senarai dialih keluar', sw: 'Tangazo limeondolewa', fa: 'آگهی حذف شد',
+    ur: 'لسٹنگ ہٹا دی گئی',
+  },
+  viewListing: {
+    en: 'View listing', ko: '상품 보기', zh: '查看商品', ja: '出品を見る',
+    es: 'Ver anuncio', pt: 'Ver anúncio', fr: 'Voir l’annonce', de: 'Anzeige ansehen',
+    id: 'Lihat listing', vi: 'Xem tin đăng', th: 'ดูประกาศ', hi: 'लिस्टिंग देखें',
+    ar: 'عرض الإعلان', ru: 'Смотреть объявление', tr: 'İlanı gör', it: 'Vedi annuncio',
+    pl: 'Zobacz ogłoszenie', nl: 'Advertentie bekijken', fil: 'Tingnan ang listing', uk: 'Переглянути оголошення',
+    bn: 'লিস্টিং দেখুন', ms: 'Lihat senarai', sw: 'Tazama tangazo', fa: 'مشاهده آگهی',
+    ur: 'لسٹنگ دیکھیں',
+  },
+  meetupPlace: {
+    en: 'Meetup place', ko: '만남 장소', zh: '见面地点', ja: '待ち合わせ場所',
+    es: 'Lugar de quedada', pt: 'Local do encontro', fr: 'Lieu du rendez-vous', de: 'Treffpunkt',
+    id: 'Tempat temu', vi: 'Địa điểm hẹn', th: 'สถานที่นัดพบ', hi: 'मिलने का स्थान',
+    ar: 'مكان اللقاء', ru: 'Место встречи', tr: 'Buluşma yeri', it: 'Luogo incontro',
+    pl: 'Miejsce spotkania', nl: 'Afspraakplek', fil: 'Lugar ng meetup', uk: 'Місце зустрічі',
+    bn: 'মিলন স্থান', ms: 'Tempat jumpa', sw: 'Mahali pa mkutano', fa: 'محل ملاقات',
+    ur: 'ملاقات کی جگہ',
+  },
+  dateLine: {
+    en: 'Date {when}', ko: '일시 {when}', zh: '时间 {when}', ja: '日時 {when}',
+    es: 'Fecha {when}', pt: 'Data {when}', fr: 'Date {when}', de: 'Datum {when}',
+    id: 'Tanggal {when}', vi: 'Ngày {when}', th: 'วันที่ {when}', hi: 'तिथि {when}',
+    ar: 'التاريخ {when}', ru: 'Дата {when}', tr: 'Tarih {when}', it: 'Data {when}',
+    pl: 'Data {when}', nl: 'Datum {when}', fil: 'Petsa {when}', uk: 'Дата {when}',
+    bn: 'তারিখ {when}', ms: 'Tarikh {when}', sw: 'Tarehe {when}', fa: 'تاریخ {when}',
+    ur: 'تاریخ {when}',
+  },
+  placeTimeNotSetYet: {
+    en: 'Place and time not set yet', ko: '장소와 시간이 아직 정해지지 않았습니다', zh: '地点和时间尚未设置', ja: '場所と時間はまだ未設定です',
+    es: 'Lugar y hora aún no definidos', pt: 'Local e horário ainda não definidos', fr: 'Lieu et heure pas encore définis', de: 'Ort und Zeit noch nicht festgelegt',
+    id: 'Tempat dan waktu belum diatur', vi: 'Chưa đặt địa điểm và giờ', th: 'ยังไม่ได้ตั้งสถานที่และเวลา', hi: 'स्थान और समय अभी तय नहीं',
+    ar: 'المكان والوقت غير محددين بعد', ru: 'Место и время ещё не заданы', tr: 'Yer ve saat henüz ayarlanmadı', it: 'Luogo e ora non ancora impostati',
+    pl: 'Miejsce i czas jeszcze nieustalone', nl: 'Plek en tijd nog niet ingesteld', fil: 'Hindi pa nakatakda ang lugar at oras', uk: 'Місце і час ще не задані',
+    bn: 'স্থান ও সময় এখনো সেট নয়', ms: 'Tempat dan masa belum ditetapkan', sw: 'Mahali na muda bado hajawekwa', fa: 'مکان و زمان هنوز تنظیم نشده',
+    ur: 'جگہ اور وقت ابھی طے نہیں',
+  },
+  freeShareRequest: {
+    en: 'Free share request', ko: '나눔 요청', zh: '免费分享请求', ja: '無料譲渡リクエスト',
+    es: 'Solicitud de regalo', pt: 'Pedido de doação', fr: 'Demande de don', de: 'Verschenk-Anfrage',
+    id: 'Permintaan berbagi gratis', vi: 'Yêu cầu chia sẻ miễn phí', th: 'คำขอแจกฟรี', hi: 'मुफ़्त शेयर अनुरोध',
+    ar: 'طلب مشاركة مجانية', ru: 'Запрос на бесплатную передачу', tr: 'Ücretsiz paylaşım isteği', it: 'Richiesta regalo',
+    pl: 'Prośba o darmowe oddanie', nl: 'Gratis deelverzoek', fil: 'Kahilingan sa libreng share', uk: 'Запит на безоплатну передачу',
+    bn: 'ফ্রি শেয়ার অনুরোধ', ms: 'Permintaan kongsi percuma', sw: 'Ombi la kushiriki bila malipo', fa: 'درخواست اشتراک رایگان',
+    ur: 'مفت شیئر کی درخواست',
+  },
+  wasPrice: {
+    en: 'Was {n}', ko: '기존 {n}', zh: '原价 {n}', ja: '元の価格 {n}',
+    es: 'Antes {n}', pt: 'Era {n}', fr: 'Était {n}', de: 'War {n}',
+    id: 'Sebelumnya {n}', vi: 'Giá cũ {n}', th: 'เดิม {n}', hi: 'पहले {n}',
+    ar: 'كان {n}', ru: 'Было {n}', tr: 'Önceki {n}', it: 'Era {n}',
+    pl: 'Było {n}', nl: 'Was {n}', fil: 'Dating {n}', uk: 'Було {n}',
+    bn: 'আগে {n}', ms: 'Dahulu {n}', sw: 'Ilikuwa {n}', fa: 'قبلاً {n}',
+    ur: 'پہلے {n}',
+  },
+  offerAmount: {
+    en: 'Offer {n}', ko: '제안 {n}', zh: '出价 {n}', ja: 'オファー {n}',
+    es: 'Oferta {n}', pt: 'Oferta {n}', fr: 'Offre {n}', de: 'Angebot {n}',
+    id: 'Penawaran {n}', vi: 'Đề nghị {n}', th: 'ข้อเสนอ {n}', hi: 'ऑफ़र {n}',
+    ar: 'العرض {n}', ru: 'Предложение {n}', tr: 'Teklif {n}', it: 'Offerta {n}',
+    pl: 'Oferta {n}', nl: 'Bod {n}', fil: 'Offer {n}', uk: 'Пропозиція {n}',
+    bn: 'অফার {n}', ms: 'Tawaran {n}', sw: 'Ofa {n}', fa: 'پیشنهاد {n}',
+    ur: 'پیشکش {n}',
+  },
+  accept: {
+    en: 'Accept', ko: '수락', zh: '接受', ja: '承認',
+    es: 'Aceptar', pt: 'Aceitar', fr: 'Accepter', de: 'Annehmen',
+    id: 'Terima', vi: 'Chấp nhận', th: 'ยอมรับ', hi: 'स्वीकारें',
+    ar: 'قبول', ru: 'Принять', tr: 'Kabul et', it: 'Accetta',
+    pl: 'Akceptuj', nl: 'Accepteren', fil: 'Tanggapin', uk: 'Прийняти',
+    bn: 'গ্রহণ', ms: 'Terima', sw: 'Kubali', fa: 'پذیرش',
+    ur: 'قبول',
+  },
+  decline: {
+    en: 'Decline', ko: '거절', zh: '拒绝', ja: '拒否',
+    es: 'Rechazar', pt: 'Recusar', fr: 'Refuser', de: 'Ablehnen',
+    id: 'Tolak', vi: 'Từ chối', th: 'ปฏิเสธ', hi: 'अस्वीकारें',
+    ar: 'رفض', ru: 'Отклонить', tr: 'Reddet', it: 'Rifiuta',
+    pl: 'Odrzuć', nl: 'Afwijzen', fil: 'Tanggihan', uk: 'Відхилити',
+    bn: 'প্রত্যাখ্যান', ms: 'Tolak', sw: 'Kataa', fa: 'رد',
+    ur: 'مسترد',
+  },
+  declineShareConfirm: {
+    en: 'Decline the free share request for "{title}"?', ko: '«{title}» 나눔 요청을 거절할까요?', zh: '拒绝「{title}」的免费分享请求？', ja: '「{title}」の無料譲渡リクエストを拒否しますか？',
+    es: '¿Rechazar la solicitud de regalo de «{title}»?', pt: 'Recusar o pedido de doação de «{title}»?', fr: 'Refuser la demande de don pour « {title} » ?', de: 'Verschenk-Anfrage für „{title}“ ablehnen?',
+    id: 'Tolak permintaan berbagi gratis untuk "{title}"?', vi: 'Từ chối yêu cầu chia sẻ miễn phí cho "{title}"?', th: 'ปฏิเสธคำขอแจกฟรีของ "{title}"?', hi: '"{title}" का मुफ़्त शेयर अनुरोध अस्वीकारें?',
+    ar: 'رفض طلب المشاركة المجانية لـ "{title}"؟', ru: 'Отклонить запрос на бесплатную передачу «{title}»?', tr: '"{title}" ücretsiz paylaşım isteğini reddet?', it: 'Rifiutare la richiesta regalo per «{title}»?',
+    pl: 'Odrzucić prośbę o darmowe oddanie „{title}”?', nl: 'Gratis deelverzoek voor "{title}" afwijzen?', fil: 'Tanggihan ang libreng share request para sa "{title}"?', uk: 'Відхилити запит на безоплатну передачу «{title}»?',
+    bn: '"{title}" এর ফ্রি শেয়ার অনুরোধ প্রত্যাখ্যান করবেন?', ms: 'Tolak permintaan kongsi percuma untuk "{title}"?', sw: 'Kataa ombi la kushiriki bila malipo la "{title}"?', fa: 'درخواست اشتراک رایگان «{title}» رد شود؟',
+    ur: '"{title}" کی مفت شیئر درخواست مسترد کریں؟',
+  },
+  declineOfferConfirm: {
+    en: 'Decline the purchase offer for "{title}"?', ko: '«{title}» 구매 제안을 거절할까요?', zh: '拒绝「{title}」的购买报价？', ja: '「{title}」の購入オファーを拒否しますか？',
+    es: '¿Rechazar la oferta de compra de «{title}»?', pt: 'Recusar a oferta de compra de «{title}»?', fr: 'Refuser l’offre d’achat pour « {title} » ?', de: 'Kaufangebot für „{title}“ ablehnen?',
+    id: 'Tolak penawaran pembelian untuk "{title}"?', vi: 'Từ chối đề nghị mua "{title}"?', th: 'ปฏิเสธข้อเสนอซื้อ "{title}"?', hi: '"{title}" की खरीद ऑफ़र अस्वीकारें?',
+    ar: 'رفض عرض شراء "{title}"؟', ru: 'Отклонить предложение покупки «{title}»?', tr: '"{title}" satın alma teklifini reddet?', it: 'Rifiutare l’offerta di acquisto per «{title}»?',
+    pl: 'Odrzucić ofertę zakupu „{title}”?', nl: 'Koopbod voor "{title}" afwijzen?', fil: 'Tanggihan ang purchase offer para sa "{title}"?', uk: 'Відхилити пропозицію купівлі «{title}»?',
+    bn: '"{title}" এর ক্রয় অফার প্রত্যাখ্যান করবেন?', ms: 'Tolak tawaran belian untuk "{title}"?', sw: 'Kataa ofa ya kununua ya "{title}"?', fa: 'پیشنهاد خرید «{title}» رد شود؟',
+    ur: '"{title}" کی خرید پیشکش مسترد کریں؟',
+  },
+  couldNotDeclineOffer: {
+    en: 'Could not decline this offer. Check your connection and try again.', ko: '제안을 거절하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.', zh: '无法拒绝该报价，请检查网络后重试。', ja: 'オファーを拒否できませんでした。接続を確認して再試行してください。',
+    es: 'No se pudo rechazar la oferta. Comprueba la conexión e inténtalo de nuevo.', pt: 'Não foi possível recusar a oferta. Verifique a conexão e tente novamente.', fr: 'Impossible de refuser l’offre. Vérifiez la connexion et réessayez.', de: 'Angebot konnte nicht abgelehnt werden. Verbindung prüfen.',
+    id: 'Tidak dapat menolak penawaran. Periksa koneksi dan coba lagi.', vi: 'Không từ chối được đề nghị. Kiểm tra kết nối và thử lại.', th: 'ปฏิเสธข้อเสนอไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่', hi: 'ऑफ़र अस्वीकार नहीं हुई। कनेक्शन जांचें।',
+    ar: 'تعذر رفض العرض. تحقق من الاتصال وحاول مرة أخرى.', ru: 'Не удалось отклонить предложение. Проверьте соединение.', tr: 'Teklif reddedilemedi. Bağlantınızı kontrol edin.', it: 'Impossibile rifiutare l’offerta. Controlla la connessione.',
+    pl: 'Nie udało się odrzucić oferty. Sprawdź połączenie.', nl: 'Bod kon niet worden afgewezen. Controleer je verbinding.', fil: 'Hindi matanggihan ang offer. Suriin ang koneksyon.', uk: 'Не вдалося відхилити пропозицію. Перевірте з’єднання.',
+    bn: 'অফার প্রত্যাখ্যান যায়নি। সংযোগ পরীক্ষা করুন।', ms: 'Tidak dapat tolak tawaran. Semak sambungan.', sw: 'Imeshindwa kukataa ofa. Angalia muunganisho.', fa: 'رد پیشنهاد ممکن نشد. اتصال را بررسی کنید.',
+    ur: 'پیشکش مسترد نہ ہو سکی۔ کنکشن چیک کریں۔',
+  },
+  typeMessage: {
+    en: 'Type a message', ko: '메시지를 입력하세요', zh: '输入消息', ja: 'メッセージを入力',
+    es: 'Escribe un mensaje', pt: 'Digite uma mensagem', fr: 'Écrire un message', de: 'Nachricht eingeben',
+    id: 'Ketik pesan', vi: 'Nhập tin nhắn', th: 'พิมพ์ข้อความ', hi: 'संदेश लिखें',
+    ar: 'اكتب رسالة', ru: 'Введите сообщение', tr: 'Mesaj yazın', it: 'Scrivi un messaggio',
+    pl: 'Napisz wiadomość', nl: 'Typ een bericht', fil: 'Mag-type ng mensahe', uk: 'Введіть повідомлення',
+    bn: 'বার্তা লিখুন', ms: 'Taip mesej', sw: 'Andika ujumbe', fa: 'پیام بنویسید',
+    ur: 'پیغام لکھیں',
+  },
+  listingRemovedCannotMessage: {
+    en: 'This listing was removed; you cannot send messages.', ko: '삭제된 상품이라 메시지를 보낼 수 없습니다.', zh: '该商品已删除，无法发送消息。', ja: '出品が削除されたためメッセージを送れません。',
+    es: 'Este anuncio se eliminó; no puedes enviar mensajes.', pt: 'Este anúncio foi removido; você não pode enviar mensagens.', fr: 'Cette annonce a été supprimée ; vous ne pouvez pas envoyer de messages.', de: 'Diese Anzeige wurde entfernt; Nachrichten senden nicht möglich.',
+    id: 'Listing dihapus; Anda tidak dapat mengirim pesan.', vi: 'Tin đăng đã xóa; bạn không thể gửi tin.', th: 'ประกาศถูกลบ ส่งข้อความไม่ได้', hi: 'लिस्टिंग हटाई गई; संदेश नहीं भेज सकते।',
+    ar: 'تم حذف الإعلان؛ لا يمكنك إرسال رسائل.', ru: 'Объявление удалено; сообщения отправить нельзя.', tr: 'İlan kaldırıldı; mesaj gönderemezsiniz.', it: 'Annuncio rimosso; non puoi inviare messaggi.',
+    pl: 'Ogłoszenie usunięte; nie możesz wysyłać wiadomości.', nl: 'Advertentie verwijderd; je kunt geen berichten sturen.', fil: 'Inalis ang listing; hindi ka makapagpadala ng mensahe.', uk: 'Оголошення видалено; повідомлення надсилати не можна.',
+    bn: 'লিস্টিং সরানো হয়েছে; বার্তা পাঠাতে পারবেন না।', ms: 'Senarai dialih keluar; anda tidak boleh hantar mesej.', sw: 'Tangazo limeondolewa; huwezi kutuma ujumbe.', fa: 'آگهی حذف شده؛ نمی‌توانید پیام بفرستید.',
+    ur: 'لسٹنگ ہٹا دی گئی؛ پیغام نہیں بھیج سکتے۔',
+  },
+  dateAndTime: {
+    en: 'Date & time', ko: '날짜 및 시간', zh: '日期和时间', ja: '日時',
+    es: 'Fecha y hora', pt: 'Data e hora', fr: 'Date et heure', de: 'Datum & Uhrzeit',
+    id: 'Tanggal & waktu', vi: 'Ngày & giờ', th: 'วันและเวลา', hi: 'तारीख और समय',
+    ar: 'التاريخ والوقت', ru: 'Дата и время', tr: 'Tarih ve saat', it: 'Data e ora',
+    pl: 'Data i czas', nl: 'Datum & tijd', fil: 'Petsa at oras', uk: 'Дата і час',
+    bn: 'তারিখ ও সময়', ms: 'Tarikh & masa', sw: 'Tarehe na muda', fa: 'تاریخ و زمان',
+    ur: 'تاریخ اور وقت',
+  },
+  placeTimeNotSetYetModal: {
+    en: 'Place and time are not set yet.', ko: '장소와 시간이 아직 정해지지 않았습니다.', zh: '地点和时间尚未设置。', ja: '場所と時間はまだ未設定です。',
+    es: 'El lugar y la hora aún no están definidos.', pt: 'Local e horário ainda não estão definidos.', fr: 'Le lieu et l’heure ne sont pas encore définis.', de: 'Ort und Zeit sind noch nicht festgelegt.',
+    id: 'Tempat dan waktu belum diatur.', vi: 'Chưa đặt địa điểm và giờ.', th: 'ยังไม่ได้ตั้งสถานที่และเวลา', hi: 'स्थान और समय अभी तय नहीं हैं।',
+    ar: 'المكان والوقت غير محددين بعد.', ru: 'Место и время ещё не заданы.', tr: 'Yer ve saat henüz ayarlanmadı.', it: 'Luogo e ora non ancora impostati.',
+    pl: 'Miejsce i czas nie są jeszcze ustalone.', nl: 'Plek en tijd zijn nog niet ingesteld.', fil: 'Hindi pa nakatakda ang lugar at oras.', uk: 'Місце і час ще не задані.',
+    bn: 'স্থান ও সময় এখনো সেট নয়।', ms: 'Tempat dan masa belum ditetapkan.', sw: 'Mahali na muda bado hajawekwa.', fa: 'مکان و زمان هنوز تنظیم نشده است.',
+    ur: 'جگہ اور وقت ابھی طے نہیں۔',
+  },
+  close: {
+    en: 'Close', ko: '닫기', zh: '关闭', ja: '閉じる',
+    es: 'Cerrar', pt: 'Fechar', fr: 'Fermer', de: 'Schließen',
+    id: 'Tutup', vi: 'Đóng', th: 'ปิด', hi: 'बंद करें',
+    ar: 'إغلاق', ru: 'Закрыть', tr: 'Kapat', it: 'Chiudi',
+    pl: 'Zamknij', nl: 'Sluiten', fil: 'Isara', uk: 'Закрити',
+    bn: 'বন্ধ', ms: 'Tutup', sw: 'Funga', fa: 'بستن',
+    ur: 'بند کریں',
+  },
+  viewProfileAria: {
+    en: "View {name}'s profile", ko: '{name} 프로필 보기', zh: '查看{name}的资料', ja: '{name}のプロフィールを見る',
+    es: 'Ver perfil de {name}', pt: 'Ver perfil de {name}', fr: 'Voir le profil de {name}', de: 'Profil von {name} ansehen',
+    id: 'Lihat profil {name}', vi: 'Xem hồ sơ của {name}', th: 'ดูโปรไฟล์ของ {name}', hi: '{name} की प्रोफ़ाइल देखें',
+    ar: 'عرض ملف {name}', ru: 'Смотреть профиль {name}', tr: '{name} profilini gör', it: 'Vedi profilo di {name}',
+    pl: 'Zobacz profil {name}', nl: 'Profiel van {name} bekijken', fil: 'Tingnan ang profile ni {name}', uk: 'Переглянути профіль {name}',
+    bn: '{name} এর প্রোফাইল দেখুন', ms: 'Lihat profil {name}', sw: 'Tazama wasifu wa {name}', fa: 'مشاهده پروفایل {name}',
+    ur: '{name} کی پروفائل دیکھیں',
+  },
+  verified: {
+    en: 'Verified', ko: '인증됨', zh: '已认证', ja: '認証済み',
+    es: 'Verificado', pt: 'Verificado', fr: 'Vérifié', de: 'Verifiziert',
+    id: 'Terverifikasi', vi: 'Đã xác minh', th: 'ยืนยันแล้ว', hi: 'सत्यापित',
+    ar: 'موثّق', ru: 'Подтверждено', tr: 'Doğrulandı', it: 'Verificato',
+    pl: 'Zweryfikowano', nl: 'Geverifieerd', fil: 'Verified', uk: 'Підтверджено',
+    bn: 'যাচাইকৃত', ms: 'Disahkan', sw: 'Imethibitishwa', fa: 'تأییدشده',
+    ur: 'تصدیق شدہ',
+  },
+  newMessages: {
+    en: 'New messages', ko: '새 메시지', zh: '新消息', ja: '新しいメッセージ',
+    es: 'Mensajes nuevos', pt: 'Novas mensagens', fr: 'Nouveaux messages', de: 'Neue Nachrichten',
+    id: 'Pesan baru', vi: 'Tin nhắn mới', th: 'ข้อความใหม่', hi: 'नए संदेश',
+    ar: 'رسائل جديدة', ru: 'Новые сообщения', tr: 'Yeni mesajlar', it: 'Nuovi messaggi',
+    pl: 'Nowe wiadomości', nl: 'Nieuwe berichten', fil: 'Mga bagong mensahe', uk: 'Нові повідомлення',
+    bn: 'নতুন বার্তা', ms: 'Mesej baharu', sw: 'Ujumbe mpya', fa: 'پیام‌های جدید',
+    ur: 'نئے پیغامات',
+  },
+  unreadFromHere: {
+    en: 'Unread from here', ko: '여기부터 안 읽음', zh: '从此未读', ja: 'ここから未読',
+    es: 'No leído desde aquí', pt: 'Não lido a partir daqui', fr: 'Non lu à partir d’ici', de: 'Ab hier ungelesen',
+    id: 'Belum dibaca dari sini', vi: 'Chưa đọc từ đây', th: 'ยังไม่อ่านตั้งแต่ตรงนี้', hi: 'यहाँ से अपठित',
+    ar: 'غير مقروء من هنا', ru: 'Непрочитано отсюда', tr: 'Buradan itibaren okunmamış', it: 'Non letto da qui',
+    pl: 'Nieprzeczytane stąd', nl: 'Ongelezen vanaf hier', fil: 'Hindi pa nabasa mula dito', uk: 'Непрочитане звідси',
+    bn: 'এখান থেকে অপঠিত', ms: 'Belum dibaca dari sini', sw: 'Haijasomwa kutoka hapa', fa: 'از اینجا خوانده‌نشده',
+    ur: 'یہاں سے ان پڑھے',
+  },
+  bannerTradeComplete: {
+    en: 'Trade complete for this order.', ko: '이 주문의 거래가 완료되었습니다.', zh: '该订单交易已完成。', ja: 'この注文の取引は完了しました。',
+    es: 'Trato completado para este pedido.', pt: 'Negócio concluído para este pedido.', fr: 'Échange terminé pour cette commande.', de: 'Geschäft für diese Bestellung abgeschlossen.',
+    id: 'Transaksi selesai untuk pesanan ini.', vi: 'Giao dịch hoàn tất cho đơn này.', th: 'การซื้อขายของคำสั่งนี้เสร็จแล้ว', hi: 'इस ऑर्डर का लेन-देन पूरा।',
+    ar: 'اكتملت الصفقة لهذا الطلب.', ru: 'Сделка по этому заказу завершена.', tr: 'Bu sipariş için ticaret tamam.', it: 'Scambio completato per questo ordine.',
+    pl: 'Transakcja dla tego zamówienia zakończona.', nl: 'Handel voor deze bestelling afgerond.', fil: 'Tapos na ang trade para sa order na ito.', uk: 'Угоду за цим замовленням завершено.',
+    bn: 'এই অর্ডারের লেনদেন সম্পন্ন।', ms: 'Dagangan selesai untuk pesanan ini.', sw: 'Biashara imekamilika kwa agizo hili.', fa: 'معامله این سفارش کامل شد.',
+    ur: 'اس آرڈر کا لین دین مکمل۔',
+  },
+  bannerListingSold: {
+    en: 'This listing has been sold.', ko: '이 상품은 판매되었습니다.', zh: '该商品已售出。', ja: 'この出品は売却済みです。',
+    es: 'Este anuncio se ha vendido.', pt: 'Este anúncio foi vendido.', fr: 'Cette annonce a été vendue.', de: 'Diese Anzeige wurde verkauft.',
+    id: 'Listing ini telah terjual.', vi: 'Tin đăng này đã bán.', th: 'ประกาศนี้ขายแล้ว', hi: 'यह लिस्टिंग बिक चुकी है।',
+    ar: 'تم بيع هذا الإعلان.', ru: 'Это объявление продано.', tr: 'Bu ilan satıldı.', it: 'Questo annuncio è stato venduto.',
+    pl: 'To ogłoszenie zostało sprzedane.', nl: 'Deze advertentie is verkocht.', fil: 'Nabenta na ang listing na ito.', uk: 'Це оголошення продано.',
+    bn: 'এই লিস্টিং বিক্রি হয়ে গেছে।', ms: 'Senarai ini telah dijual.', sw: 'Tangazo hili limeshauziwa.', fa: 'این آگهی فروخته شده است.',
+    ur: 'یہ لسٹنگ بک چکی ہے۔',
+  },
+  bannerYourDispute: {
+    en: 'You opened a dispute', ko: '내가 연 분쟁', zh: '你发起了争议', ja: 'あなたが紛争を開始しました',
+    es: 'Abriste una disputa', pt: 'Você abriu uma disputa', fr: 'Vous avez ouvert un litige', de: 'Du hast einen Streitfall eröffnet',
+    id: 'Anda membuka sengketa', vi: 'Bạn đã mở tranh chấp', th: 'คุณเปิดข้อพิพาทแล้ว', hi: 'आपने विवाद खोला',
+    ar: 'فتحت نزاعًا', ru: 'Вы открыли спор', tr: 'Bir anlaşmazlık açtınız', it: 'Hai aperto una controversia',
+    pl: 'Otworzyłeś spór', nl: 'Je hebt een geschil geopend', fil: 'Nagbukas ka ng dispute', uk: 'Ви відкрили спір',
+    bn: 'আপনি একটি বিবাদ খুলেছেন', ms: 'Anda membuka pertikaian', sw: 'Umefungua mzozo', fa: 'شما اختلاف باز کردید',
+    ur: 'آپ نے تنازعہ کھولا',
+  },
+  bannerTheirDispute: {
+    en: 'The other party opened a dispute', ko: '상대방이 분쟁을 열었습니다', zh: '对方发起了争议', ja: '相手が紛争を開始しました',
+    es: 'La otra parte abrió una disputa', pt: 'A outra parte abriu uma disputa', fr: 'L’autre partie a ouvert un litige', de: 'Die andere Partei hat einen Streitfall eröffnet',
+    id: 'Pihak lain membuka sengketa', vi: 'Đối phương đã mở tranh chấp', th: 'อีกฝ่ายเปิดข้อพิพาทแล้ว', hi: 'दूसरे पक्ष ने विवाद खोला',
+    ar: 'فتح الطرف الآخر نزاعًا', ru: 'Другая сторона открыла спор', tr: 'Karşı taraf bir anlaşmazlık açtı', it: 'L’altra parte ha aperto una controversia',
+    pl: 'Druga strona otworzyła spór', nl: 'De andere partij heeft een geschil geopend', fil: 'Nagbukas ng dispute ang kabilang partido', uk: 'Інша сторона відкрила спір',
+    bn: 'অন্য পক্ষ একটি বিবাদ খুলেছে', ms: 'Pihak lain membuka pertikaian', sw: 'Upande mwingine umefungua mzozo', fa: 'طرف مقابل اختلاف باز کرد',
+    ur: 'دوسری فریق نے تنازعہ کھولا',
+  },
+  bannerDisputeGeneric: {
+    en: 'This item is in a dispute', ko: '이 상품은 분쟁 중입니다', zh: '该商品处于争议中', ja: 'この商品は紛争中です',
+    es: 'Este artículo está en disputa', pt: 'Este item está em disputa', fr: 'Cet article est en litige', de: 'Dieser Artikel ist in einem Streitfall',
+    id: 'Item ini sedang sengketa', vi: 'Mặt hàng này đang tranh chấp', th: 'สินค้านี้กำลังมีข้อพิพาท', hi: 'यह वस्तु विवाद में है',
+    ar: 'هذا العنصر في نزاع', ru: 'Этот товар в споре', tr: 'Bu ürün anlaşmazlıkta', it: 'Questo articolo è in controversia',
+    pl: 'Ten przedmiot jest w sporze', nl: 'Dit item zit in een geschil', fil: 'May dispute ang item na ito', uk: 'Цей товар у спорі',
+    bn: 'এই আইটেম বিবাদে আছে', ms: 'Item ini dalam pertikaian', sw: 'Kipengele hiki kiko katika mzozo', fa: 'این کالا در اختلاف است',
+    ur: 'یہ آئٹم تنازعے میں ہے',
+  },
+  bannerDisputeResolved: {
+    en: 'Dispute resolved for this item.', ko: '이 상품의 분쟁이 해결되었습니다.', zh: '该商品的争议已解决。', ja: 'この商品の紛争は解決しました。',
+    es: 'Disputa resuelta para este artículo.', pt: 'Disputa resolvida para este item.', fr: 'Litige résolu pour cet article.', de: 'Streitfall für diesen Artikel gelöst.',
+    id: 'Sengketa item ini diselesaikan.', vi: 'Tranh chấp của mặt hàng này đã giải quyết.', th: 'ข้อพิพาทของสินค้านี้ยุติแล้ว', hi: 'इस वस्तु का विवाद सुलझ गया।',
+    ar: 'تم حل النزاع لهذا العنصر.', ru: 'Спор по этому товару решён.', tr: 'Bu ürün için anlaşmazlık çözüldü.', it: 'Controversia risolta per questo articolo.',
+    pl: 'Spór dotyczący tego przedmiotu rozwiązany.', nl: 'Geschil voor dit item opgelost.', fil: 'Naresolba ang dispute para sa item na ito.', uk: 'Спір щодо цього товару вирішено.',
+    bn: 'এই আইটেমের বিবাদ সমাধান হয়েছে।', ms: 'Pertikaian item ini diselesaikan.', sw: 'Mzozo wa kipengele hiki umetatuliwa.', fa: 'اختلاف این کالا حل شد.',
+    ur: 'اس آئٹم کا تنازعہ حل ہو گیا۔',
+  },
+  roomEnded: {
+    en: 'This chat has ended. Start a new chat from the listing.', ko: '이 채팅은 종료되었습니다. 상품에서 새 채팅을 시작해 주세요.', zh: '此聊天已结束。请从商品重新发起聊天。', ja: 'このチャットは終了しました。出品から新しいチャットを開始してください。',
+    es: 'Este chat ha terminado. Inicia uno nuevo desde el anuncio.', pt: 'Este chat terminou. Inicie um novo pelo anúncio.', fr: 'Ce chat est terminé. Démarrez-en un depuis l’annonce.', de: 'Dieser Chat ist beendet. Starte einen neuen von der Anzeige.',
+    id: 'Chat ini berakhir. Mulai chat baru dari listing.', vi: 'Cuộc trò chuyện đã kết thúc. Bắt đầu chat mới từ tin đăng.', th: 'แชทนี้สิ้นสุดแล้ว เริ่มแชทใหม่จากประกาศ', hi: 'यह चैट समाप्त। लिस्टिंग से नई चैट शुरू करें।',
+    ar: 'انتهت هذه المحادثة. ابدأ محادثة جديدة من الإعلان.', ru: 'Этот чат завершён. Начните новый из объявления.', tr: 'Bu sohbet sona erdi. İlandan yeni sohbet başlatın.', it: 'Questa chat è terminata. Avviane una nuova dall’annuncio.',
+    pl: 'Ten czat się zakończył. Zacznij nowy z ogłoszenia.', nl: 'Deze chat is beëindigd. Start een nieuwe vanaf de advertentie.', fil: 'Natapos ang chat na ito. Magsimula ng bago mula sa listing.', uk: 'Цей чат завершено. Почніть новий з оголошення.',
+    bn: 'এই চ্যাট শেষ। লিস্টিং থেকে নতুন চ্যাট শুরু করুন।', ms: 'Sembang ini tamat. Mulakan baharu dari senarai.', sw: 'Gumzo hili limeisha. Anza jipya kutoka tangazo.', fa: 'این گفتگو پایان یافته. از آگهی گفتگوی جدید آغاز کنید.',
+    ur: 'یہ چیٹ ختم۔ لسٹنگ سے نئی چیٹ شروع کریں۔',
+  },
+  roomEndedInput: {
+    en: 'This chat has ended; you cannot send messages.', ko: '종료된 채팅방에서는 메시지를 보낼 수 없습니다.', zh: '此聊天已结束，无法发送消息。', ja: '終了したチャットではメッセージを送れません。',
+    es: 'Este chat ha terminado; no puedes enviar mensajes.', pt: 'Este chat terminou; você não pode enviar mensagens.', fr: 'Ce chat est terminé ; vous ne pouvez pas envoyer de messages.', de: 'Dieser Chat ist beendet; Nachrichten senden nicht möglich.',
+    id: 'Chat ini berakhir; Anda tidak dapat mengirim pesan.', vi: 'Cuộc trò chuyện đã kết thúc; bạn không thể gửi tin.', th: 'แชทนี้สิ้นสุดแล้ว ส่งข้อความไม่ได้', hi: 'चैट समाप्त; संदेश नहीं भेज सकते।',
+    ar: 'انتهت هذه المحادثة؛ لا يمكنك إرسال رسائل.', ru: 'Чат завершён; сообщения отправить нельзя.', tr: 'Bu sohbet sona erdi; mesaj gönderemezsiniz.', it: 'Chat terminata; non puoi inviare messaggi.',
+    pl: 'Czat zakończony; nie możesz wysyłać wiadomości.', nl: 'Chat beëindigd; je kunt geen berichten sturen.', fil: 'Natapos ang chat; hindi ka makapagpadala.', uk: 'Чат завершено; повідомлення надсилати не можна.',
+    bn: 'চ্যাট শেষ; বার্তা পাঠাতে পারবেন না।', ms: 'Sembang tamat; anda tidak boleh hantar mesej.', sw: 'Gumzo limeisha; huwezi kutuma ujumbe.', fa: 'گفتگو پایان یافته؛ نمی‌توانید پیام بفرستید.',
+    ur: 'چیٹ ختم؛ پیغام نہیں بھیج سکتے۔',
+  },
+  couldNotSendPhotos: {
+    en: 'Could not send photos. Check your connection and try again.', ko: '사진을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.', zh: '无法发送照片，请检查网络后重试。', ja: '写真を送れませんでした。接続を確認して再試行してください。',
+    es: 'No se pudieron enviar las fotos. Comprueba la conexión e inténtalo de nuevo.', pt: 'Não foi possível enviar as fotos. Verifique a conexão e tente novamente.', fr: 'Impossible d’envoyer les photos. Vérifiez la connexion et réessayez.', de: 'Fotos konnten nicht gesendet werden. Verbindung prüfen.',
+    id: 'Tidak dapat mengirim foto. Periksa koneksi dan coba lagi.', vi: 'Không gửi được ảnh. Kiểm tra kết nối và thử lại.', th: 'ส่งรูปไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่', hi: 'फ़ोटो नहीं भेजी जा सकीं। कनेक्शन जांचें।',
+    ar: 'تعذر إرسال الصور. تحقق من الاتصال وحاول مرة أخرى.', ru: 'Не удалось отправить фото. Проверьте соединение.', tr: 'Fotoğraflar gönderilemedi. Bağlantınızı kontrol edin.', it: 'Impossibile inviare le foto. Controlla la connessione.',
+    pl: 'Nie udało się wysłać zdjęć. Sprawdź połączenie.', nl: 'Foto’s konden niet worden verzonden. Controleer je verbinding.', fil: 'Hindi maipadala ang mga larawan. Suriin ang koneksyon.', uk: 'Не вдалося надіслати фото. Перевірте з’єднання.',
+    bn: 'ছবি পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।', ms: 'Tidak dapat hantar foto. Semak sambungan.', sw: 'Imeshindwa kutuma picha. Angalia muunganisho.', fa: 'ارسال عکس ممکن نشد. اتصال را بررسی کنید.',
+    ur: 'تصاویر نہ بھیجی جا سکیں۔ کنکشن چیک کریں۔',
+  },
+  messageSendFailed: {
+    en: 'Message could not be sent. Check your connection and try again.', ko: '메시지를 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.', zh: '消息发送失败，请检查网络后重试。', ja: 'メッセージを送信できませんでした。接続を確認して再試行してください。',
+    es: 'No se pudo enviar el mensaje. Comprueba la conexión e inténtalo de nuevo.', pt: 'Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.', fr: 'Le message n’a pas pu être envoyé. Vérifiez la connexion et réessayez.', de: 'Nachricht konnte nicht gesendet werden. Verbindung prüfen.',
+    id: 'Pesan tidak dapat dikirim. Periksa koneksi dan coba lagi.', vi: 'Không gửi được tin nhắn. Kiểm tra kết nối và thử lại.', th: 'ส่งข้อความไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่', hi: 'संदेश नहीं भेजा जा सका। कनेक्शन जांचें।',
+    ar: 'تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى.', ru: 'Не удалось отправить сообщение. Проверьте соединение.', tr: 'Mesaj gönderilemedi. Bağlantınızı kontrol edin.', it: 'Messaggio non inviato. Controlla la connessione.',
+    pl: 'Nie udało się wysłać wiadomości. Sprawdź połączenie.', nl: 'Bericht kon niet worden verzonden. Controleer je verbinding.', fil: 'Hindi maipadala ang mensahe. Suriin ang koneksyon.', uk: 'Не вдалося надіслати повідомлення. Перевірте з’єднання.',
+    bn: 'বার্তা পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।', ms: 'Mesej tidak dapat dihantar. Semak sambungan.', sw: 'Ujumbe haukuweza kutumwa. Angalia muunganisho.', fa: 'ارسال پیام ممکن نشد. اتصال را بررسی کنید.',
+    ur: 'پیغام نہ بھیجا جا سکا۔ کنکشن چیک کریں۔',
+  },
+  listingRemovedAlert: {
+    en: 'This listing was removed.', ko: '이 상품이 삭제되었습니다.', zh: '该商品已删除。', ja: 'この出品は削除されました。',
+    es: 'Este anuncio se eliminó.', pt: 'Este anúncio foi removido.', fr: 'Cette annonce a été supprimée.', de: 'Diese Anzeige wurde entfernt.',
+    id: 'Listing ini dihapus.', vi: 'Tin đăng này đã bị xóa.', th: 'ประกาศนี้ถูกลบแล้ว', hi: 'यह लिस्टिंग हटा दी गई।',
+    ar: 'تم حذف هذا الإعلان.', ru: 'Это объявление удалено.', tr: 'Bu ilan kaldırıldı.', it: 'Questo annuncio è stato rimosso.',
+    pl: 'To ogłoszenie zostało usunięte.', nl: 'Deze advertentie is verwijderd.', fil: 'Inalis ang listing na ito.', uk: 'Це оголошення видалено.',
+    bn: 'এই লিস্টিং সরানো হয়েছে।', ms: 'Senarai ini dialih keluar.', sw: 'Tangazo hili limeondolewa.', fa: 'این آگهی حذف شد.',
+    ur: 'یہ لسٹنگ ہٹا دی گئی۔',
+  },
+};
+
+const keys = Object.keys(entries);
+for (const k of keys) {
+  for (const lang of LANGS) {
+    if (!entries[k][lang]) {
+      console.error(`Missing ${lang} for ${k}`);
+      process.exit(1);
+    }
+  }
+}
+
+let out = `/* Auto-generated by scripts/gen-chat-room-i18n.mjs */
+import type { AppLanguage } from '@/utils/languageStorage';
+
+export type ChatRoomMessageKey =
+${keys.map((k) => `  | '${k}'`).join('\n')};
+
+const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>> = {\n`;
+
+for (const lang of LANGS) {
+  out += `  ${lang}: {\n`;
+  for (const k of keys) {
+    const v = entries[k][lang]
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
+    out += `    ${k}: '${v}',\n`;
+  }
+  out += `  },\n`;
+}
+out += `};
+
+export function chatRoomT(
+  lang: AppLanguage,
+  key: ChatRoomMessageKey,
+  vars?: Record<string, string | number>,
+): string {
+  const raw = CHAT_ROOM_MESSAGES[lang]?.[key] ?? CHAT_ROOM_MESSAGES.en[key] ?? key;
+  if (!vars) return raw;
+  return Object.entries(vars).reduce(
+    (s, [k, v]) => s.split('{' + k + '}').join(String(v)),
+    raw,
+  );
+}
+`;
+
+fs.writeFileSync(path.join(__dirname, '../src/i18n/chatRoomMessages.ts'), out, 'utf8');
+console.log('Wrote chatRoomMessages.ts', keys.length, 'keys');

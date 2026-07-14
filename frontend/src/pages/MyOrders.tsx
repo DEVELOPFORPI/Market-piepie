@@ -8,12 +8,15 @@ import { syncOrdersFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
 import { labelOrderStatus, labelTradeMethod } from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 type OrderType = 'all' | 'buying' | 'selling';
 type FilterStatus = 'all' | OrderStatus;
 
 export const MyOrders: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
   const [orderType, setOrderType] = useState<OrderType>('all');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -54,13 +57,13 @@ export const MyOrders: React.FC = () => {
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Orders"
+        title={t('orders')}
       />
 
       <div className="flex gap-2 overflow-x-auto border-b border-gray-200 px-4 py-3">
@@ -77,7 +80,7 @@ export const MyOrders: React.FC = () => {
           }`}
           style={orderType === 'all' && filterStatus === 'all' ? { backgroundColor: '#00A8A3' } : undefined}
         >
-          All
+          {t('chipAll')}
         </button>
         {(['buying', 'selling'] as const).map((type) => (
           <button
@@ -91,7 +94,7 @@ export const MyOrders: React.FC = () => {
             }`}
             style={orderType === type ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {type === 'buying' ? 'Buying' : 'Selling'}
+            {type === 'buying' ? t('buying') : t('selling')}
           </button>
         ))}
         {(
@@ -136,13 +139,13 @@ export const MyOrders: React.FC = () => {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
               />
             </svg>
-            <p className="text-gray-500">No orders yet.</p>
+            <p className="text-gray-500">{t('noOrdersYet')}</p>
             <button
               onClick={() => navigate('/')}
               className="mt-4 px-6 py-2 rounded-lg text-white text-sm font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Browse listings
+              {t('browseListings')}
             </button>
           </div>
         ) : (
@@ -167,11 +170,11 @@ export const MyOrders: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-sm font-medium truncate mb-1 ${productDeleted ? 'text-gray-400' : 'text-gray-900'}`}>
-                      {productDeleted ? 'Removed listing' : (order.product?.title ?? 'Listing')}
+                      {productDeleted ? t('removedListing') : (order.product?.title ?? t('listingFallback'))}
                     </h3>
                     <p className="text-base font-bold text-gray-900 mb-1">
                       {order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0
-                        ? 'Free'
+                        ? t('free')
                         : `${Number(order.proposedPrice ?? 0).toLocaleString()} Pi`}
                     </p>
                     <div className="flex items-center gap-2">
@@ -185,8 +188,8 @@ export const MyOrders: React.FC = () => {
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-500">
-                    {order.buyer?.id === userId ? 'Buying' : 'Selling'} ·{' '}
-                    {new Date(order.createdAt).toLocaleDateString('en-US')}
+                    {order.buyer?.id === userId ? t('buying') : t('selling')} ·{' '}
+                    {new Date(order.createdAt).toLocaleDateString(localeForAppLanguage(lang))}
                   </span>
                 </div>
               </div>

@@ -14,12 +14,15 @@ import {
   ProfilePersonSilhouetteIcon,
 } from '@/components/common/profileAvatarPlaceholder';
 import { isGuest } from '@/utils/guestGate';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
 
 const TEAL = '#00A8A3';
 type ProfileTab = 'info' | 'badges';
 
 export const My: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (isGuest()) navigate('/welcome', { replace: true });
@@ -52,15 +55,15 @@ export const My: React.FC = () => {
   const showAvatarPlaceholder =
     isPlaceholderProfileImage(user.profileImage) || avatarLoadFailed;
 
-  const menuItems = [
-    { label: 'My listings', icon: '/profile/1.svg', path: '/my/products' },
-    { label: 'Saved', icon: '/profile/2.svg', path: '/my/favorites' },
-    { label: 'Orders', icon: '/profile/3.svg', path: '/my/orders' },
-    { label: 'My posts', icon: '/profile/5.svg', path: '/my/posts' },
-    { label: 'Reviews', icon: '/profile/6.svg', path: '/my/reviews' },
-    { label: 'Inquiries', icon: '/profile/9.svg', path: '/my/inquiries' },
-    { label: 'Disputes', icon: '/profile/4.svg', path: '/my/disputes' },
-    { label: 'Settings', icon: '/profile/7.svg', path: '/settings' },
+  const menuItems: { labelKey: AppMessageKey; icon: string; path: string }[] = [
+    { labelKey: 'myListings', icon: '/profile/1.svg', path: '/my/products' },
+    { labelKey: 'saved', icon: '/profile/2.svg', path: '/my/favorites' },
+    { labelKey: 'orders', icon: '/profile/3.svg', path: '/my/orders' },
+    { labelKey: 'myPosts', icon: '/profile/5.svg', path: '/my/posts' },
+    { labelKey: 'reviews', icon: '/profile/6.svg', path: '/my/reviews' },
+    { labelKey: 'inquiries', icon: '/profile/9.svg', path: '/my/inquiries' },
+    { labelKey: 'disputes', icon: '/profile/4.svg', path: '/my/disputes' },
+    { labelKey: 'settings', icon: '/profile/7.svg', path: '/settings' },
   ];
 
   return (
@@ -72,13 +75,13 @@ export const My: React.FC = () => {
         {profileTab === 'info' ? (
           <div className="flex items-center justify-between px-4 h-14">
             <div className="w-20" />
-            <h1 className="text-lg font-bold text-gray-900">MY</h1>
+            <h1 className="text-lg font-bold text-gray-900">{t('myTitle')}</h1>
             <button
               type="button"
               onClick={() => navigate('/profile/edit')}
               className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
-              Edit profile
+              {t('editProfile')}
             </button>
           </div>
         ) : (
@@ -88,7 +91,7 @@ export const My: React.FC = () => {
                 type="button"
                 onClick={() => goProfileTab('info')}
                 className="p-2 text-gray-800"
-                aria-label="Back"
+                aria-label={t('back')}
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -97,9 +100,9 @@ export const My: React.FC = () => {
             </div>
             <h1
               className="pointer-events-none absolute left-1/2 top-1/2 z-[1] max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 text-center text-base font-bold leading-none text-gray-900 whitespace-nowrap sm:text-lg"
-              title="Activity badges"
+              title={t('activityBadges')}
             >
-              Activity badges
+              {t('activityBadges')}
             </h1>
             {/* Same width as back column so the title stays visually centered */}
             <span aria-hidden className="ml-auto w-11 shrink-0" />
@@ -119,7 +122,7 @@ export const My: React.FC = () => {
                 : undefined
             }
           >
-            Profile
+            {t('profileTab')}
           </button>
           <button
             type="button"
@@ -133,7 +136,7 @@ export const My: React.FC = () => {
                 : undefined
             }
           >
-            Badges
+            {t('badgesTab')}
           </button>
         </div>
       </div>
@@ -177,7 +180,7 @@ export const My: React.FC = () => {
               </span>
               {isGuestUser() && (
                 <span className="text-xs font-medium flex-shrink-0 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                  Guest
+                  {t('guest')}
                 </span>
               )}
             </div>
@@ -200,29 +203,32 @@ export const My: React.FC = () => {
 
       {/* Menu List */}
       <div className="mt-3 px-4 space-y-2">
-        {menuItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className="w-full flex items-center gap-4 px-4 py-5 bg-white rounded-xl border border-gray-100 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left shadow-sm"
-          >
-            {/* Icon */}
-            <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-              <img src={item.icon} alt={item.label} className="max-w-[20px] max-h-[20px]" />
-            </div>
-            {/* Label */}
-            <span className="flex-1 text-sm font-medium text-gray-800">{item.label}</span>
-            {/* Chevron */}
-            <svg
-              className="w-5 h-5 text-gray-300 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {menuItems.map((item) => {
+          const label = t(item.labelKey);
+          return (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className="w-full flex items-center gap-4 px-4 py-5 bg-white rounded-xl border border-gray-100 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left shadow-sm"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        ))}
+              {/* Icon */}
+              <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                <img src={item.icon} alt={label} className="max-w-[20px] max-h-[20px]" />
+              </div>
+              {/* Label */}
+              <span className="flex-1 text-sm font-medium text-gray-800">{label}</span>
+              {/* Chevron */}
+              <svg
+                className="w-5 h-5 text-gray-300 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          );
+        })}
       </div>
         </>
       )}

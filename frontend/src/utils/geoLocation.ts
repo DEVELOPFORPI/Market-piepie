@@ -3,7 +3,29 @@
  * Multiple free APIs with fallback for 403/CORS.
  */
 
+import { getAppLanguage, type AppLanguage } from '@/utils/languageStorage';
+import {
+  getRegion,
+  getRegionCoords,
+  saveRegion,
+  type RegionCoords,
+} from '@/utils/regionStorage';
+
+export type DetectedLocation = { region: string; coords?: RegionCoords };
+
 const UNKNOWN_REGION = 'Unknown';
+
+/** Map app locale → Nominatim / Accept-Language */
+function toGeocodeLanguage(lang: AppLanguage): string {
+  switch (lang) {
+    case 'zh':
+      return 'zh-CN';
+    case 'fil':
+      return 'tl';
+    default:
+      return lang;
+  }
+}
 
 type NominatimAddress = {
   neighbourhood?: string;
@@ -98,40 +120,237 @@ export function normalizeRegionLabel(parts: {
   return null;
 }
 
+type NominatimAddressWithCode = NominatimAddress & { country_code?: string };
+
+function alreadyHasAdminUnit(label: string): boolean {
+  return (
+    /[시군구동읍면]$/.test(label) ||
+    /광역시$/.test(label) ||
+    /특별시$/.test(label) ||
+    /특별자치시$/.test(label) ||
+    /-si\b/i.test(label) ||
+    /-gu\b/i.test(label) ||
+    /-gun\b/i.test(label) ||
+    /-do\b/i.test(label) ||
+    /\bmetropolitan\b/i.test(label)
+  );
+}
+
+function isSouthKorea(address: NominatimAddressWithCode): boolean {
+  const cc = address.country_code?.toLowerCase();
+  if (cc === 'kr') return true;
+  return /대한민국|한국|South Korea|Korea, Republic|Republic of Korea/i.test(address.country || '');
+}
+
 function normalizeRegionFromNominatimAddress(address: NominatimAddress | undefined): string | null {
   if (!address) return null;
-  return normalizeRegionLabel({
-    district: pickDistrict(address),
-    city: pickFirst(address.city, address.town, address.municipality),
-    state: address.state,
-    country: address.country,
+  const addr = address as NominatimAddressWithCode;
+  const label = normalizeRegionLabel({
+    district: pickDistrict(addr),
+    city: pickFirst(addr.city, addr.town, addr.municipality),
+    state: addr.state,
+    country: addr.country,
   });
+  if (!label || alreadyHasAdminUnit(label)) return label;
+
+  // City-only KR labels often come back as "Gwangju" / "광주" without 시 — unify to …-si / …시
+  const city = pickFirst(addr.city, addr.town, addr.municipality)?.trim();
+  if (isSouthKorea(addr) && city && label === city) {
+    const latin = /^[\x00-\x7F]+$/.test(label.replace(/[\s,.-]/g, ''));
+    return latin ? `${label}-si` : `${label}시`;
+  }
+  return label;
+}
+
+function acceptLanguageHeader(lang: AppLanguage): string {
+  const locale = toGeocodeLanguage(lang);
+  // Nominatim follows this preference order. If the selected locale has no
+  // translated place name, request English before its local/native default.
+  return locale === 'en' ? 'en' : `${locale},en;q=0.9`;
+}
+
+async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+  lang: AppLanguage = getAppLanguage(),
+): Promise<string | null> {
+  const acceptLanguage = acceptLanguageHeader(lang);
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${encodeURIComponent(acceptLanguage)}`,
+      {
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent': 'MarketPiePie/1.0',
+          'Accept-Language': acceptLanguage,
+        },
+      },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return normalizeRegionFromNominatimAddress(data.address as NominatimAddress);
+  } catch {
+    return null;
+  }
+}
+
+/** Forward-geocode a stored region string, then pick a label in `lang`. */
+async function searchRegionLabel(
+  query: string,
+  lang: AppLanguage,
+): Promise<string | null> {
+  const q = query.trim();
+  if (!q) return null;
+  const acceptLanguage = acceptLanguageHeader(lang);
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(q)}&accept-language=${encodeURIComponent(acceptLanguage)}`,
+      {
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent': 'MarketPiePie/1.0',
+          'Accept-Language': acceptLanguage,
+        },
+      },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as Array<{ address?: NominatimAddress }>;
+    const first = data[0];
+    if (!first?.address) return null;
+    return normalizeRegionFromNominatimAddress(first.address);
+  } catch {
+    return null;
+  }
+}
+
+const regionDisplayCache = new Map<string, string>();
+const regionDisplayInflight = new Map<string, Promise<string | null>>();
+
+/**
+ * Nominatim often drops KR admin suffixes (광주/Gwangju vs 광주시/Gwangju-si).
+ * Restore them from the stored label when the re-labeled name lost that unit.
+ */
+export function preserveAdminUnitSuffix(
+  original: string | null | undefined,
+  localized: string,
+): string {
+  const src = original?.trim() || '';
+  let out = localized.trim();
+  if (!out || !src) return out;
+
+  const latin = /^[\x00-\x7F]+$/.test(out.replace(/[\s,.-]/g, ''));
+  if (alreadyHasAdminUnit(out)) return out;
+
+  if (/광역시$/.test(src) || /특별시$/.test(src) || /특별자치시$/.test(src) || /시$/.test(src)) {
+    return latin ? `${out}-si` : `${out}시`;
+  }
+  if (/구$/.test(src)) return latin ? `${out}-gu` : `${out}구`;
+  if (/군$/.test(src)) return latin ? `${out}-gun` : `${out}군`;
+  if (/도$/.test(src)) return latin ? `${out}-do` : `${out}도`;
+  return out;
+}
+
+/**
+ * Re-label a listing/post region for the current UI language.
+ * Prefers lat/lon reverse geocode; falls back to searching the stored name.
+ */
+export async function localizeRegionForDisplay(
+  opts: {
+    region?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    lang?: AppLanguage;
+  },
+): Promise<string | null> {
+  const lang = opts.lang ?? getAppLanguage();
+  const region = opts.region?.trim() || '';
+  const lat = opts.latitude;
+  const lon = opts.longitude;
+  const hasCoords =
+    typeof lat === 'number' &&
+    typeof lon === 'number' &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lon);
+
+  // v2: admin-suffix preservation (avoid stale cache without 시/-si)
+  const cacheKey = hasCoords
+    ? `c2:${lat!.toFixed(4)},${lon!.toFixed(4)}:${lang}:${region.toLowerCase()}`
+    : region
+      ? `n2:${region.toLowerCase()}:${lang}`
+      : '';
+  if (!cacheKey) return region || null;
+
+  const cached = regionDisplayCache.get(cacheKey);
+  if (cached) return cached;
+
+  const existing = regionDisplayInflight.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    let resolved: string | null = null;
+    if (hasCoords) {
+      resolved = await reverseGeocode(lat!, lon!, lang);
+    }
+    if (!resolved && region) {
+      resolved = await searchRegionLabel(region, lang);
+    }
+    if (resolved) {
+      resolved = preserveAdminUnitSuffix(region, resolved);
+      regionDisplayCache.set(cacheKey, resolved);
+    }
+    return resolved;
+  })().finally(() => {
+    regionDisplayInflight.delete(cacheKey);
+  });
+
+  regionDisplayInflight.set(cacheKey, promise);
+  return promise;
 }
 
 // Free IP geolocation APIs (try next on failure)
 const IP_APIS = [
   {
     url: 'https://ipapi.co/json/',
-    parser: (data: { city?: string; region?: string; country_name?: string }) =>
-      normalizeRegionLabel({
+    parser: (data: {
+      city?: string;
+      region?: string;
+      country_name?: string;
+      latitude?: number;
+      longitude?: number;
+    }) => ({
+      region: normalizeRegionLabel({
         city: data.city,
         state: data.region,
         country: data.country_name,
       }),
+      latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+      longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+    }),
   },
   {
     url: 'https://freeipapi.com/api/json',
-    parser: (data: { cityName?: string; regionName?: string; countryName?: string }) =>
-      normalizeRegionLabel({
+    parser: (data: {
+      cityName?: string;
+      regionName?: string;
+      countryName?: string;
+      latitude?: number;
+      longitude?: number;
+    }) => ({
+      region: normalizeRegionLabel({
         city: data.cityName,
         state: data.regionName,
         country: data.countryName,
       }),
+      latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+      longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+    }),
   },
 ];
 
 /** Resolve region label via IP; null if all APIs fail */
-export async function detectLocationByIp(): Promise<{ region: string } | null> {
+export async function detectLocationByIp(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<DetectedLocation | null> {
   for (const api of IP_APIS) {
     try {
       const res = await fetch(api.url, {
@@ -141,10 +360,18 @@ export async function detectLocationByIp(): Promise<{ region: string } | null> {
       if (!res.ok) continue;
 
       const data = await res.json();
-      const region = api.parser(data);
+      const parsed = api.parser(data);
 
-      if (region && region !== UNKNOWN_REGION) {
-        return { region };
+      if (parsed.latitude != null && parsed.longitude != null) {
+        const coords = { latitude: parsed.latitude, longitude: parsed.longitude };
+        const localized = await reverseGeocode(coords.latitude, coords.longitude, lang);
+        if (localized && localized !== UNKNOWN_REGION) {
+          return { region: localized, coords };
+        }
+      }
+
+      if (parsed.region && parsed.region !== UNKNOWN_REGION) {
+        return { region: parsed.region };
       }
     } catch {
       continue;
@@ -154,7 +381,9 @@ export async function detectLocationByIp(): Promise<{ region: string } | null> {
 }
 
 /** GPS via browser API; needs permission */
-export async function detectLocationByGPS(): Promise<{ region: string } | null> {
+export async function detectLocationByGPS(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<DetectedLocation | null> {
   if (!navigator?.geolocation) {
     return null;
   }
@@ -162,29 +391,12 @@ export async function detectLocationByGPS(): Promise<{ region: string } | null> 
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords;
-
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=en`,
-            {
-              signal: AbortSignal.timeout(5000),
-              headers: { 'User-Agent': 'MarketPiePie/1.0' },
-            }
-          );
-
-          if (!response.ok) {
-            resolve(null);
-            return;
-          }
-
-          const data = await response.json();
-          const region = normalizeRegionFromNominatimAddress(data.address as NominatimAddress);
-
-          resolve(region ? { region } : null);
-        } catch {
-          resolve(null);
-        }
+        const coords = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        const region = await reverseGeocode(coords.latitude, coords.longitude, lang);
+        resolve(region ? { region, coords } : null);
       },
       () => {
         resolve(null);
@@ -192,20 +404,34 @@ export async function detectLocationByGPS(): Promise<{ region: string } | null> 
       {
         timeout: 10000,
         enableHighAccuracy: false,
-      }
+      },
     );
   });
 }
 
-/** Try GPS first, then IP */
-export async function detectLocation(): Promise<{ region: string } | null> {
-  const gpsResult = await detectLocationByGPS();
+/** Try GPS first, then IP — labels follow the selected app language */
+export async function detectLocation(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<DetectedLocation | null> {
+  const gpsResult = await detectLocationByGPS(lang);
   if (gpsResult) return gpsResult;
 
-  const ipResult = await detectLocationByIp();
+  const ipResult = await detectLocationByIp(lang);
   if (ipResult) return ipResult;
 
   return null;
+}
+
+/** Re-label stored region into the new app language (needs saved GPS/IP coords) */
+export async function refreshRegionForLanguage(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<boolean> {
+  const coords = getRegionCoords();
+  if (!coords) return false;
+  const previous = getRegion();
+  const region = await reverseGeocode(coords.latitude, coords.longitude, lang);
+  if (!region) return false;
+  return saveRegion(preserveAdminUnitSuffix(previous, region), coords);
 }
 
 /** Current lat/lon only (for distance filter) */

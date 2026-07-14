@@ -3,15 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { ToastHost } from './components/common/ToastHost';
 import { SplashScreen } from './components/SplashScreen';
 import { BottomTab } from './components/navigation/BottomTab';
+import { useLanguage } from './hooks/useLanguage';
 import { Home } from './pages/Home';
 import { Search } from './pages/Search';
 import { Community } from './pages/Community';
 import { PostDetail } from './pages/PostDetail';
 import { PostWrite } from './pages/PostWrite';
 import { Notifications } from './pages/Notifications';
-import { BarterProductSelect } from './pages/BarterProductSelect';
-import { BarterOfferWrite } from './pages/BarterOfferWrite';
-import { BarterComplete } from './pages/BarterComplete';
 import { Register } from './pages/Register';
 import { ChatList } from './pages/ChatList';
 import { My } from './pages/My';
@@ -44,12 +42,8 @@ import { AdminReports } from './pages/AdminReports';
 import { InquiryWrite } from './pages/InquiryWrite';
 import { AdminPassword } from './pages/AdminPassword';
 import { RegisterComplete } from './pages/RegisterComplete';
-import { ShippingInfo } from './pages/ShippingInfo';
-import { ShippingInfoInput } from './pages/ShippingInfoInput';
-import { ShippingInfoRequest } from './pages/ShippingInfoRequest';
 import { MeetupSchedule } from './pages/MeetupSchedule';
 import { ReceiveConfirm } from './pages/ReceiveConfirm';
-import { CompleteCheck } from './pages/CompleteCheck';
 import { RegionSelect } from './pages/RegionSelect';
 import { NoticeDetail } from './pages/NoticeDetail';
 import { NoticeList } from './pages/NoticeList';
@@ -113,7 +107,6 @@ const HIDE_NAV_PREFIXES = [
   '/dispute',
   '/notices/',
   '/receive/',
-  '/complete-check/',
   '/meetup/',
 ];
 
@@ -154,6 +147,7 @@ function ScrollToTop() {
 function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyReady: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const testModeEnabled = isTestLoginEnabled();
 
   useEffect(() => {
@@ -392,7 +386,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
               onClick={() => navigate(`/dispute/${firstUndismissed.orderId}?view=other`)}
               className="flex-1 text-center"
             >
-              The other party opened a dispute. Please review.
+              {t('disputeBanner')}
             </span>
             <button
               type="button"
@@ -402,7 +396,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
               }}
               className="shrink-0 px-2 py-1 rounded bg-white/20 hover:bg-white/30 font-medium"
             >
-              OK
+              {t('ok')}
             </button>
           </div>
         );
@@ -426,9 +420,6 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/notices" element={<NoticeList />} />
           <Route path="/notices/:id" element={<NoticeDetail />} />
-          <Route path="/barter/select/:targetProductId" element={<BarterProductSelect />} />
-          <Route path="/barter/offer/:targetProductId" element={<BarterOfferWrite />} />
-          <Route path="/barter/complete/:orderId" element={<BarterComplete />} />
           <Route path="/register" element={<Register />} />
           <Route path="/register/edit/:id" element={<Register />} />
           <Route path="/register/complete" element={<RegisterComplete />} />
@@ -463,12 +454,8 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
             <Route path="data" element={<AdminData />} />
             <Route path="inquiries" element={<AdminInquiries />} />
           </Route>
-          <Route path="/shipping/:orderId" element={<ShippingInfo />} />
-          <Route path="/shipping-info/:orderId" element={<ShippingInfoInput />} />
-          <Route path="/shipping-info-request/:orderId" element={<ShippingInfoRequest />} />
           <Route path="/meetup/:orderId" element={<MeetupSchedule />} />
           <Route path="/receive/:orderId" element={<ReceiveConfirm />} />
-          <Route path="/complete-check/:orderId" element={<CompleteCheck />} />
           <Route path="/region/select" element={<RegionSelect />} />
           <Route path="/terms" element={<div className="p-4 min-h-screen">Terms of service</div>} />
           <Route path="/privacy" element={<div className="p-4 min-h-screen">Privacy policy</div>} />

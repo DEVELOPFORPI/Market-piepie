@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUnreadCount } from '@/utils/notificationStorage';
+import { useLanguage } from '@/hooks/useLanguage';
 
 type NotificationBellButtonProps = {
   className?: string;
@@ -8,6 +9,7 @@ type NotificationBellButtonProps = {
 
 export const NotificationBellButton: React.FC<NotificationBellButtonProps> = ({ className = '' }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export const NotificationBellButton: React.FC<NotificationBellButtonProps> = ({ 
       type="button"
       onClick={() => navigate('/notifications')}
       className={`relative p-2 ${unreadCount > 0 ? 'text-[#00A8A3]' : 'text-gray-900 hover:text-gray-600'} ${className}`}
-      aria-label="Notifications"
+      aria-label={t('notifications')}
     >
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path

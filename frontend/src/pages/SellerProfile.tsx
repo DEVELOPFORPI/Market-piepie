@@ -14,15 +14,15 @@ import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profile
 import { mapPostFromDB } from '@/utils/dbSync';
 import { API_BASE } from '@/utils/apiConfig';
 import {
-  DISPUTE_LIST_RECEIVED,
-  DISPUTE_LIST_SENT,
-  DISPUTE_STATUS_ACTIVE,
-  DISPUTE_STATUS_RESOLVED,
   labelPostCategory,
   isFreeShareListing,
   labelFreeShareMenu,
   labelProductStatus,
 } from '@/locale/enUI';
+import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
+import { labelDisputeStoredValue } from '@/utils/disputeLabels';
+import { labelReviewTag } from '@/utils/reviewTagLabels';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 interface ReviewFromDB {
   id: string;
@@ -72,30 +72,17 @@ const POST_CATEGORY_TABS: PostCategoryFilter[] = [
   POST_CATEGORY_VALUE.SWAP,
 ];
 
-function postCategoryTabLabel(category: PostCategoryFilter): string {
-  if (category === 'all') return 'All';
-  return labelPostCategory(category);
-}
-
-const TAB_LABELS: Record<TabKey, string> = {
-  listings: 'Listings',
-  posts: 'Posts',
-  reviews: 'Reviews',
-  disputes: 'Disputes',
-};
-
 const TAB_ORDER: TabKey[] = ['listings', 'posts', 'reviews', 'disputes'];
 
-function disputeStatusLabel(status: DisputeStatus): string {
-  return status === 'RESOLVED' ? DISPUTE_STATUS_RESOLVED : DISPUTE_STATUS_ACTIVE;
-}
+const TAB_I18N: Record<TabKey, AppMessageKey> = {
+  listings: 'listingsTab',
+  posts: 'postsTab',
+  reviews: 'reviews',
+  disputes: 'disputes',
+};
 
 function disputeStatusVariant(status: DisputeStatus): 'warning' | 'success' {
   return status === 'RESOLVED' ? 'success' : 'warning';
-}
-
-function reviewCountLabel(count: number): string {
-  return count === 1 ? '1 review' : `${count} reviews`;
 }
 
 function buildStarDistribution(reviews: ReviewFromDB[]): Record<1 | 2 | 3 | 4 | 5, number> {
@@ -110,9 +97,11 @@ function buildStarDistribution(reviews: ReviewFromDB[]): Record<1 | 2 | 3 | 4 | 
 function ReviewSummary({
   avgRating,
   reviews,
+  reviewCountLabel,
 }: {
   avgRating: number;
   reviews: ReviewFromDB[];
+  reviewCountLabel: string;
 }) {
   const distribution = buildStarDistribution(reviews);
   const total = reviews.length;
@@ -124,7 +113,7 @@ function ReviewSummary({
           <span className="text-4xl font-bold text-gray-900 tracking-tight leading-none">
             {avgRating.toFixed(1)}
           </span>
-          <p className="mt-2.5 text-xs font-medium text-gray-500">{reviewCountLabel(total)}</p>
+          <p className="mt-2.5 text-xs font-medium text-gray-500">{reviewCountLabel}</p>
         </div>
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-2 pl-4">
           {([5, 4, 3, 2, 1] as const).map((star) => {
@@ -157,6 +146,7 @@ function ReviewSummary({
 export const SellerProfile: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { lang, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabKey>('listings');
   const [seller, setSeller] = useState<User | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -261,6 +251,19 @@ export const SellerProfile: React.FC = () => {
     loadData();
   }, [id]);
 
+  const postCategoryTabLabel = (category: PostCategoryFilter): string => {
+    if (category === 'all') return t('chipAll');
+    return labelPostCategory(category);
+  };
+
+  const disputeStatusLabel = (status: DisputeStatus): string => (
+    status === 'RESOLVED' ? t('disputeResolved') : t('disputeActive')
+  );
+
+  const reviewCountLabel = (count: number): string => (
+    count === 1 ? t('reviewCountOne') : t('reviewCountMany', { n: count })
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -274,14 +277,14 @@ export const SellerProfile: React.FC = () => {
       <div className="min-h-screen bg-white">
         <TopBar
           leftContent={
-            <button onClick={() => navigate(-1)} className="p-2">
+            <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           }
         />
-        <div className="text-center py-16 text-gray-500">User not found.</div>
+        <div className="text-center py-16 text-gray-500">{t('userNotFound')}</div>
       </div>
     );
   }
@@ -309,7 +312,7 @@ export const SellerProfile: React.FC = () => {
   })();
 
   const listingFilterTabs: { value: ListingFilter; label: string }[] = [
-    { value: 'all', label: 'All' },
+    { value: 'all', label: t('chipAll') },
     { value: 'free', label: labelFreeShareMenu() },
     { value: PRODUCT_STATUS_VALUE.FOR_SALE, label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
     { value: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
@@ -317,16 +320,16 @@ export const SellerProfile: React.FC = () => {
   ];
 
   const disputeFilterOptions: { value: DisputeDirectionFilter; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'sent', label: DISPUTE_LIST_SENT },
-    { value: 'received', label: DISPUTE_LIST_RECEIVED },
+    { value: 'all', label: t('chipAll') },
+    { value: 'sent', label: t('disputeSent') },
+    { value: 'received', label: t('disputeReceived') },
   ];
 
   return (
     <div className="min-h-screen bg-white pb-6">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -385,7 +388,7 @@ export const SellerProfile: React.FC = () => {
             }`}
             style={activeTab === tab ? { color: '#00A8A3', borderColor: '#00A8A3' } : undefined}
           >
-            {TAB_LABELS[tab]}
+            {t(TAB_I18N[tab])}
           </button>
         ))}
       </div>
@@ -395,7 +398,7 @@ export const SellerProfile: React.FC = () => {
           <div>
             {products.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                No listings.
+                {t('sellerNoListings')}
               </div>
             ) : (
               <>
@@ -418,7 +421,7 @@ export const SellerProfile: React.FC = () => {
                 </div>
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
-                    No listings in this category.
+                    {t('noListingsInCategory')}
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
@@ -441,7 +444,7 @@ export const SellerProfile: React.FC = () => {
           <div>
             {posts.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                No posts yet.
+                {t('noPostsYet')}
               </div>
             ) : (
               <>
@@ -464,7 +467,7 @@ export const SellerProfile: React.FC = () => {
                 </div>
                 {filteredPosts.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
-                    No posts in this category.
+                    {t('noPostsInCategory')}
                   </div>
                 ) : (
                   <div className="-mx-4">
@@ -481,16 +484,20 @@ export const SellerProfile: React.FC = () => {
         {activeTab === 'reviews' && (
           <div>
             {reviews.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No reviews yet.</div>
+              <div className="text-center py-8 text-gray-400">{t('noReviewsYet')}</div>
             ) : (
               <>
-                <ReviewSummary avgRating={avgRating} reviews={reviews} />
+                <ReviewSummary
+                  avgRating={avgRating}
+                  reviews={reviews}
+                  reviewCountLabel={reviewCountLabel(reviews.length)}
+                />
                 <div className="space-y-4">
                   {reviews.map((review) => (
                   <div key={review.id} className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-sm font-medium text-gray-900">
-                        {review.reviewer?.nickname || 'Anonymous'}
+                        {review.reviewer?.nickname || t('anonymous')}
                       </span>
                       {review.reviewer?.kyc_status === 'verified' && (
                         <KYCBadge status="verified" userId={review.reviewer.id} />
@@ -517,7 +524,7 @@ export const SellerProfile: React.FC = () => {
                             key={tag}
                             className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
                           >
-                            {tag}
+                            {labelReviewTag(tag, lang)}
                           </span>
                         ))}
                       </div>
@@ -537,7 +544,7 @@ export const SellerProfile: React.FC = () => {
           <div>
             {disputes.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                No disputes.
+                {t('noDisputes')}
               </div>
             ) : (
               <>
@@ -560,13 +567,13 @@ export const SellerProfile: React.FC = () => {
                 </div>
                 {filteredDisputes.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
-                    No disputes in this category.
+                    {t('noDisputesInCategory')}
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {filteredDisputes.map((dispute) => {
                   const isSent = dispute.opened_by_user_id === id;
-                  const directionLabel = isSent ? DISPUTE_LIST_SENT : DISPUTE_LIST_RECEIVED;
+                  const directionLabel = isSent ? t('disputeSent') : t('disputeReceived');
                   return (
                     <div
                       key={dispute.id}
@@ -593,7 +600,7 @@ export const SellerProfile: React.FC = () => {
                             {Number(dispute.proposed_price).toLocaleString()} Pi
                           </p>
                           <p className="text-xs text-gray-600">
-                            Reason: {dispute.reason}
+                            {t('reasonLabel')} {labelDisputeStoredValue(lang, dispute.reason)}
                           </p>
                         </div>
                       </div>
@@ -602,7 +609,7 @@ export const SellerProfile: React.FC = () => {
                           {directionLabel}
                         </span>
                         {' · '}
-                        {new Date(dispute.created_at).toLocaleDateString('en-US')}
+                        {new Date(dispute.created_at).toLocaleDateString(localeForAppLanguage(lang))}
                       </div>
                     </div>
                   );

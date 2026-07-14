@@ -1,16 +1,20 @@
-import { api } from "@/utils/api";
-import { getMyUser } from "@/utils/profileStorage";
+import { api } from '@/utils/api';
+import { getMyUser } from '@/utils/profileStorage';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Review } from '@/types';
 import { getMyWrittenReviews, getReceivedReviews } from '@/utils/reviewStorage';
+import { useLanguage } from '@/hooks/useLanguage';
+import { localeForAppLanguage } from '@/utils/languageStorage';
+import { labelReviewTag } from '@/utils/reviewTagLabels';
 
 type TabType = 'received' | 'written';
 
 export const MyReviews: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('received');
   const [writtenReviews, setWrittenReviews] = useState<Review[]>([]);
   const [receivedReviews, setReceivedReviews] = useState<Review[]>([]);
@@ -23,11 +27,27 @@ export const MyReviews: React.FC = () => {
       if (me?.id) {
         const res = await api.get(`/api/reviews?reviewee_id=${me.id}`);
         if (res.ok) {
-          const dbReviews = (res.data as any[]).map((r: any) => ({ id: r.id, reviewerId: r.reviewer_id, revieweeId: r.reviewee_id, orderId: r.order_id, rating: r.rating, tags: r.tags || [], comment: r.comment, productTitle: r.product_title, productImage: r.product_image, createdAt: r.created_at, reviewer: r.reviewer ? { id: r.reviewer.id, nickname: r.reviewer.nickname, profileImage: r.reviewer.profile_image } : undefined }));
+          const dbReviews = (res.data as any[]).map((r: any) => ({
+            id: r.id,
+            reviewerId: r.reviewer_id,
+            revieweeId: r.reviewee_id,
+            orderId: r.order_id,
+            rating: r.rating,
+            tags: r.tags || [],
+            comment: r.comment,
+            productTitle: r.product_title,
+            productImage: r.product_image,
+            createdAt: r.created_at,
+            reviewer: r.reviewer
+              ? { id: r.reviewer.id, nickname: r.reviewer.nickname, profileImage: r.reviewer.profile_image }
+              : undefined,
+          }));
           setReceivedReviews(dbReviews as any);
         }
       }
-    } catch(e) { console.error("fetch received reviews fail", e); }
+    } catch (e) {
+      console.error('fetch received reviews fail', e);
+    }
   };
 
   useEffect(() => {
@@ -36,7 +56,6 @@ export const MyReviews: React.FC = () => {
     return () => window.removeEventListener('reviewsChanged', loadReviews);
   }, []);
 
-  // After writing a review, deep-link can open the Written tab
   useEffect(() => {
     if (location.state?.showWrittenTab) {
       setActiveTab('written');
@@ -62,7 +81,6 @@ export const MyReviews: React.FC = () => {
 
   const renderReviewCard = (review: Review) => (
     <div key={review.id} className="p-4 border border-gray-200 rounded-lg">
-      {/* Product info */}
       {review.productTitle && (
         <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100">
           {review.productImage && (
@@ -78,18 +96,16 @@ export const MyReviews: React.FC = () => {
         </div>
       )}
 
-      {/* Reviewer & Rating */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-sm font-medium text-gray-900">
           {review.reviewer.nickname}
         </span>
         {renderStars(review.rating)}
         <span className="text-xs text-gray-500 ml-auto">
-          {new Date(review.createdAt).toLocaleDateString('en-US')}
+          {new Date(review.createdAt).toLocaleDateString(localeForAppLanguage(lang))}
         </span>
       </div>
 
-      {/* Tags */}
       {review.tags && review.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {review.tags.map((tag) => (
@@ -97,13 +113,12 @@ export const MyReviews: React.FC = () => {
               key={tag}
               className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
             >
-              {tag}
+              {labelReviewTag(tag, lang)}
             </span>
           ))}
         </div>
       )}
 
-      {/* Comment */}
       {review.comment && (
         <p className="text-sm text-gray-700 leading-relaxed">{review.comment}</p>
       )}
@@ -114,16 +129,15 @@ export const MyReviews: React.FC = () => {
     <div className="min-h-screen bg-white pb-20">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Reviews"
+        title={t('reviews')}
       />
 
-      {/* Tabs */}
       <div className="flex border-b border-gray-200">
         <button
           onClick={() => setActiveTab('received')}
@@ -134,7 +148,7 @@ export const MyReviews: React.FC = () => {
           }`}
           style={activeTab === 'received' ? { color: '#00A8A3', borderColor: '#00A8A3' } : undefined}
         >
-          Received ({receivedReviews.length})
+          {t('reviewsReceived', { n: receivedReviews.length })}
         </button>
         <button
           onClick={() => setActiveTab('written')}
@@ -145,11 +159,10 @@ export const MyReviews: React.FC = () => {
           }`}
           style={activeTab === 'written' ? { color: '#00A8A3', borderColor: '#00A8A3' } : undefined}
         >
-          Written ({writtenReviews.length})
+          {t('reviewsWritten', { n: writtenReviews.length })}
         </button>
       </div>
 
-      {/* Reviews List */}
       <div className="px-4 py-4">
         {activeTab === 'received' ? (
           receivedReviews.length === 0 ? (
@@ -167,8 +180,8 @@ export const MyReviews: React.FC = () => {
                   d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
                 />
               </svg>
-              <p className="text-gray-500">No reviews received yet.</p>
-              <p className="text-xs text-gray-400 mt-1">Complete trades to receive reviews.</p>
+              <p className="text-gray-500">{t('noReviewsReceived')}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('noReviewsReceivedHint')}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -191,14 +204,14 @@ export const MyReviews: React.FC = () => {
                   d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                 />
               </svg>
-              <p className="text-gray-500">You have not written any reviews.</p>
-              <p className="text-xs text-gray-400 mt-1">Leave a review after a trade.</p>
+              <p className="text-gray-500">{t('noReviewsWritten')}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('noReviewsWrittenHint')}</p>
               <button
                 onClick={() => navigate('/my/orders')}
                 className="mt-4 px-6 py-2 rounded-lg text-white text-sm font-medium"
                 style={{ backgroundColor: '#00A8A3' }}
               >
-                View orders
+                {t('viewOrders')}
               </button>
             </div>
           ) : (

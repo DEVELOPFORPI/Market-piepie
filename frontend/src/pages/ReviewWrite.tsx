@@ -8,12 +8,15 @@ import { addReviewToChat } from '@/utils/chatStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { NOTIFY_REVIEW_WRITTEN, labelTradeMethod } from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
+import { labelReviewTag } from '@/utils/reviewTagLabels';
 
 const reviewTags = ['Quick response', 'On time', 'Kind', 'As described', 'Recommend'];
 
 export const ReviewWrite: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const { lang, t } = useLanguage();
   const [order, setOrder] = useState<Order | null>(null);
   const [rating, setRating] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -35,7 +38,7 @@ export const ReviewWrite: React.FC = () => {
 
       const existing = await ensureMyReviewForOrder(orderId);
       if (existing) {
-        alert('You already submitted a review for this trade.');
+        alert(t('alreadyReviewed'));
         navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
         return;
       }
@@ -55,12 +58,20 @@ export const ReviewWrite: React.FC = () => {
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     };
-  }, [orderId, navigate]);
+  }, [orderId, navigate, t]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
+  };
+
+  const ratingCaption = () => {
+    if (rating === 5) return t('ratingExcellent');
+    if (rating === 4) return t('ratingGood');
+    if (rating === 3) return t('ratingOkay');
+    if (rating === 2) return t('ratingPoor');
+    return t('ratingBad');
   };
 
   const handleSubmit = async () => {
@@ -84,7 +95,7 @@ export const ReviewWrite: React.FC = () => {
       };
     } catch (e) {
       console.log('[REVIEW] build review FAILED', e);
-      alert('Could not build review: ' + String(e));
+      alert(`${t('couldNotSaveReview')} ${String(e)}`);
       return;
     }
 
@@ -93,7 +104,7 @@ export const ReviewWrite: React.FC = () => {
       console.log('[REVIEW] sync + received map', { revieweeId: reviewee?.id });
       const synced = await addReceivedReviewForUser(reviewee.id, review);
       if (!synced) {
-        alert('Review could not be submitted. Check your connection and try again.');
+        alert(t('reviewSubmitFailed'));
         return;
       }
       try {
@@ -115,19 +126,19 @@ export const ReviewWrite: React.FC = () => {
       console.log('[REVIEW] saveReview OK');
     } catch (e) {
       console.log('[REVIEW] saveReview FAILED', e);
-      const message = e instanceof Error ? e.message : 'Could not save review.';
+      const message = e instanceof Error ? e.message : t('couldNotSaveReview');
       alert(message);
       return;
     }
 
-    alert('Review submitted!');
+    alert(t('reviewSubmitted'));
     navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <p className="text-gray-600">Loading…</p>
+        <p className="text-gray-600">{t('loading')}</p>
       </div>
     );
   }
@@ -136,17 +147,16 @@ export const ReviewWrite: React.FC = () => {
     <div className="min-h-screen bg-white pb-24">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Write a review"
+        title={t('writeReview')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
-        {/* Order Info */}
         {order && (
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex gap-3">
@@ -170,13 +180,12 @@ export const ReviewWrite: React.FC = () => {
 
         {!order && (
           <div className="p-4 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
-            Order not found.
+            {t('orderNotFound')}
           </div>
         )}
 
-        {/* Rating */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Rating</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('ratingLabel')}</h2>
           <div className="flex items-center justify-center gap-3">
             {[1, 2, 3, 4, 5].map((star) => (
               <button
@@ -198,14 +207,13 @@ export const ReviewWrite: React.FC = () => {
           </div>
           {rating > 0 && (
             <p className="text-center text-sm text-gray-500 mt-2">
-              {rating === 5 ? 'Excellent!' : rating === 4 ? 'Good' : rating === 3 ? 'Okay' : rating === 2 ? 'Poor' : 'Bad'}
+              {ratingCaption()}
             </p>
           )}
         </div>
 
-        {/* Tags */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Tags (optional)</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">{t('tagsOptional')}</h2>
           <div className="flex flex-wrap gap-2">
             {reviewTags.map((tag) => (
               <button
@@ -218,26 +226,24 @@ export const ReviewWrite: React.FC = () => {
                 }`}
                 style={selectedTags.includes(tag) ? { backgroundColor: '#00A8A3' } : undefined}
               >
-                {tag}
+                {labelReviewTag(tag, lang)}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Comment */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Comment</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">{t('commentLabel')}</h2>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Share your experience"
+            placeholder={t('shareExperiencePh')}
             rows={6}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3] resize-none"
           />
         </div>
       </div>
 
-      {/* Submit Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
           onClick={handleSubmit}
@@ -245,7 +251,7 @@ export const ReviewWrite: React.FC = () => {
           className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
           style={rating > 0 ? { backgroundColor: '#00A8A3' } : undefined}
         >
-          Submit review
+          {t('submitReview')}
         </button>
       </div>
     </div>

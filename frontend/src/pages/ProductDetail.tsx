@@ -14,14 +14,17 @@ import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStor
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
-import { labelProductStatus, labelProductStatusListing, labelProductAvailability, labelFreeShareMenu, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
+import { labelProductStatus, labelProductAvailability, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
+import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 
 const fallbackProduct: Product = {
   id: '0',
-  title: 'Product not found',
+  title: '',
   price: 0,
   images: ['/placeholder.jpg'],
   category: 'Other',
@@ -31,7 +34,7 @@ const fallbackProduct: Product = {
   createdAt: new Date().toISOString(),
   seller: {
     id: '',
-    nickname: 'Unknown',
+    nickname: '',
     kycStatus: 'unverified',
     trustScore: 0,
     rating: 0,
@@ -48,12 +51,16 @@ type SellerListingMenuKey =
   | typeof PRODUCT_STATUS_VALUE.RESERVED
   | typeof PRODUCT_STATUS_VALUE.SOLD;
 
-const SELLER_LISTING_MENU: { key: SellerListingMenuKey; label: string }[] = [
-  { key: 'for_sale', label: labelProductStatus(PRODUCT_STATUS_VALUE.FOR_SALE) },
-  { key: 'free', label: labelFreeShareMenu() },
-  { key: PRODUCT_STATUS_VALUE.RESERVED, label: labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED) },
-  { key: PRODUCT_STATUS_VALUE.SOLD, label: labelProductStatusListing(PRODUCT_STATUS_VALUE.SOLD) },
-];
+function sellerListingMenu(
+  t: (key: AppMessageKey, vars?: Record<string, string | number>) => string,
+): { key: SellerListingMenuKey; label: string }[] {
+  return [
+    { key: 'for_sale', label: t('forSale') },
+    { key: 'free', label: t('free') },
+    { key: PRODUCT_STATUS_VALUE.RESERVED, label: t('trading') },
+    { key: PRODUCT_STATUS_VALUE.SOLD, label: t('sold') },
+  ];
+}
 
 function isSellerListingMenuSelected(key: SellerListingMenuKey, p: Product): boolean {
   if (key === 'free') {
@@ -67,6 +74,7 @@ function isSellerListingMenuSelected(key: SellerListingMenuKey, p: Product): boo
 
 export const ProductDetail: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { id } = useParams();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -77,6 +85,7 @@ export const ProductDetail: React.FC = () => {
   const [showReport, setShowReport] = useState(false);
 
   const [product, setProduct] = useState<Product>(fallbackProduct);
+  const localizedRegion = useLocalizedRegion(product.region);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const isMine = product.seller?.id === getCurrentUserId();
@@ -181,7 +190,7 @@ export const ProductDetail: React.FC = () => {
   }, [id]);
 
   const handleDelete = () => {
-    if (confirm(`Delete "${product.title}"?`)) {
+    if (confirm(t('deleteConfirm', { title: product.title }))) {
       deleteProduct(product.id);
       window.dispatchEvent(new Event('productRegistered'));
       navigate(-1);
@@ -202,7 +211,7 @@ export const ProductDetail: React.FC = () => {
       };
       const ok = await saveProduct(updated);
       if (!ok) {
-        alert('Could not update listing. Check your connection and try again.');
+        alert(t('couldNotUpdateListing'));
         return;
       }
       setProduct(updated);
@@ -213,7 +222,7 @@ export const ProductDetail: React.FC = () => {
       if (!isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) return;
       if (isFreeShareListing(product)) {
         if (!product.price || product.price <= 0) {
-          alert('Edit the listing to set a price before switching to For sale.');
+          alert(t('setPriceBeforeForSale'));
           navigate(`/register/edit/${product.id}`);
           return;
         }
@@ -225,7 +234,7 @@ export const ProductDetail: React.FC = () => {
         };
         const ok = await saveProduct(updated);
         if (!ok) {
-          alert('Could not update listing. Check your connection and try again.');
+          alert(t('couldNotUpdateListing'));
           return;
         }
         setProduct(updated);
@@ -233,7 +242,7 @@ export const ProductDetail: React.FC = () => {
       }
       const ok = await updateProductStatus(product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
       if (!ok) {
-        alert('Could not update status. Check your connection and try again.');
+        alert(t('couldNotUpdateStatus'));
         return;
       }
       setProduct((prev) => ({ ...prev, status: PRODUCT_STATUS_VALUE.FOR_SALE }));
@@ -243,7 +252,7 @@ export const ProductDetail: React.FC = () => {
     const status = key as ProductStatus;
     const ok = await updateProductStatus(product.id, status);
     if (!ok) {
-      alert('Could not update status. Check your connection and try again.');
+      alert(t('couldNotUpdateStatus'));
       return;
     }
     setProduct((prev) => ({ ...prev, status }));
@@ -278,7 +287,7 @@ export const ProductDetail: React.FC = () => {
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[#00A8A3] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading...</p>
+          <p className="text-sm text-gray-500">{t('loading')}</p>
         </div>
       </div>
     );
@@ -289,7 +298,7 @@ export const ProductDetail: React.FC = () => {
       <div className="min-h-screen bg-white">
         <TopBar
           leftContent={
-            <button onClick={() => navigate(-1)} className="p-2" aria-label="Go back">
+            <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
@@ -300,14 +309,14 @@ export const ProductDetail: React.FC = () => {
           <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
           </svg>
-          <h2 className="text-lg font-semibold text-gray-700 mb-1">Product not found</h2>
-          <p className="text-sm text-gray-500 mb-6">This listing may have been removed or the link is invalid.</p>
+          <h2 className="text-lg font-semibold text-gray-700 mb-1">{t('productNotFound')}</h2>
+          <p className="text-sm text-gray-500 mb-6">{t('listingRemovedOrInvalid')}</p>
           <button
             onClick={() => navigate('/')}
             className="px-6 py-2.5 text-white rounded-lg font-medium text-sm"
             style={{ backgroundColor: '#00A8A3' }}
           >
-            Go to Home
+            {t('goHome')}
           </button>
         </div>
       </div>
@@ -318,11 +327,11 @@ export const ProductDetail: React.FC = () => {
     <div className="min-h-screen bg-white pb-24">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2" aria-label="Go back">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
         }
         centerContent={isMine ? (
           <button
@@ -358,7 +367,7 @@ export const ProductDetail: React.FC = () => {
             <button
               onClick={() => setShowProductMenu((v) => !v)}
               className="p-2 text-gray-600"
-              aria-label="More options"
+              aria-label={t('moreOptions')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -374,7 +383,7 @@ export const ProductDetail: React.FC = () => {
                   }}
                   className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 rounded-lg"
                 >
-                  Report
+                  {t('report')}
                 </button>
               </div>
             )}
@@ -387,7 +396,7 @@ export const ProductDetail: React.FC = () => {
         height="auto"
       >
         <div className="py-2">
-          {SELLER_LISTING_MENU.map((option) => (
+          {sellerListingMenu(t).map((option) => (
             <button
               key={option.key}
               type="button"
@@ -404,7 +413,7 @@ export const ProductDetail: React.FC = () => {
             onClick={() => setShowStatusMenu(false)}
             className="w-full px-4 py-4 text-center text-base text-gray-500 border-t border-gray-100"
           >
-            Cancel
+            {t('cancel')}
           </button>
         </div>
       </BottomSheet>
@@ -493,18 +502,18 @@ export const ProductDetail: React.FC = () => {
                 {labelProductAvailability(product)}
               </Badge>
               {productDisputeOpen && (
-                <Badge variant="danger" size="sm">Dispute</Badge>
+                <Badge variant="danger" size="sm">{t('inDispute')}</Badge>
               )}
             </div>
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500 mt-1.5">
-          <span>{product.region} · {relativeTimeShort(product.createdAt)}</span>
-          {chatCount > 0 && <span>· {chatCount} chats</span>}
+          <span>{localizedRegion} · {relativeTimeShort(product.createdAt)}</span>
+          {chatCount > 0 && <span>· {t('chatsCount', { n: chatCount })}</span>}
         </div>
         {(product.isFreeShare || product.price === 0) && (
           <div className="flex flex-wrap gap-2 mt-2">
-            <Badge variant="success" size="sm">🎁 Free share</Badge>
+            <Badge variant="success" size="sm">🎁 {t('freeShare')}</Badge>
           </div>
         )}
         {(product.tradeMethods?.length > 0 || product.todayTradeAvailable) && (
@@ -513,14 +522,14 @@ export const ProductDetail: React.FC = () => {
               <Badge key={method} variant="info" size="sm">{labelTradeMethod(method)}</Badge>
             ))}
             {product.todayTradeAvailable && (
-              <Badge variant="success" size="sm">Same-day OK</Badge>
+              <Badge variant="success" size="sm">{t('sameDayOk')}</Badge>
             )}
           </div>
         )}
       </div>
 
       <div className="px-4 pt-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-2">Description</h2>
+        <h2 className="text-base font-semibold text-gray-900 mb-2">{t('description')}</h2>
         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
           {product.description && product.description !== '-' ? (
             showFullDescription
@@ -528,7 +537,7 @@ export const ProductDetail: React.FC = () => {
               : product.description.length > 100
                 ? `${product.description.substring(0, 100)}...`
                 : product.description
-          ) : 'No description yet.'}
+          ) : t('noDescription')}
         </p>
         {product.description && product.description !== '-' && product.description.length > 100 && (
           <button
@@ -536,7 +545,7 @@ export const ProductDetail: React.FC = () => {
             className="text-sm mt-1 font-medium"
             style={{ color: '#00A8A3' }}
           >
-            {showFullDescription ? 'Show less' : 'Show more'}
+            {showFullDescription ? t('showLess') : t('showMore')}
           </button>
         )}
       </div>
@@ -546,23 +555,23 @@ export const ProductDetail: React.FC = () => {
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 pt-3 pb-3 safe-area-bottom">
         <div className="flex justify-end items-baseline gap-1 mb-3">
-          <span className="text-sm text-gray-500">Price</span>
+          <span className="text-sm text-gray-500">{t('priceLabel')}</span>
           {product.isFreeShare || product.price === 0 ? (
-            <span className="text-lg font-bold text-green-600">Free</span>
+            <span className="text-lg font-bold text-green-600">{t('free')}</span>
           ) : (
             <span className="text-lg font-bold text-gray-900">{product.price.toLocaleString()} PI</span>
           )}
         </div>
         {product.adminHidden ? (
           <div className="rounded-lg bg-gray-100 px-4 py-3 text-sm text-gray-600">
-            This listing was hidden by admin.
-            {product.adminHiddenReason ? ` Reason: ${product.adminHiddenReason}` : ''}
-            {!isMine ? ' You can continue an existing trade from the chat room.' : ''}
+            {t('adminHidden')}
+            {product.adminHiddenReason ? ` ${product.adminHiddenReason}` : ''}
+            {!isMine ? t('adminHiddenContinue') : ''}
           </div>
         ) : isMine ? (
           hasProductActiveDispute(product.id) ? (
             <div className="flex items-center gap-2 py-2">
-              <p className="flex-1 text-sm text-gray-500">You cannot edit or delete while a dispute is open.</p>
+              <p className="flex-1 text-sm text-gray-500">{t('cannotEditDeleteDispute')}</p>
             </div>
           ) : (
             <div className="flex gap-3">
@@ -572,23 +581,23 @@ export const ProductDetail: React.FC = () => {
                   className="flex-1 px-4 py-3 text-white rounded-lg font-medium text-sm"
                   style={{ backgroundColor: '#00A8A3' }}
                 >
-                  Edit
+                  {t('edit')}
                 </button>
               )}
               <button
                 onClick={handleDelete}
                 className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
               >
-                Delete
+                {t('delete')}
               </button>
             </div>
           )
         ) : product.status === PRODUCT_STATUS_VALUE.SOLD ? (
-          <p className="text-sm text-gray-500 py-2">This listing is sold.</p>
+          <p className="text-sm text-gray-500 py-2">{t('listingSold')}</p>
         ) : product.status === PRODUCT_STATUS_VALUE.RESERVED ? (
-          <p className="text-sm text-gray-500 py-2">This item is reserved.</p>
+          <p className="text-sm text-gray-500 py-2">{t('itemReserved')}</p>
         ) : hasProductActiveDispute(product.id) ? (
-          <p className="text-sm text-gray-500 py-2">This listing has an open dispute.</p>
+          <p className="text-sm text-gray-500 py-2">{t('listingOpenDispute')}</p>
         ) : (
           <div className="flex gap-3">
             <button
@@ -601,7 +610,7 @@ export const ProductDetail: React.FC = () => {
               className="flex-1 px-4 py-3 text-white rounded-lg font-medium text-sm"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Chat
+              {t('navChat')}
             </button>
             {product.allowOffer !== false && !product.isFreeShare && product.price > 0 && (
               hasPendingOffer ? (
@@ -609,14 +618,14 @@ export const ProductDetail: React.FC = () => {
                   <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Offer sent
+                  {t('offerSent')}
                 </div>
               ) : (
                 <button
                   onClick={() => { if (guestGuard('offer')) return; navigate(`/offer/${product.id}`); }}
                   className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg font-medium text-sm hover:bg-gray-800"
                 >
-                  Make offer
+                  {t('makeOffer')}
                 </button>
               )
             )}

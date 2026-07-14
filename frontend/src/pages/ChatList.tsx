@@ -4,16 +4,19 @@ import { getChatRooms, getOtherUser, leaveChatRoom, addRemoteMessage, addRemoteR
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
 import { ChatRoom } from '@/types';
-import { displayChatMessageContent, relativeTimeShort, CHAT_ROOM_ENDED_BADGE, CHAT_LEAVE_ROOM_CONFIRM } from '@/locale/enUI';
+import { displayChatMessageContent, relativeTimeShort } from '@/locale/enUI';
 import { connectChatSocket, onNewMessage, onRoomUpdated, onNewRoom } from '@/utils/chatSocket';
 import { isGuest } from '@/utils/guestGate';
 import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { syncChatRoomsFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
+import { useLanguage } from '@/hooks/useLanguage';
+import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 
 export const ChatList: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (isGuest()) navigate('/welcome', { replace: true });
@@ -117,7 +120,7 @@ export const ChatList: React.FC = () => {
 
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Leave ${selectedIds.size} chat${selectedIds.size > 1 ? 's' : ''}?\nThe other person will see that you left.`)) return;
+    if (!confirm(t('leaveNChatsConfirm', { n: selectedIds.size }))) return;
     selectedIds.forEach((id) => { leaveChatRoom(id); });
     loadRooms();
     setSelectedIds(new Set());
@@ -160,7 +163,7 @@ export const ChatList: React.FC = () => {
 
   const handleLeaveRoom = (roomId: string) => {
     setContextMenu(null);
-    if (confirm(CHAT_LEAVE_ROOM_CONFIRM)) {
+    if (confirm(t('leaveChatConfirm'))) {
       void leaveChatRoom(roomId).then(() => loadRooms());
     }
   };
@@ -176,7 +179,7 @@ export const ChatList: React.FC = () => {
       {/* Header */}
       <div className="bg-white sticky top-0 z-10 border-b border-gray-200">
         <div className="flex items-center justify-between h-14 px-4">
-          <h1 className="text-lg font-bold text-gray-900">Chats</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('chatsTitle')}</h1>
           <div className="flex items-center gap-1">
             {deleteMode ? (
               <>
@@ -185,10 +188,10 @@ export const ChatList: React.FC = () => {
                   className="text-sm font-medium px-2"
                   style={{ color: '#00A8A3' }}
                 >
-                  {allSelected ? 'Unselect all' : 'Select all'}
+                  {allSelected ? t('unselectAll') : t('selectAll')}
                 </button>
                 <button onClick={exitDeleteMode} className="text-sm font-medium text-gray-600 px-2">
-                  Cancel
+                  {t('cancel')}
                 </button>
               </>
             ) : (
@@ -199,7 +202,7 @@ export const ChatList: React.FC = () => {
                     type="button"
                     onClick={() => setDeleteMode(true)}
                     className="p-2 text-gray-700"
-                    aria-label="Delete"
+                    aria-label={t('deleteAria')}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -250,12 +253,12 @@ export const ChatList: React.FC = () => {
                   <svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
                   </svg>
-                  <span className="text-xs text-red-400 font-medium">Listing no longer available</span>
+                  <span className="text-xs text-red-400 font-medium">{t('listingUnavailable')}</span>
                 </div>
               )}
               {roomEnded && !productDeleted && (
                 <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
-                  <span className="text-xs text-gray-400 font-medium">{CHAT_ROOM_ENDED_BADGE}</span>
+                  <span className="text-xs text-gray-400 font-medium">{t('ended')}</span>
                 </div>
               )}
 
@@ -267,7 +270,7 @@ export const ChatList: React.FC = () => {
                     className={`w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
                       selected ? 'border-[#00A8A3] bg-[#00A8A3]' : 'border-gray-300 hover:border-[#00A8A3]'
                     }`}
-                    aria-label="Select"
+                    aria-label={t('selectAria')}
                   >
                     {selected && (
                       <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
@@ -312,11 +315,17 @@ export const ChatList: React.FC = () => {
                       {resolveDisplayNickname(other.id, other.nickname)}
                     </span>
                     <span className="text-xs text-gray-400 flex-shrink-0">
-                      {room.product?.region} · {relativeTimeShort(room.lastMessageTime)}
+                      {room.product?.region ? (
+                        <>
+                          <LocalizedRegionText region={room.product.region} />
+                          {' · '}
+                        </>
+                      ) : null}
+                      {relativeTimeShort(room.lastMessageTime)}
                     </span>
                   </div>
                   <p className={`text-sm truncate ${muted ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {room.lastMessage ? displayChatMessageContent(room.lastMessage) : 'Say hello'}
+                    {room.lastMessage ? displayChatMessageContent(room.lastMessage) : t('sayHello')}
                   </p>
                 </div>
 
@@ -339,7 +348,7 @@ export const ChatList: React.FC = () => {
           <svg className="w-14 h-14 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <p className="text-sm text-gray-400">No chats yet.</p>
+          <p className="text-sm text-gray-400">{t('noChatsYet')}</p>
         </div>
       )}
 
@@ -355,7 +364,7 @@ export const ChatList: React.FC = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            Leave {selectedIds.size} chat{selectedIds.size > 1 ? 's' : ''}
+            {t('leaveNChats', { n: selectedIds.size })}
           </button>
         </div>
       )}
@@ -377,7 +386,7 @@ export const ChatList: React.FC = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Leave chat
+            {t('leaveChat')}
           </button>
         </div>
       )}

@@ -6,6 +6,9 @@ import {
 import { getUnlockedBadgeIds, unlockActivityBadge } from '@/utils/activityBadgeStorage';
 import { getDisplayActivityBadgeId, setDisplayActivityBadgeId } from '@/utils/profileStorage';
 import { piBadgePurchasePayment } from '@/utils/piAuth';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { AppMessageKey } from '@/hooks/useLanguage';
+import { activityBadgeLabelKey } from '@/i18n/badgeNameMessages';
 
 const TEAL = '#00A8A3';
 
@@ -23,6 +26,7 @@ interface PurchaseModal {
 }
 
 export const ActivityBadgesPanel: React.FC = () => {
+  const { t } = useLanguage();
   const [unlocked, setUnlocked] = useState(() => getUnlockedBadgeIds());
   const [displayBadgeId, setDisplayBadgeIdState] = useState(() => getDisplayActivityBadgeId());
   const [purchaseModal, setPurchaseModal] = useState<PurchaseModal | null>(null);
@@ -64,10 +68,10 @@ export const ActivityBadgesPanel: React.FC = () => {
         setUnlocked(getUnlockedBadgeIds());
         setPurchaseModal(null);
       } else {
-        alert('Payment cancelled.');
+        alert(t('paymentCancelled'));
       }
     } catch {
-      alert('Payment failed. Please try again in Pi Browser.');
+      alert(t('paymentFailed'));
     } finally {
       setPurchasing(false);
     }
@@ -76,16 +80,18 @@ export const ActivityBadgesPanel: React.FC = () => {
   return (
     <div className="px-4 pt-6 pb-28 bg-white min-h-[50vh]">
       <p className="text-center text-sm text-gray-500 mb-3 px-2">
-        Earn badges by trading and joining the community.
+        {t('badgesEarnHint')}
       </p>
       <p className="text-center text-xs text-gray-400 mb-8 px-3">
-        Tap an unlocked badge to show it on your profile photo. Tap again to clear.
+        {t('badgesTapHint')}
       </p>
 
       <div className="grid grid-cols-3 gap-x-3 gap-y-6 max-w-md mx-auto">
         {ACTIVITY_BADGE_DEFINITIONS.map(({ id, label }) => {
           const isOn = unlocked.has(id);
           const isProfilePick = displayBadgeId === id;
+          const labelKey = activityBadgeLabelKey(id);
+          const displayLabel = labelKey ? t(labelKey as AppMessageKey) : label;
           return (
             <div key={id} className="flex flex-col items-center text-center">
               <button
@@ -93,7 +99,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                 onClick={() =>
                   isOn
                     ? setDisplayActivityBadgeId(id)
-                    : handleLockedBadgeClick(id, label)
+                    : handleLockedBadgeClick(id, displayLabel)
                 }
                 className={`relative rounded-full flex items-center justify-center mb-2 shrink-0 transition-transform active:scale-[0.97] ${
                   isOn
@@ -110,9 +116,9 @@ export const ActivityBadgesPanel: React.FC = () => {
                 aria-label={
                   isOn
                     ? isProfilePick
-                      ? `${label}, featured on profile, tap to remove`
-                      : `${label}, tap to set as profile badge`
-                    : `${label}, locked — tap to purchase`
+                      ? t('ariaBadgeFeatured', { name: displayLabel })
+                      : t('ariaBadgeSet', { name: displayLabel })
+                    : t('ariaBadgeLocked', { name: displayLabel })
                 }
               >
                 {isOn ? (
@@ -132,7 +138,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                     className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 rounded-full bg-amber-400 text-[10px] font-bold text-white flex items-center justify-center shadow"
                     aria-hidden
                   >
-                    Main
+                    {t('badgeMain')}
                   </span>
                 )}
               </button>
@@ -140,7 +146,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                 className="text-xs font-medium leading-tight px-0.5"
                 style={{ color: isOn ? TEAL : '#9ca3af' }}
               >
-                {label}
+                {displayLabel}
               </span>
             </div>
           );
@@ -166,10 +172,10 @@ export const ActivityBadgesPanel: React.FC = () => {
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-1">{purchaseModal.badgeLabel}</h3>
               <p className="text-sm text-gray-500 text-center leading-relaxed">
-                Complete missions to earn this badge for free.
+                {t('badgeEarnFree')}
               </p>
               <p className="text-sm text-gray-700 text-center mt-3 font-medium">
-                Want to unlock it now?
+                {t('badgeUnlockNow')}
               </p>
               <div className="flex items-center gap-1.5 mt-2 mb-2">
                 <img src="/pi_logo.svg" alt="Pi" className="w-5 h-5" />
@@ -184,7 +190,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                 disabled={purchasing}
                 className="flex-1 py-3.5 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                Close
+                {t('close')}
               </button>
               <div className="w-px bg-gray-100" />
               <button
@@ -194,7 +200,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                 className="flex-1 py-3.5 text-sm font-bold text-white transition-colors disabled:opacity-60"
                 style={{ backgroundColor: TEAL }}
               >
-                {purchasing ? 'Processing...' : 'Pay 0.01 Pi'}
+                {purchasing ? t('processing') : t('payPi')}
               </button>
             </div>
           </div>

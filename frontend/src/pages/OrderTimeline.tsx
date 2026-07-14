@@ -8,34 +8,27 @@ import { getProductById } from '@/utils/productStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
 import { labelTradeMethod } from '@/locale/enUI';
 import { resolveDisplayNickname } from '@/utils/profileStorage';
+import { useLanguage } from '@/hooks/useLanguage';
+import { localeForAppLanguage } from '@/utils/languageStorage';
+import { displayOrderTimelineDescription } from '@/utils/orderTimelineDisplay';
 
 export const OrderTimeline: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
+  const dateLocale = localeForAppLanguage(lang);
   const { orderId } = useParams();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-
-
   // Auto-redirect to review page when order becomes COMPLETE and no review yet
-
   useEffect(() => {
-
     if (order?.status === ORDER_STATUS_VALUE.COMPLETE && orderId) {
-
       const existing = getReviewByOrderId(orderId);
-
       if (!existing) {
-
         navigate(`/review/${orderId}`);
-
       }
-
     }
-
   }, [order?.status, orderId, navigate]);
-
-
 
   const loadOrder = async () => {
     if (!orderId) {
@@ -50,19 +43,20 @@ export const OrderTimeline: React.FC = () => {
   };
 
   useEffect(() => {
-    loadOrder();
-    window.addEventListener('ordersChanged', loadOrder);
+    const refresh = () => { void loadOrder(); };
+    refresh();
+    window.addEventListener('ordersChanged', refresh);
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'all_orders') loadOrder();
-      if (e.key === 'all_products' && orderId) loadOrder();
+      if (e.key === 'all_orders') refresh();
+      if (e.key === 'all_products' && orderId) refresh();
     };
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadOrder();
+      if (document.visibilityState === 'visible') refresh();
     };
     window.addEventListener('storage', handleStorage);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      window.removeEventListener('ordersChanged', loadOrder);
+      window.removeEventListener('ordersChanged', refresh);
       window.removeEventListener('storage', handleStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
@@ -81,16 +75,16 @@ export const OrderTimeline: React.FC = () => {
       <div className="min-h-screen bg-white">
         <TopBar
           leftContent={
-            <button onClick={() => navigate(-1)} className="p-2">
+            <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           }
-          title="Order detail"
+          title={t('orderDetailTitle')}
         />
         <div className="text-center py-12 text-gray-500">
-          Order not found.
+          {t('orderNotFound')}
         </div>
       </div>
     );
@@ -100,24 +94,24 @@ export const OrderTimeline: React.FC = () => {
     <div className="min-h-screen bg-white">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title="Order detail"
+        title={t('orderDetailTitle')}
       />
 
       <div className="px-4 py-6 space-y-6">
         <div className="p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Status</span>
+            <span className="text-sm text-gray-600">{t('statusHeading')}</span>
             <OrderStatusChip status={order.status} />
           </div>
           <p className="text-lg font-bold text-gray-900 mt-2">
             {order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0
-              ? 'Free'
+              ? t('freePrice')
               : `${order.proposedPrice.toLocaleString()} Pi`}
           </p>
         </div>
@@ -129,7 +123,7 @@ export const OrderTimeline: React.FC = () => {
               className={`p-4 border border-gray-200 rounded-lg ${productDeleted ? '' : 'cursor-pointer hover:bg-gray-50'}`}
               onClick={productDeleted ? undefined : () => navigate(`/product/${order.product!.id}`)}
             >
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Listing</h3>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t('listingSection')}</h3>
               <div className="flex gap-3">
                 <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
                   <img
@@ -140,7 +134,7 @@ export const OrderTimeline: React.FC = () => {
                 </div>
                 <div className="flex-1">
                   <h4 className={`text-sm font-medium mb-1 ${productDeleted ? 'text-gray-400' : 'text-gray-900'}`}>
-                    {productDeleted ? 'Listing removed' : (order.product?.title ?? 'Listing')}
+                    {productDeleted ? t('listingRemoved') : (order.product?.title ?? t('listingSection'))}
                   </h4>
                   {!productDeleted && (
                     <>
@@ -156,7 +150,7 @@ export const OrderTimeline: React.FC = () => {
                     </>
                   )}
                   {productDeleted && (
-                    <p className="text-xs text-gray-400 mt-1">The seller removed this listing.</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('listingRemovedBySeller')}</p>
                   )}
                 </div>
               </div>
@@ -166,13 +160,13 @@ export const OrderTimeline: React.FC = () => {
 
         {order.memo && (
           <div className="p-4 border border-gray-200 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Note</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{t('noteLabel')}</h3>
             <p className="text-sm text-gray-600">{order.memo}</p>
           </div>
         )}
 
         <div className="p-4 border border-gray-200 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">Timeline</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-4">{t('timelineHeading')}</h3>
           <div className="space-y-4">
             {order.timeline.map((event, idx) => (
               <div key={event.id} className="flex gap-3">
@@ -187,9 +181,11 @@ export const OrderTimeline: React.FC = () => {
                   )}
                 </div>
                 <div className="flex-1 pb-2">
-                  <p className="text-sm font-medium text-gray-900">{event.description}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {displayOrderTimelineDescription(event.description, lang)}
+                  </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {new Date(event.timestamp).toLocaleString('en-US')}
+                    {new Date(event.timestamp).toLocaleString(dateLocale)}
                   </p>
                 </div>
               </div>
@@ -198,24 +194,24 @@ export const OrderTimeline: React.FC = () => {
         </div>
 
         <div className="p-4 border border-gray-200 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Parties</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">{t('partiesHeading')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Buyer</span>
+              <span className="text-gray-500">{t('buyerLabel')}</span>
               <span className="text-gray-900">{resolveDisplayNickname(order.buyer.id, order.buyer.nickname)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Seller</span>
+              <span className="text-gray-500">{t('sellerLabel')}</span>
               <span className="text-gray-900">{resolveDisplayNickname(order.seller.id, order.seller.nickname)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Method</span>
+              <span className="text-gray-500">{t('methodLabel')}</span>
               <span className="text-gray-900">{labelTradeMethod(order.tradeMethod)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Offer date</span>
+              <span className="text-gray-500">{t('offerDateLabel')}</span>
               <span className="text-gray-900">
-                {new Date(order.createdAt).toLocaleDateString('en-US')}
+                {new Date(order.createdAt).toLocaleDateString(dateLocale)}
               </span>
             </div>
           </div>

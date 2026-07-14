@@ -6,6 +6,7 @@ import { addMeetupConfirmedToChat, addMeetupUpdatedToChat, addMeetupCancelledToC
 import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { NOTIFY_MEETUP_CANCELED, NOTIFY_MEETUP_CONFIRMED, NOTIFY_MEETUP_UPDATED } from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** 24h H:MM or HH:MM (built from English AM/PM selects) */
@@ -52,6 +53,7 @@ const timeSelectClass =
 export const MeetupSchedule: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const { t } = useLanguage();
   const [place, setPlace] = useState('');
   const [date, setDate] = useState('');
   const [hour12, setHour12] = useState<number | ''>('');
@@ -108,21 +110,21 @@ export const MeetupSchedule: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!place || !date || !time || !orderId) {
-      alert('Please fill in all fields.');
+      alert(t('fillAllFields'));
       return;
     }
 
     if (!DATE_PATTERN.test(date.trim())) {
-      alert('Date must be YYYY-MM-DD (e.g. 2026-03-17).');
+      alert(t('dateFormatHint'));
       return;
     }
     if (!TIME_PATTERN.test(time.trim())) {
-      alert('Time must be 24-hour HH:MM (e.g. 14:30).');
+      alert(t('timeFormatHint'));
       return;
     }
 
     if (date.trim() < minDateStr) {
-      alert('Date cannot be in the past.');
+      alert(t('dateNotPast'));
       return;
     }
 
@@ -157,11 +159,7 @@ export const MeetupSchedule: React.FC = () => {
           : `Meetup for "${updatedOrder.product.title}" is set: ${place}, ${date.trim()} ${normalizedTime}`,
         link: `/order/${orderId}`,
       });
-      alert(
-        wasEdit
-          ? 'Meetup updated. It is reflected in chat.'
-          : 'Meetup confirmed. Your partner has been notified.'
-      );
+      alert(wasEdit ? t('meetupUpdatedAlert') : t('meetupConfirmedAlert'));
     }
     navigate(-1);
   };
@@ -170,7 +168,7 @@ export const MeetupSchedule: React.FC = () => {
     if (!orderId) return;
     const orderBefore = getOrderById(orderId);
     if (!orderBefore) return;
-    if (!confirm('Cancel this meetup? The other person will be notified.')) return;
+    if (!confirm(t('cancelMeetupConfirm'))) return;
     const cancelled = await cancelOrderMeetup(orderId);
     if (cancelled) {
       await addMeetupCancelledToChat(cancelled);
@@ -183,7 +181,7 @@ export const MeetupSchedule: React.FC = () => {
         content: `The meetup for "${orderBefore.product.title}" was canceled.`,
         link: `/chat`,
       });
-      alert('Meetup canceled.');
+      alert(t('meetupCanceledAlert'));
       navigate(-1);
     }
   };
@@ -191,7 +189,7 @@ export const MeetupSchedule: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <p className="text-gray-600">Loading…</p>
+        <p className="text-gray-600">{t('loading')}</p>
       </div>
     );
   }
@@ -200,30 +198,30 @@ export const MeetupSchedule: React.FC = () => {
     <div className="min-h-screen bg-white pb-24" lang="en-US">
       <TopBar
         leftContent={
-          <button onClick={() => navigate(-1)} className="p-2">
+          <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         }
-        title={hasExistingMeetup ? 'Edit meetup' : 'Schedule meetup'}
+        title={hasExistingMeetup ? t('editMeetup') : t('scheduleMeetup')}
       />
 
       <div className="px-4 py-6 pb-24 space-y-6">
         <div className="p-4 bg-gray-50 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Listing</h3>
-          <p className="text-sm text-gray-900">{productTitle || 'Loading…'}</p>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('listingSection')}</h3>
+          <p className="text-sm text-gray-900">{productTitle || t('loading')}</p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Meetup place <span className="text-red-500">*</span>
+            {t('meetupPlace')} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             value={place}
             onChange={(e) => setPlace(e.target.value)}
-            placeholder="e.g. Exit 1, Gangnam Station"
+            placeholder={t('meetupPlacePh')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -231,7 +229,7 @@ export const MeetupSchedule: React.FC = () => {
         <div className="flex flex-col gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="meetup-date-picker">
-              Date <span className="text-red-500">*</span>
+              {t('dateLabel')} <span className="text-red-500">*</span>
             </label>
             <div className="relative h-[50px] rounded-lg focus-within:ring-2 focus-within:ring-[#00A8A3] focus-within:ring-offset-0">
               <div
@@ -251,11 +249,11 @@ export const MeetupSchedule: React.FC = () => {
                 className="absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0"
               />
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Tap to open calendar · today or later</p>
+            <p className="text-[11px] text-gray-400 mt-1">{t('dateCalendarHint')}</p>
           </div>
           <div>
             <span className="block text-sm font-medium text-gray-700 mb-2" id="meetup-time-label">
-              Time <span className="text-red-500">*</span>
+              {t('timeLabel')} <span className="text-red-500">*</span>
             </span>
             <div
               className="grid w-full gap-2 sm:gap-3 [grid-template-columns:minmax(5.25rem,1fr)_minmax(5.25rem,1fr)_minmax(4.75rem,1fr)]"
@@ -263,12 +261,12 @@ export const MeetupSchedule: React.FC = () => {
               aria-labelledby="meetup-time-label"
             >
               <select
-                aria-label="Hour"
+                aria-label={t('hourLabel')}
                 className={timeSelectClass}
                 value={hour12 === '' ? '' : String(hour12)}
                 onChange={(e) => setHour12(e.target.value === '' ? '' : Number(e.target.value))}
               >
-                <option value="">Hour</option>
+                <option value="">{t('hourLabel')}</option>
                 {HOURS_12.map((h) => (
                   <option key={h} value={h}>
                     {h}
@@ -276,12 +274,12 @@ export const MeetupSchedule: React.FC = () => {
                 ))}
               </select>
               <select
-                aria-label="Minute"
+                aria-label={t('minuteLabel')}
                 className={timeSelectClass}
                 value={minute === '' ? '' : String(minute)}
                 onChange={(e) => setMinute(e.target.value === '' ? '' : Number(e.target.value))}
               >
-                <option value="">Min</option>
+                <option value="">{t('minOption')}</option>
                 {MINUTES.map((m) => (
                   <option key={m} value={m}>
                     {String(m).padStart(2, '0')}
@@ -289,18 +287,18 @@ export const MeetupSchedule: React.FC = () => {
                 ))}
               </select>
               <select
-                aria-label="AM or PM"
+                aria-label={t('amPmLabel')}
                 className={timeSelectClass}
                 value={ampm}
                 onChange={(e) => setAmpm(e.target.value === '' ? '' : (e.target.value as 'AM' | 'PM'))}
               >
-                <option value="">AM/PM</option>
+                <option value="">{t('amPmOption')}</option>
                 <option value="AM">AM</option>
                 <option value="PM">PM</option>
               </select>
             </div>
             <p className="text-[11px] text-gray-400 mt-1">
-              {time ? `Stored as ${time} (24h)` : 'Choose hour, minute, and AM or PM (English labels)'}
+              {time ? t('storedAs24h', { time }) : t('chooseTimeHint')}
             </p>
           </div>
         </div>
@@ -309,9 +307,9 @@ export const MeetupSchedule: React.FC = () => {
           <p className="text-sm text-blue-800">
             💡{' '}
             {hasExistingMeetup
-              ? 'Saving will notify the other person.'
-              : 'Confirming will notify the other person.'}{' '}
-            Double-check the time and place.
+              ? t('notifyOtherOnSave')
+              : t('notifyOtherOnConfirm')}{' '}
+            {t('doubleCheckTimePlace')}
           </p>
         </div>
       </div>
@@ -322,7 +320,7 @@ export const MeetupSchedule: React.FC = () => {
           disabled={!place || !date || !time}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          {hasExistingMeetup ? 'Save changes' : 'Confirm meetup'}
+          {hasExistingMeetup ? t('saveChanges') : t('confirmMeetup')}
         </button>
         {hasExistingMeetup && (
           <button
@@ -330,7 +328,7 @@ export const MeetupSchedule: React.FC = () => {
             onClick={handleCancelMeetup}
             className="w-full px-4 py-3 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50"
           >
-            Cancel meetup
+            {t('cancelMeetup')}
           </button>
         )}
       </div>

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
+import { useLanguage } from '@/hooks/useLanguage';
+import { localeForAppLanguage } from '@/utils/languageStorage';
 
 type NoticeSummary = {
   id: string;
@@ -9,15 +11,9 @@ type NoticeSummary = {
   updated_at?: string;
 };
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('ko-KR', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export const NoticeList: React.FC = () => {
   const navigate = useNavigate();
+  const { lang, t } = useLanguage();
   const [notices, setNotices] = useState<NoticeSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,7 +24,7 @@ export const NoticeList: React.FC = () => {
       const response = await api.get<NoticeSummary[]>('/api/notices');
       if (cancelled) return;
       if (!response.ok) {
-        setError(response.error || '공지 목록을 불러오지 못했습니다.');
+        setError(response.error || t('loadNoticesFailed'));
       } else {
         setNotices(response.data ?? []);
       }
@@ -37,7 +33,13 @@ export const NoticeList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
+
+  const formatDate = (value: string) =>
+    new Date(value).toLocaleDateString(localeForAppLanguage(lang), {
+      month: 'short',
+      day: 'numeric',
+    });
 
   return (
     <div className="min-h-screen bg-[#f5f5f7]">
@@ -47,7 +49,7 @@ export const NoticeList: React.FC = () => {
             type="button"
             onClick={() => navigate('/')}
             className="relative z-[1] flex h-10 w-10 items-center justify-center rounded-full text-gray-800 transition-colors hover:bg-gray-100 active:bg-gray-200"
-            aria-label="뒤로가기"
+            aria-label={t('goBack')}
           >
             <svg
               width="22"
@@ -64,18 +66,18 @@ export const NoticeList: React.FC = () => {
             </svg>
           </button>
           <h1 className="pointer-events-none absolute inset-x-14 text-center text-lg font-bold text-gray-900">
-            공지사항
+            {t('noticesTitle')}
           </h1>
         </div>
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-5">
         {loading ? (
-          <p className="px-5 py-10 text-center text-sm text-gray-500">불러오는 중…</p>
+          <p className="px-5 py-10 text-center text-sm text-gray-500">{t('loading')}</p>
         ) : error ? (
           <p className="px-5 py-10 text-center text-sm text-red-600">{error}</p>
         ) : notices.length === 0 ? (
-          <p className="px-5 py-16 text-center text-sm text-gray-500">등록된 공지가 없습니다.</p>
+          <p className="px-5 py-16 text-center text-sm text-gray-500">{t('noNotices')}</p>
         ) : (
           <ul className="space-y-2.5">
             {notices.map((notice) => (

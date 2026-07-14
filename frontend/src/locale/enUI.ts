@@ -17,22 +17,34 @@ import {
   HOME_FEED_CHIP_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
+import { accountT } from '@/i18n/accountMessages';
+import { communityT } from '@/i18n/communityMessages';
+import { homeT } from '@/i18n/homeMessages';
+import { productT } from '@/i18n/productMessages';
+import { getAppLanguage } from '@/utils/languageStorage';
+
+export {
+  displayChatMessageContent,
+  isMeetupCanceledMessage,
+  isChatSystemKey,
+} from '@/utils/chatDisplay';
 
 /** UI strings are English-first; Korean literals in `types/` are persisted data keys only. */
 const pick = (en: string, _ko?: string) => en;
 
 export function labelProductStatus(s: ProductStatus): string {
+  const lang = getAppLanguage();
   const map: Record<ProductStatus, string> = {
-    [PRODUCT_STATUS_VALUE.FOR_SALE]: pick('For sale', '\uD310\uB9E4\uC911'),
-    [PRODUCT_STATUS_VALUE.RESERVED]: pick('Trading', '\uAC70\uB798\uC911'),
-    [PRODUCT_STATUS_VALUE.SOLD]: pick('Trade complete', '\uAC70\uB798\uC644\uB8CC'),
+    [PRODUCT_STATUS_VALUE.FOR_SALE]: homeT(lang, 'forSale'),
+    [PRODUCT_STATUS_VALUE.RESERVED]: homeT(lang, 'trading'),
+    [PRODUCT_STATUS_VALUE.SOLD]: homeT(lang, 'sold'),
   };
   return map[s];
 }
 
 /** Listing cards: show trade-complete instead of raw status for completed listings */
 export function labelProductStatusListing(s: ProductStatus): string {
-  return s === PRODUCT_STATUS_VALUE.SOLD ? pick('Trade complete', '\uAC70\uB798\uC644\uB8CC') : labelProductStatus(s);
+  return s === PRODUCT_STATUS_VALUE.SOLD ? homeT(getAppLanguage(), 'sold') : labelProductStatus(s);
 }
 
 export function isFreeShareListing(product: { isFreeShare?: boolean; price?: number }): boolean {
@@ -46,13 +58,13 @@ export function labelProductAvailability(product: {
   price?: number;
 }): string {
   if (isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) {
-    return pick('Free', '나눔');
+    return homeT(getAppLanguage(), 'free');
   }
   return labelProductStatusListing(product.status);
 }
 
 export function labelFreeShareMenu(): string {
-  return pick('Free', '나눔');
+  return homeT(getAppLanguage(), 'free');
 }
 
 export function labelCommentReply(): string {
@@ -72,30 +84,32 @@ export function labelProfileStatDisputes(): string {
 }
 
 export function labelInDispute(): string {
-  return pick('In dispute', '\uBD84\uC7C1\uC911');
+  return homeT(getAppLanguage(), 'inDispute');
 }
 
 export function labelOrderStatus(s: OrderStatus): string {
+  const lang = getAppLanguage();
   const map: Record<OrderStatus, string> = {
-    [ORDER_STATUS_VALUE.PENDING_OFFER]: pick('Offer pending', '제안중'),
-    [ORDER_STATUS_VALUE.ACCEPTED]: pick('Accepted', '수락됨'),
-    [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: pick('Awaiting shipping info', '배송정보대기'),
-    [ORDER_STATUS_VALUE.MEETUP_SET]: pick('Meetup set', '약속확정'),
-    [ORDER_STATUS_VALUE.SHIPPED]: pick('Shipped', '발송완료'),
-    [ORDER_STATUS_VALUE.DELIVERED]: pick('Delivered', '배송완료'),
-    [ORDER_STATUS_VALUE.RECEIVED]: pick('Received', '수령완료'),
-    [ORDER_STATUS_VALUE.COMPLETE]: pick('Completed', '완료'),
-    [ORDER_STATUS_VALUE.DISPUTE]: pick('Dispute', '분쟁'),
+    [ORDER_STATUS_VALUE.PENDING_OFFER]: accountT(lang, 'orderStatusPendingOffer'),
+    [ORDER_STATUS_VALUE.ACCEPTED]: accountT(lang, 'orderStatusAccepted'),
+    [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: accountT(lang, 'orderStatusAwaitingShipping'),
+    [ORDER_STATUS_VALUE.MEETUP_SET]: accountT(lang, 'orderStatusMeetupSet'),
+    [ORDER_STATUS_VALUE.SHIPPED]: accountT(lang, 'orderStatusShipped'),
+    [ORDER_STATUS_VALUE.DELIVERED]: accountT(lang, 'orderStatusDelivered'),
+    [ORDER_STATUS_VALUE.RECEIVED]: accountT(lang, 'orderStatusReceived'),
+    [ORDER_STATUS_VALUE.COMPLETE]: accountT(lang, 'orderStatusComplete'),
+    [ORDER_STATUS_VALUE.DISPUTE]: accountT(lang, 'orderStatusDispute'),
   };
   return map[s];
 }
 
-export function labelTradeMethod(t: TradeMethod): string {
+export function labelTradeMethod(method: TradeMethod): string {
+  const lang = getAppLanguage();
   const map: Record<TradeMethod, string> = {
-    [TRADE_METHOD_VALUE.IN_PERSON]: pick('In person', '직거래'),
-    [TRADE_METHOD_VALUE.SHIPPING]: pick('Shipping', '택배'),
+    [TRADE_METHOD_VALUE.IN_PERSON]: productT(lang, 'inPerson'),
+    [TRADE_METHOD_VALUE.SHIPPING]: productT(lang, 'shipping'),
   };
-  return map[t];
+  return map[method];
 }
 
 export function labelTabType(t: TabType): string {
@@ -125,12 +139,13 @@ export function labelSellerType(t: SellerType): string {
 }
 
 export function labelPostCategory(c: PostCategory): string {
+  const lang = getAppLanguage();
   const map: Record<PostCategory, string> = {
-    [POST_CATEGORY_VALUE.QUESTION]: pick('Question', '질문'),
-    [POST_CATEGORY_VALUE.INFO]: pick('Info', '정보'),
-    [POST_CATEGORY_VALUE.LOOKING_FOR]: pick('Looking for', '이거 찾아요'),
-    [POST_CATEGORY_VALUE.DISPUTE]: pick('Dispute', '분쟁'),
-    [POST_CATEGORY_VALUE.SWAP]: pick('Swap', '교환'),
+    [POST_CATEGORY_VALUE.QUESTION]: communityT(lang, 'catQuestion'),
+    [POST_CATEGORY_VALUE.INFO]: communityT(lang, 'catInfo'),
+    [POST_CATEGORY_VALUE.LOOKING_FOR]: communityT(lang, 'catLookingFor'),
+    [POST_CATEGORY_VALUE.DISPUTE]: communityT(lang, 'catDispute'),
+    [POST_CATEGORY_VALUE.SWAP]: communityT(lang, 'catSwap'),
   };
   return map[c];
 }
@@ -147,25 +162,26 @@ export function labelBuyerChatTab(tab: BuyerChatTab): string {
 }
 
 export function relativeTimeShort(isoDate: string): string {
+  const lang = getAppLanguage();
   const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
-  if (diff < 1) return pick('Just now', '방금 전');
-  if (diff < 60) return `${diff}m ago`;
-  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
-  return `${Math.floor(diff / 1440)}d ago`;
+  if (diff < 1) return homeT(lang, 'justNow');
+  if (diff < 60) return homeT(lang, 'minutesAgo', { n: diff });
+  if (diff < 1440) return homeT(lang, 'hoursAgo', { n: Math.floor(diff / 60) });
+  return homeT(lang, 'daysAgo', { n: Math.floor(diff / 1440) });
 }
 
-/** Timeline / storage descriptions for order status transitions (English) */
+/** Timeline / storage descriptions for order status transitions (always English; localize at display). */
 export function descriptionForOrderStatusForTimeline(s: OrderStatus): string {
   const map: Record<OrderStatus, string> = {
-    [ORDER_STATUS_VALUE.PENDING_OFFER]: pick('Purchase offer created', '구매 제안 생성'),
-    [ORDER_STATUS_VALUE.ACCEPTED]: pick('Offer accepted', '제안 수락'),
-    [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: pick('Awaiting shipping details', '배송정보 대기'),
-    [ORDER_STATUS_VALUE.MEETUP_SET]: pick('Meetup confirmed', '약속 확정'),
-    [ORDER_STATUS_VALUE.SHIPPED]: pick('Marked as shipped', '발송 처리됨'),
-    [ORDER_STATUS_VALUE.DELIVERED]: pick('Marked as delivered', '배송 완료 처리됨'),
-    [ORDER_STATUS_VALUE.RECEIVED]: pick('Receipt confirmed', '수령 확인됨'),
-    [ORDER_STATUS_VALUE.COMPLETE]: pick('Trade completed', '거래 완료'),
-    [ORDER_STATUS_VALUE.DISPUTE]: pick('Dispute opened', '분쟁 접수'),
+    [ORDER_STATUS_VALUE.PENDING_OFFER]: 'Purchase offer created',
+    [ORDER_STATUS_VALUE.ACCEPTED]: 'Offer accepted',
+    [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: 'Awaiting shipping details',
+    [ORDER_STATUS_VALUE.MEETUP_SET]: 'Meetup confirmed',
+    [ORDER_STATUS_VALUE.SHIPPED]: 'Marked as shipped',
+    [ORDER_STATUS_VALUE.DELIVERED]: 'Marked as delivered',
+    [ORDER_STATUS_VALUE.RECEIVED]: 'Receipt confirmed',
+    [ORDER_STATUS_VALUE.COMPLETE]: 'Trade completed',
+    [ORDER_STATUS_VALUE.DISPUTE]: 'Dispute opened',
   };
   return map[s] ?? s;
 }
@@ -191,6 +207,17 @@ export const DISPUTE_LIST_RECEIVED = pick('Received', 'Received');
 export const DISPUTE_STATUS_ACTIVE = pick('Active', 'Active');
 export const DISPUTE_STATUS_RESOLVED = pick('Resolved', 'Resolved');
 export const DISPUTE_OTHER_PARTY = pick('Other party', 'Other party');
+export const DISPUTE_FILED_BY = pick('Filed by', 'Filed by');
+export const DISPUTE_WITH = pick('Dispute with', 'Dispute with');
+export const DISPUTE_VIEW = pick('View dispute', 'View dispute');
+export const DISPUTE_POST_SHARE_VIEW = pick(
+  'Share your view in the comments.',
+  'Share your view in the comments.',
+);
+export const DISPUTE_POST_RESOLVED = pick('This dispute is resolved.', 'This dispute is resolved.');
+export const DISPUTE_REASON_LABEL = pick('Reason', 'Reason');
+export const DISPUTE_DETAILS_LABEL = pick('Details', 'Details');
+export const DISPUTE_LINKED_LISTING = pick('Listing', 'Listing');
 export const CHAT_MSG_RECEIPT_CONFIRMED = pick('The buyer confirmed receipt.', '\uAD6C\uB9E4\uC790\uAC00 \uC218\uB839\uC744 \uD655\uC778\uD588\uC2B5\uB2C8\uB2E4.');
 export const CHAT_MSG_REVIEW_WRITTEN = pick('A review has been posted.', '\uB9AC\uBDF0\uAC00 \uB4F1\uB85D\uB418\uC5C8\uC2B5\uB2C8\uB2E4.');
 export const CHAT_MSG_BUYER_SHARE_REQUEST = pick('The buyer requested a free share.', '구매자가 나눔을 요청했습니다.');
@@ -294,54 +321,3 @@ export const MSG_ORDER_QUOTA_EXCEEDED =
 /** Region picker placeholder when none saved */
 export const UI_REGION_PLACEHOLDER = pick('Choose region', '지역 선택');
 
-/**
- * Older builds stored Korean system text in chat messages. Map to current English for display
- * without migrating localStorage. User-typed text is unchanged unless it exactly matches a key.
- */
-export function displayChatMessageContent(content: string): string {
-  if (content == null || typeof content !== 'string') return content;
-  const raw = content;
-  const t = raw.trim().replace(/\s+/g, ' ');
-
-  const exact: Record<string, string> = {
-    '! 판매자가 약속 잡기를 시작했어요.': `! ${CHAT_MSG_SELLER_MEETUP_STARTED}`,
-    '!판매자가 약속 잡기를 시작했어요.': `!${CHAT_MSG_SELLER_MEETUP_STARTED}`,
-    '판매자가 약속 잡기를 시작했어요.': CHAT_MSG_SELLER_MEETUP_STARTED,
-    '판매자가 약속 잡기를 시작했어요': CHAT_MSG_SELLER_MEETUP_STARTED,
-    '! 상품이 예약되었습니다!': CHAT_MSG_PRODUCT_RESERVED,
-    '!상품이 예약되었습니다!': CHAT_MSG_PRODUCT_RESERVED,
-    '상품이 예약되었습니다!': CHAT_MSG_PRODUCT_RESERVED,
-    '상품이 예약되었습니다.': CHAT_MSG_PRODUCT_RESERVED,
-    '이 상품이 예약되었습니다!': CHAT_MSG_PRODUCT_RESERVED,
-    '약속 정보가 업데이트되었습니다.': CHAT_MSG_MEETUP_UPDATED,
-    '약속이 취소되었습니다.': CHAT_MSG_MEETUP_CANCELED,
-    '미팅이 취소되었습니다.': CHAT_MSG_MEETUP_CANCELED,
-    '만남이 취소되었습니다.': CHAT_MSG_MEETUP_CANCELED,
-    '거래가 완료되었습니다.': CHAT_MSG_TRADE_COMPLETED,
-    '구매자가 나눔을 요청했습니다.': CHAT_MSG_BUYER_SHARE_REQUEST,
-    '구매자가 무료 나눔을 요청했습니다.': CHAT_MSG_BUYER_SHARE_REQUEST,
-    '구매자가 가격 제안을 보냈습니다.': CHAT_MSG_BUYER_PRICE_OFFER,
-    '나눔 요청이 수락되었습니다.': CHAT_MSG_ACCEPT_SHARE,
-    '무료 나눔 요청이 수락되었습니다.': CHAT_MSG_ACCEPT_SHARE,
-    '나눔 요청이 거절되었습니다.': CHAT_MSG_REJECT_SHARE,
-    '무료 나눔 요청이 거절되었습니다.': CHAT_MSG_REJECT_SHARE,
-  };
-
-  if (exact[raw] != null) return exact[raw];
-  if (exact[t] != null) return exact[t];
-
-  const acceptPi = t.match(/^([\d,]+)\s*Pi\s*제안을\s*수락했습니다\.?$/i);
-  if (acceptPi) return chatMsgAcceptOffer(acceptPi[1].replace(/,/g, ''));
-
-  const rejectPi = t.match(/^([\d,]+)\s*Pi\s*제안을\s*거절했습니다\.?$/i);
-  if (rejectPi) return chatMsgRejectOffer(rejectPi[1].replace(/,/g, ''));
-
-  return raw;
-}
-
-/** System line stored in Korean before i18n pass */
-export function isMeetupCanceledMessage(content: string): boolean {
-  const c = content.trim();
-  if (c === CHAT_MSG_MEETUP_CANCELED) return true;
-  return ['약속이 취소되었습니다.', '미팅이 취소되었습니다.', '만남이 취소되었습니다.'].includes(c);
-}

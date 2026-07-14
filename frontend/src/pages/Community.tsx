@@ -2,13 +2,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PostCard } from '@/components/common/PostCard';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
+import { LanguageButton } from '@/components/common/LanguageButton';
 import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 import { PostCategory, POST_CATEGORY_VALUE } from '@/types';
 import { getAllPosts } from '@/utils/communityStorage';
 import { syncPostsFromDB } from '@/utils/dbSync';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { guestGuard } from '@/utils/guestGate';
-import { labelPostCategory } from '@/locale/enUI';
 
 type CategoryFilter = PostCategory | 'all';
 
@@ -23,13 +24,17 @@ const CATEGORY_TABS: CategoryFilter[] = [
   POST_CATEGORY_VALUE.SWAP,
 ];
 
-function tabLabel(c: CategoryFilter): string {
-  if (c === 'all') return 'All';
-  return labelPostCategory(c);
-}
+const CAT_KEY: Record<PostCategory, AppMessageKey> = {
+  [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
+  [POST_CATEGORY_VALUE.INFO]: 'catInfo',
+  [POST_CATEGORY_VALUE.LOOKING_FOR]: 'catLookingFor',
+  [POST_CATEGORY_VALUE.DISPUTE]: 'catDispute',
+  [POST_CATEGORY_VALUE.SWAP]: 'catSwap',
+};
 
 export const Community: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL);
   const [posts, setPosts] = useState(getAllPosts());
 
@@ -57,15 +62,23 @@ export const Community: React.FC = () => {
 
   const { pull, refreshing } = usePullToRefresh(handlePullRefresh);
 
+  const tabLabel = (c: CategoryFilter): string => {
+    if (c === 'all') return t('chipAll');
+    return t(CAT_KEY[c]);
+  };
+
   return (
     <div className="min-h-screen bg-white pb-20">
       <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="flex items-center justify-between px-4 py-3 h-14">
           <div className="flex items-center gap-1">
-            <span className="text-base font-bold text-gray-900">Community</span>
+            <span className="text-base font-bold text-gray-900">{t('navCommunity')}</span>
           </div>
-          <NotificationBellButton />
+          <div className="flex items-center gap-0.5">
+            <LanguageButton />
+            <NotificationBellButton />
+          </div>
         </div>
       </div>
 
@@ -103,14 +116,14 @@ export const Community: React.FC = () => {
               />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <p className="text-gray-500">No posts yet.</p>
-            <p className="text-xs text-gray-400 mt-1">Be the first to share something.</p>
+            <p className="text-gray-500">{t('noPostsYet')}</p>
+            <p className="text-xs text-gray-400 mt-1">{t('beFirstToShare')}</p>
             <button
               onClick={() => { if (guestGuard('post')) return; navigate('/community/write'); }}
               className="mt-4 px-6 py-2 rounded-lg text-white text-sm font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >
-              Write a post
+              {t('writeAPost')}
             </button>
           </div>
         ) : (
@@ -124,7 +137,7 @@ export const Community: React.FC = () => {
         onClick={() => { if (guestGuard('post')) return; navigate('/community/write'); }}
         className="fixed bottom-24 right-4 w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity z-40"
         style={{ backgroundColor: '#00A8A3' }}
-        aria-label="Write post"
+        aria-label={t('writePostAria')}
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
