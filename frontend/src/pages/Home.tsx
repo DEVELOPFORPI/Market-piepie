@@ -16,6 +16,7 @@ import { syncProductsFromDB } from '@/utils/dbSync';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import type { HomeMessageKey } from '@/i18n/homeMessages';
 import { HOME_PROMO_SHOWN_SESSION_KEY } from '@/utils/authStorage';
 
@@ -104,6 +105,9 @@ export const Home: React.FC = () => {
   const [maxPrice, setMaxPrice] = useState('');
   const [allProducts, setAllProducts] = useState<Product[]>(defaultMockProducts);
   const [selectedRegion, setSelectedRegion] = useState<string>(UI_REGION_PLACEHOLDER);
+  const localizedRegion = useLocalizedRegion(
+    selectedRegion === UI_REGION_PLACEHOLDER ? null : selectedRegion,
+  );
   const [piExpanded, setPiExpanded] = useState(false);
   const piPrice = usePiPrice();
   const [homePromo, setHomePromo] = useState<{ show: boolean; popup: HomePopupView | null }>({
@@ -274,7 +278,9 @@ export const Home: React.FC = () => {
             onClick={() => navigate('/region/select')}
             className="flex items-center gap-1 text-sm font-medium text-gray-900"
           >
-            {selectedRegion === UI_REGION_PLACEHOLDER ? t('chooseRegion') : selectedRegion}{' '}
+            {selectedRegion === UI_REGION_PLACEHOLDER
+              ? t('chooseRegion')
+              : localizedRegion || selectedRegion}{' '}
             <span className="text-gray-400">▾</span>
           </button>
           <div className="flex items-center gap-0.5">
