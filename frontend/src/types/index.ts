@@ -158,6 +158,9 @@ export interface Order {
   sellerCompleted?: boolean;
   buyerCompleted?: boolean;
   meetupAccepted?: boolean;
+  /** Buyer receipt condition (good / normal / bad) */
+  receiptCondition?: 'good' | 'normal' | 'bad';
+  receiptNotes?: string;
 }
 
 export interface OrderTimelineEvent {
@@ -172,7 +175,7 @@ export interface ChatMessage {
   senderId: string;
   content: string;
   timestamp: string;
-  type: 'user' | 'system' | 'meetup_confirmed' | 'price_offer' | 'price_offer_result';
+  type: 'user' | 'system' | 'meetup_confirmed' | 'receipt_confirmed' | 'price_offer' | 'price_offer_result';
   images?: string[];
   meetupPlace?: string;
   meetupDate?: string;
@@ -181,6 +184,9 @@ export interface ChatMessage {
   originalPrice?: number;
   proposedPrice?: number;
   offerResult?: 'accepted' | 'rejected';
+  /** Buyer receipt condition (receipt_confirmed messages) */
+  receiptCondition?: 'good' | 'normal' | 'bad';
+  receiptNotes?: string;
 }
 
 export interface ChatRoom {

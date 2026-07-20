@@ -1679,6 +1679,8 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
     meetup_date,
     meetup_time,
     memo,
+    receipt_condition,
+    receipt_notes,
     buyer_completed,
     seller_completed,
     meetup_accepted,
@@ -1724,11 +1726,13 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
       }
     }
     const { rows } = await queryReturning(
-      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company, shipping_proof_images)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      `INSERT INTO orders (id, product_id, buyer_id, seller_id, status, proposed_price, trade_method, meetup_location, meetup_time, memo, receipt_condition, receipt_notes, buyer_completed, seller_completed, meetup_accepted, shipping_address, shipping_name, shipping_phone, tracking_number, shipping_company, shipping_proof_images)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        ON DUPLICATE KEY UPDATE
          status=VALUES(status), proposed_price=VALUES(proposed_price),
          meetup_location=VALUES(meetup_location), meetup_time=VALUES(meetup_time),
+         memo=VALUES(memo),
+         receipt_condition=VALUES(receipt_condition), receipt_notes=VALUES(receipt_notes),
          buyer_completed=VALUES(buyer_completed), seller_completed=VALUES(seller_completed),
          meetup_accepted=VALUES(meetup_accepted),
          shipping_address=VALUES(shipping_address), shipping_name=VALUES(shipping_name),
@@ -1746,6 +1750,8 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
         meetupLocation,
         meetupDateTime,
         memo,
+        receipt_condition || null,
+        receipt_notes || null,
         buyer_completed || false,
         seller_completed || false,
         meetup_accepted || false,
@@ -1824,6 +1830,9 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       trade_method: req.body.trade_method,
       meetup_accepted: req.body.meetup_accepted,
       shipping_proof_images: req.body.shipping_proof_images,
+      memo: req.body.memo,
+      receipt_condition: req.body.receipt_condition,
+      receipt_notes: req.body.receipt_notes,
     };
     for (const [col, val] of Object.entries(fields)) {
       if (val !== undefined) {

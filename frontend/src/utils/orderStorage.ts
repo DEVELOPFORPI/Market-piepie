@@ -263,18 +263,47 @@ export const clearAllOrders = (): void => {
   window.dispatchEvent(new Event('ordersChanged'));
 };
 
-export const updateOrderStatus = async (orderId: string, status: OrderStatus, description?: string): Promise<boolean> => {
+export type ReceiptCondition = 'good' | 'normal' | 'bad';
+
+export const updateOrderStatus = async (
+  orderId: string,
+  status: OrderStatus,
+  description?: string,
+  receipt?: { condition?: ReceiptCondition; notes?: string },
+): Promise<boolean> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return false;
+
+  if (receipt?.condition) {
+    order.receiptCondition = receipt.condition;
+    order.receiptNotes = receipt.notes?.trim() || undefined;
+  }
+
+  const conditionLabel =
+    receipt?.condition === 'good'
+      ? 'Good'
+      : receipt?.condition === 'normal'
+        ? 'OK'
+        : receipt?.condition === 'bad'
+          ? 'Poor'
+          : '';
+  const timelineDescription =
+    description ||
+    (status === ORDER_STATUS_VALUE.RECEIVED && conditionLabel
+      ? `Receipt confirmed (${conditionLabel})`
+      : descriptionForOrderStatusForTimeline(status));
 
   const timelineEvent = {
     id: nextTimelineId(),
     type: status,
     timestamp: new Date().toISOString(),
-    description: description || descriptionForOrderStatusForTimeline(status),
+    description: timelineDescription,
   };
-  const ok = await syncOrderStatusToDB(orderId, status, timelineEvent);
+  const ok = await syncOrderStatusToDB(orderId, status, timelineEvent, {
+    receipt_condition: order.receiptCondition || null,
+    receipt_notes: order.receiptNotes || null,
+  });
   if (!ok) return false;
 
   order.status = status;

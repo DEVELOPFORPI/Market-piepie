@@ -67,6 +67,9 @@ export const ReceiveConfirm: React.FC = () => {
       alert(t('confirmYouReceived'));
       return;
     }
+    if (price !== 0 && !condition) {
+      return;
+    }
     if (!orderId) return;
     const o = getOrderById(orderId);
     if (o?.status === ORDER_STATUS_VALUE.DISPUTE) {
@@ -74,10 +77,19 @@ export const ReceiveConfirm: React.FC = () => {
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.log('[ReceiveConfirm] confirm receive', { orderId, condition, notes });
-    await updateOrderStatus(orderId, ORDER_STATUS_VALUE.RECEIVED, 'Receipt confirmed');
-    if (o) void addReceiptConfirmedToChat(o);
+    const receipt =
+      price !== 0 && condition
+        ? { condition, notes: notes.trim() || undefined }
+        : undefined;
+
+    await updateOrderStatus(
+      orderId,
+      ORDER_STATUS_VALUE.RECEIVED,
+      undefined,
+      receipt,
+    );
+    const updated = getOrderById(orderId) || o;
+    if (updated) void addReceiptConfirmedToChat(updated, receipt);
     const completedOrder = await confirmOrderCompletion(orderId, 'buyer');
     const isShare = o && (o.proposedPrice === 0 || o.product?.isFreeShare || o.product?.price === 0);
     if (isShare) {
@@ -289,7 +301,7 @@ export const ReceiveConfirm: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
         <button
           onClick={handleSubmit}
-          disabled={!isBuyer || !confirmed}
+          disabled={!isBuyer || !confirmed || (price !== 0 && !condition)}
           className="w-full px-4 py-3 bg-primary text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           {t('submitReceiptConfirm')}

@@ -9,7 +9,7 @@ import {
   PRODUCT_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -778,13 +778,14 @@ export const ChatRoom: React.FC = () => {
           })();
         },
       });
+    } else {
+      chips.push({
+        key: 'meetup',
+        label: t('scheduleMeetup'),
+        onClick: handleSellerStartMeetup,
+        disabled: !scheduleMeetupEnabled,
+      });
     }
-    chips.push({
-      key: 'meetup',
-      label: t('scheduleMeetup'),
-      onClick: handleSellerStartMeetup,
-      disabled: !scheduleMeetupEnabled,
-    });
     if (!isShareOrder) {
       chips.push({
         key: 'dispute',
@@ -1152,7 +1153,8 @@ export const ChatRoom: React.FC = () => {
         {meetupBannerInfo
           && !isTradeCompleteForThisChat
           && !isSoldToOtherParty
-          && currentOrder?.status !== ORDER_STATUS_VALUE.DISPUTE && (
+          && currentOrder?.status !== ORDER_STATUS_VALUE.DISPUTE
+          && currentOrder?.status !== ORDER_STATUS_VALUE.RECEIVED && (
           <div className="bg-teal-50 border-t border-teal-200 px-4 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
@@ -1268,7 +1270,7 @@ export const ChatRoom: React.FC = () => {
               </span>
             </div>
           ) : null;
-          if (msg.type === 'system') {
+          if (msg.type === 'system' && !isChatSystemKey(msg.content, 'msgReceiptConfirmed')) {
             return (
               <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
                 {unreadDivider}
@@ -1336,6 +1338,72 @@ export const ChatRoom: React.FC = () => {
                     })}
                   </p>
                 </div>
+                </div>
+              </div>
+            );
+          }
+          if (msg.type === 'receipt_confirmed' || isChatSystemKey(msg.content, 'msgReceiptConfirmed')) {
+            const isMine = !!userId && msg.senderId === userId;
+            const meta = parseReceiptMessageMeta(msg.content);
+            const condition =
+              msg.receiptCondition ||
+              meta.condition ||
+              (msg.orderId ? getOrderById(msg.orderId)?.receiptCondition : undefined) ||
+              currentOrder?.receiptCondition;
+            const notes =
+              msg.receiptNotes ||
+              meta.notes ||
+              (msg.orderId ? getOrderById(msg.orderId)?.receiptNotes : undefined) ||
+              currentOrder?.receiptNotes;
+            const conditionLabel =
+              condition === 'good'
+                ? t('conditionGood')
+                : condition === 'normal'
+                  ? t('conditionOk')
+                  : condition === 'bad'
+                    ? t('conditionPoor')
+                    : '';
+            const conditionIcon =
+              condition === 'good'
+                ? '/3 ICON/1.svg'
+                : condition === 'normal'
+                  ? '/3 ICON/2.svg'
+                  : condition === 'bad'
+                    ? '/3 ICON/3.svg'
+                    : '/h.svg';
+            return (
+              <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
+                {unreadDivider}
+                <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div className="flex flex-col max-w-[85%]">
+                    <div
+                      className="rounded-lg px-4 py-3 text-white text-sm shadow-sm"
+                      style={{
+                        background: 'linear-gradient(90deg, #00A8A3 0%, #27AE60 100%)',
+                      }}
+                    >
+                      <p className="font-semibold mb-2 flex items-center gap-1">
+                        <img src={conditionIcon} alt="" className="w-4 h-4 inline-block" />
+                        {displayChatMessageContent(msg.content, lang)}
+                      </p>
+                      {conditionLabel ? (
+                        <p className="mb-0.5 text-white/95">
+                          {t('itemCondition')}
+                          <br />
+                          <span className="font-bold text-base text-white">{conditionLabel}</span>
+                        </p>
+                      ) : null}
+                      {notes ? (
+                        <p className="mt-2 text-white/95 text-xs whitespace-pre-wrap">{notes}</p>
+                      ) : null}
+                    </div>
+                    <p className={`text-xs mt-1 px-1 text-gray-500 ${isMine ? 'text-right' : 'text-left'}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString(timeLocale, {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
                 </div>
               </div>
             );

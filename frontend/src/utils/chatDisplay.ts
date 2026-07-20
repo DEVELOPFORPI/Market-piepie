@@ -68,6 +68,14 @@ export function chatSystemMessageKey(
   const leftKo = t.match(/^(.+?)\s*님이\s*채팅방을\s*나갔습니다\.?$/);
   if (leftKo) return { key: 'msgUserLeft', vars: { name: leftKo[1] } };
 
+  if (
+    t.startsWith('The buyer confirmed receipt.') ||
+    t.startsWith('구매자가 수령을 확인했습니다.') ||
+    /^(.+?) confirmed receipt\./.test(t)
+  ) {
+    return { key: 'msgReceiptConfirmed' };
+  }
+
   return null;
 }
 

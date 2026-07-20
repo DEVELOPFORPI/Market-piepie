@@ -70,6 +70,8 @@ const TABLE_COLUMNS = {
     'shipping_company',
     'shipping_proof_images',
     'memo',
+    'receipt_condition',
+    'receipt_notes',
     'seller_completed',
     'buyer_completed',
     'meetup_accepted',

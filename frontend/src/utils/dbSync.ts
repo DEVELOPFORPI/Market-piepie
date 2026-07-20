@@ -465,6 +465,8 @@ export async function syncOrderToDB(order: Order): Promise<boolean> {
       meetup_date: order.meetupDate,
       meetup_time: order.meetupTime,
       memo: order.memo,
+      receipt_condition: order.receiptCondition || null,
+      receipt_notes: order.receiptNotes || null,
       buyer_completed: order.buyerCompleted,
       seller_completed: order.sellerCompleted,
       meetup_accepted: order.meetupAccepted || false,
@@ -503,6 +505,8 @@ export type OrderStatusSyncExtra = {
   tracking_number?: string;
   shipping_company?: string;
   shipping_proof_images?: string[];
+  receipt_condition?: string | null;
+  receipt_notes?: string | null;
 };
 
 /** 주문 상태 업데이트 — 성공 여부 반환 */
@@ -667,6 +671,11 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
     meetupDate: meetup.meetupDate,
     meetupTime: meetup.meetupTime,
     memo: row.memo as string | undefined,
+    receiptCondition: (() => {
+      const c = row.receipt_condition ? String(row.receipt_condition) : '';
+      return c === 'good' || c === 'normal' || c === 'bad' ? c : undefined;
+    })(),
+    receiptNotes: row.receipt_notes ? String(row.receipt_notes) : undefined,
     buyerCompleted: Boolean(row.buyer_completed),
     sellerCompleted: Boolean(row.seller_completed),
     meetupAccepted: meetupAcceptedFromDb || meetupAcceptedFromTimeline,
@@ -995,6 +1004,25 @@ export async function syncRoomMessagesFromDB(roomId: string, userId?: string): P
     const localById = new Map((room.messages || []).map((m) => [m.id, m]));
     const dbMessages = res.data.map((row) => {
       const dbMsg = mapChatMessageFromDB(row);
+      if (dbMsg.type === 'receipt_confirmed' || dbMsg.content.includes('confirmed receipt')) {
+        const meta = (() => {
+          const idx = dbMsg.content.indexOf('\n§');
+          if (idx < 0) return {} as { condition?: 'good' | 'normal' | 'bad'; notes?: string };
+          const parts = dbMsg.content.slice(idx + 2).split('§');
+          const raw = (parts[0] || '').trim();
+          return {
+            condition: (raw === 'good' || raw === 'normal' || raw === 'bad' ? raw : undefined) as
+              | 'good'
+              | 'normal'
+              | 'bad'
+              | undefined,
+            notes: (parts[1] || '').trim() || undefined,
+          };
+        })();
+        if (meta.condition) dbMsg.receiptCondition = meta.condition;
+        if (meta.notes) dbMsg.receiptNotes = meta.notes;
+        if (dbMsg.type === 'system') dbMsg.type = 'receipt_confirmed';
+      }
       const local = localById.get(dbMsg.id);
       if (!local) return dbMsg;
       const dbHasMeetup = !!(dbMsg.meetupPlace || dbMsg.meetupDate || dbMsg.meetupTime);

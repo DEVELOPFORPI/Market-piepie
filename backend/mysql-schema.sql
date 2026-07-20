@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_company VARCHAR(255),
   shipping_proof_images JSON NOT NULL DEFAULT (JSON_ARRAY()),
   memo TEXT,
+  receipt_condition VARCHAR(20) NULL,
+  receipt_notes TEXT NULL,
   seller_completed BOOLEAN NOT NULL DEFAULT FALSE,
   buyer_completed BOOLEAN NOT NULL DEFAULT FALSE,
   meetup_accepted BOOLEAN NOT NULL DEFAULT FALSE,

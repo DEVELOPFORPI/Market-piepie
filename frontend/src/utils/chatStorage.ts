@@ -10,6 +10,7 @@ import {
   CHAT_MSG_MEETUP_UPDATED,
   CHAT_MSG_MEETUP_CANCELED,
   CHAT_MSG_PRODUCT_RESERVED,
+  CHAT_MSG_RECEIPT_CONFIRMED,
   CHAT_MSG_REJECT_SHARE,
   CHAT_MSG_SELLER_MEETUP_STARTED,
   NOTIFY_CHAT_ROOM_CREATED,
@@ -653,12 +654,51 @@ export const addTradeCompletedToChat = async (order: Order) => {
   // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
 };
 
-/** Receipt confirmed: notification only (no chat system message) */
-export const addReceiptConfirmedToChat = async (order: Order) => {
+/** Receipt confirmed: green gradient card (like meetup reserved) + i18n title */
+export const addReceiptConfirmedToChat = async (
+  order: Order,
+  opts?: { condition?: 'good' | 'normal' | 'bad'; notes?: string },
+) => {
   const room = await ensureChatRoomForOrder(order);
-  await addMessage(room.id, { id: `receipt_${Date.now()}`, senderId: 'system', content: `${order.buyer?.nickname || 'Buyer'} confirmed receipt.`, timestamp: new Date().toISOString(), type: 'system' });
-  // 채팅창에 이벤트 시스템 메시지 제거 - 알림 센터에서만 표시
+  const rooms = getAllChatRooms();
+  const r = rooms.find((x) => x.id === room.id);
+  if (r) {
+    r.order = order;
+    saveAllChatRooms(rooms, room.id);
+    persistRoomOrderLink(room.id, order);
+  }
+  const condition = opts?.condition ?? order.receiptCondition;
+  const notes = (opts?.notes ?? order.receiptNotes)?.trim() || undefined;
+  // Pack condition/notes into content for DB round-trip (no extra columns).
+  const meta =
+    condition || notes
+      ? `\n§${condition || ''}§${(notes || '').replace(/\n/g, ' ')}`
+      : '';
+  const msg: ChatMessage = {
+    id: `receipt_${Date.now()}`,
+    senderId: order.buyer.id,
+    content: `${CHAT_MSG_RECEIPT_CONFIRMED}${meta}`,
+    timestamp: new Date().toISOString(),
+    type: 'receipt_confirmed',
+    orderId: order.id,
+    receiptCondition: condition,
+    receiptNotes: notes,
+  };
+  await addMessage(room.id, msg);
 };
+
+export function parseReceiptMessageMeta(content: string): {
+  condition?: 'good' | 'normal' | 'bad';
+  notes?: string;
+} {
+  const idx = content.indexOf('\n§');
+  if (idx < 0) return {};
+  const parts = content.slice(idx + 2).split('§');
+  const raw = (parts[0] || '').trim();
+  const condition = raw === 'good' || raw === 'normal' || raw === 'bad' ? raw : undefined;
+  const notes = (parts[1] || '').trim() || undefined;
+  return { condition, notes };
+}
 
 /** Review written: notification only (no chat system message) */
 export const addReviewToChat = async (order: Order, reviewerNickname: string) => {
