@@ -1,6 +1,6 @@
-import { getAdminPassword } from '@/utils/adminAccessStorage';
+import { getAdminToken } from '@/utils/adminAccessStorage';
 
-/** Backend admin gate: send the password entered on the admin login screen. */
+/** Backend admin gate: short-lived token issued by /api/admin/login. */
 export function adminPasswordHeaders(): Record<string, string> {
-  return { 'x-admin-password': getAdminPassword() };
+  return { 'x-admin-token': getAdminToken() };
 }

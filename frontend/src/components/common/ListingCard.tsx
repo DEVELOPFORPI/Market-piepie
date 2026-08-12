@@ -3,6 +3,7 @@ import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from
 import { isFreeShareListing } from '@/locale/enUI';
 import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
+import { guestGuard } from '@/utils/guestGate';
 import { getOrdersByProductId } from '@/utils/orderStorage';
 import { getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { getDisputesByOrderId, getDisputeCountByProductId } from '@/utils/disputeStorage';
@@ -138,6 +139,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   const handleLike = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (guestGuard('like')) return;
     void (async () => {
       const nowLiked = await toggleFavorite(product);
       setLiked(nowLiked);

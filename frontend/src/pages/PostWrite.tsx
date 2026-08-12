@@ -13,7 +13,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
-import { isGuest } from '@/utils/guestGate';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -24,11 +24,8 @@ const CAT_KEY: Record<PostCategory, AppMessageKey> = {
 };
 
 export const PostWrite: React.FC = () => {
-  const _nav = useNavigate();
   const { t } = useLanguage();
-  useEffect(() => {
-    if (isGuest()) _nav('/welcome', { replace: true });
-  }, [_nav]);
+  useGuestPageGuard('post');
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
   const isEdit = !!postId;

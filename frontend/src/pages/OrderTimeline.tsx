@@ -11,8 +11,10 @@ import { resolveDisplayNickname } from '@/utils/profileStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { displayOrderTimelineDescription } from '@/utils/orderTimelineDisplay';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 export const OrderTimeline: React.FC = () => {
+  useGuestPageGuard('order');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const dateLocale = localeForAppLanguage(lang);

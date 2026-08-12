@@ -22,8 +22,10 @@ import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
 import { KYCBadge } from '@/components/common/KYCBadge';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 export const ProfileEdit: React.FC = () => {
+  useGuestPageGuard('profile');
   const { t } = useLanguage();
   const myUser = getMyUser();
   const initialData = {

@@ -24,6 +24,7 @@ import { Order, User } from '@/types';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -59,6 +60,7 @@ function resolveDisputeOpenerUserId(
 }
 
 export const Dispute: React.FC = () => {
+  useGuestPageGuard('dispute');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const dateLocale = localeForAppLanguage(lang);

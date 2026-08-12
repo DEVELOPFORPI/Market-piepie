@@ -6,6 +6,7 @@
  */
 
 import { getSessionToken } from '@/utils/authStorage';
+import { setAdminVerified } from '@/utils/adminAccessStorage';
 import { API_BASE } from '@/utils/apiConfig';
 
 export { API_BASE };
@@ -52,6 +53,12 @@ async function request<T>(
 
     if (res.status === 429) {
       rateLimitedUntil = Date.now() + 30_000;
+    }
+
+    // Admin tokens expire after a couple of hours; drop the session so the
+    // route guard sends the operator back to the admin login screen.
+    if (res.status === 401 && path.startsWith('/api/admin/') && path !== '/api/admin/login') {
+      setAdminVerified(false);
     }
 
     const data = await res.json().catch(() => null);

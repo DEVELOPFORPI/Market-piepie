@@ -1,6 +1,6 @@
 import { API_BASE } from '@/utils/apiConfig';
 import { ensureImplicitSession, getSessionToken } from '@/utils/authStorage';
-import { getAdminPassword } from '@/utils/adminAccessStorage';
+import { getAdminToken } from '@/utils/adminAccessStorage';
 
 type UploadImageOptions = {
   folder?: string;
@@ -47,8 +47,8 @@ async function authHeaders(options?: UploadImageOptions): Promise<Record<string,
   const headers: Record<string, string> = {};
 
   if (options?.admin) {
-    const adminPassword = getAdminPassword();
-    if (adminPassword) headers['x-admin-password'] = adminPassword;
+    const adminToken = getAdminToken();
+    if (adminToken) headers['x-admin-token'] = adminToken;
   }
 
   await ensureImplicitSession();

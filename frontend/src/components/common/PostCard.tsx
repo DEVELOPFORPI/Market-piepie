@@ -8,6 +8,7 @@ import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } fro
 import { getPostViewCount, syncPostViewFromDB } from '@/utils/postViewStorage';
 import { getDisputeByPostId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
+import { guestGuard } from '@/utils/guestGate';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -78,6 +79,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
   const handleLikeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (guestGuard('like')) return;
     // togglePostLike는 내부에서 postLikesChanged 이벤트를 발생시킴
     void togglePostLike(post.id);
   };

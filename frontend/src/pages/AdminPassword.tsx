@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
-import { setAdminPassword, setAdminVerified } from '@/utils/adminAccessStorage';
+import { setAdminToken, setAdminVerified } from '@/utils/adminAccessStorage';
 
 export const AdminPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -22,19 +22,26 @@ export const AdminPassword: React.FC = () => {
     }
 
     setSubmitting(true);
-    const res = await api.get('/api/admin/stats', {
-      headers: { 'x-admin-password': trimmed },
+    const res = await api.post<{ token?: string }>('/api/admin/login', {
+      password: trimmed,
     });
     setSubmitting(false);
 
-    if (!res.ok) {
+    if (!res.ok || !res.data?.token) {
       setAdminVerified(false);
-      setError(res.status === 503 ? '관리자 설정이 되어 있지 않습니다.' : '비밀번호가 올바르지 않습니다.');
+      setError(
+        res.status === 503
+          ? '관리자 설정이 되어 있지 않습니다.'
+          : res.status === 429
+            ? '시도 횟수를 초과했습니다. 잠시 후 다시 시도하세요.'
+            : '비밀번호가 올바르지 않습니다.',
+      );
       return;
     }
 
-    setAdminPassword(trimmed);
+    setAdminToken(res.data.token);
     setAdminVerified(true);
+    setPassword('');
     navigate(returnTo, { replace: true });
   };
 

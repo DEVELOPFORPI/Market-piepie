@@ -8,12 +8,14 @@ import { getFavorites, removeFavorite } from '@/utils/favoriteStorage';
 import { getProductById } from '@/utils/productStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const TEAL = '#00A8A3';
 
 type FilterStatus = 'all' | 'free' | ProductStatus;
 
 export const MyFavorites: React.FC = () => {
+  useGuestPageGuard('like');
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [favorites, setFavorites] = useState<Product[]>([]);

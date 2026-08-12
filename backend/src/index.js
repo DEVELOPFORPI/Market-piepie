@@ -272,9 +272,10 @@ async function promoteGuestToUser(piUid, piUsername) {
   try {
     await pool.query(
       `INSERT INTO users (id, nickname, pi_username, pi_verified, kyc_status)
-       VALUES ($1, $1, $2, true, 'unverified')
+       VALUES ($1, $1, $2, true, 'verified')
        ON DUPLICATE KEY UPDATE
          pi_verified = true,
+         kyc_status = 'verified',
          pi_username = COALESCE($2, users.pi_username)`,
       [piUid, resolvedUsername],
     );
@@ -363,6 +364,28 @@ async function optionalAuth(req, _res, next) {
     req.authUserId = await getUserIdFromToken(auth.slice(7));
   }
   next();
+}
+
+// 개인 데이터(주문·채팅·알림·찜)는 세션이 있어야만 접근할 수 있다.
+// requireAuth 는 users 행을 요구해 게스트 세션을 막으므로, 조회 계열에는
+// 세션 주체만 확인하는 아래 헬퍼를 쓴다.
+function requireSession(req, res) {
+  if (!req.authUserId) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+  return true;
+}
+
+/** 요청에 담긴 대상 id 중 하나라도 본인이 아니면 403. */
+function denyOtherUser(req, res, ...ids) {
+  for (const id of ids) {
+    if (id && id !== req.authUserId) {
+      res.status(403).json({ error: "Forbidden" });
+      return true;
+    }
+  }
+  return false;
 }
 
 async function requireAuth(req, res, next) {
@@ -484,6 +507,17 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
   handler: logRateLimited,
 });
+// 중단된 결제 정리는 로그인 전에도 불려야 해서 세션을 요구할 수 없다.
+// 대신 별도 한도를 둬서, 결제 id 를 찍어보는 시도가 실제 결제 요청 한도를
+// 갉아먹지 못하게 분리한다.
+const incompletePaymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: perUserKey,
+  handler: logRateLimited,
+});
 app.use("/api/", generalLimiter);
 app.use("/api/auth/", authLimiter);
 app.use("/api/guests/", authLimiter);
@@ -520,10 +554,65 @@ function parseImageUpload(req, res, next) {
   });
 }
 
+// ── 관리자 세션 토큰 ────────────────────────────────────────────
+// 비밀번호는 서버 환경변수에만 두고, 클라이언트는 로그인 시 한 번만 교환해
+// 받은 단기 토큰을 사용한다. 원문 비밀번호가 브라우저에 남지 않게 하기 위함.
+const ADMIN_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+const ADMIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const ADMIN_FAIL_MAX = 10;
+const adminTokens = new Map();
+const adminFailures = new Map();
+
+function issueAdminToken() {
+  const now = Date.now();
+  for (const [token, expiresAt] of adminTokens) {
+    if (expiresAt <= now) adminTokens.delete(token);
+  }
+  const token = crypto.randomBytes(32).toString("hex");
+  adminTokens.set(token, now + ADMIN_TOKEN_TTL_MS);
+  return token;
+}
+
+function isValidAdminToken(token) {
+  if (!token || typeof token !== "string") return false;
+  const expiresAt = adminTokens.get(token);
+  if (!expiresAt) return false;
+  if (expiresAt <= Date.now()) {
+    adminTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function matchesAdminPassword(supplied) {
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected || typeof supplied !== "string" || !supplied) return false;
+  const digest = (v) => crypto.createHash("sha256").update(v).digest();
+  return crypto.timingSafeEqual(digest(supplied), digest(expected));
+}
+
+function adminLockedOut(ip) {
+  const entry = adminFailures.get(ip);
+  if (!entry) return false;
+  if (entry.resetAt <= Date.now()) {
+    adminFailures.delete(ip);
+    return false;
+  }
+  return entry.count >= ADMIN_FAIL_MAX;
+}
+
+function recordAdminFailure(ip) {
+  const now = Date.now();
+  const entry = adminFailures.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    adminFailures.set(ip, { count: 1, resetAt: now + ADMIN_FAIL_WINDOW_MS });
+    return;
+  }
+  entry.count += 1;
+}
+
 async function requireUploadActor(req, res, next) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  const suppliedAdminPassword = req.headers["x-admin-password"];
-  if (adminPassword && suppliedAdminPassword === adminPassword) {
+  if (isValidAdminToken(req.headers["x-admin-token"])) {
     req.uploadActorId = "admin";
     return next();
   }
@@ -901,9 +990,15 @@ async function resolvePaymentPiUsername(info) {
 }
 
 function resolvePaymentWalletAddress(info) {
-  // user → app: 결제자 지갑 = from_address
-  if (typeof info.from_address === "string" && info.from_address.trim()) {
-    return info.from_address.trim();
+  // U2A: 결제자 지갑 = from_address. 승인 직후엔 비어 있을 수 있어
+  // 메타데이터에 넣어 둔 값도 같이 본다.
+  const candidates = [
+    info?.from_address,
+    info?.metadata?.wallet_address,
+    info?.metadata?.wallet,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return null;
 }
@@ -972,10 +1067,34 @@ async function handleVerificationPaymentComplete(paymentInfo) {
 
 // ??? ????
 
+/**
+ * 결제가 요청자 본인 것인지 Pi 서버 원본으로 확인한다.
+ * 클라이언트가 보낸 결제 정보는 어떤 경우에도 신뢰하지 않는다.
+ */
+async function requirePaymentOwner(req, res, paymentId) {
+  if (!requireSession(req, res)) return null;
+  let info;
+  try {
+    info = await piApiCall("GET", "/payments/" + paymentId);
+  } catch (e) {
+    res
+      .status(502)
+      .json({ error: "Could not verify payment with Pi: " + e.message });
+    return null;
+  }
+  if (!info || info.user_uid !== req.authUserId) {
+    res.status(403).json({ error: "Forbidden" });
+    return null;
+  }
+  return info;
+}
+
 app.post("/api/payments/approve", async (req, res) => {
   const { paymentId } = req.body;
 
   if (!paymentId) return res.status(400).json({ error: "paymentId required" });
+
+  if (!(await requirePaymentOwner(req, res, paymentId))) return;
 
   try {
     const result = await piApiCall(
@@ -1013,6 +1132,8 @@ app.post("/api/payments/complete", async (req, res) => {
 
   if (!paymentId || !txid)
     return res.status(400).json({ error: "paymentId and txid required" });
+
+  if (!(await requirePaymentOwner(req, res, paymentId))) return;
 
   try {
     const result = await piApiCall(
@@ -1054,15 +1175,36 @@ app.post("/api/payments/complete", async (req, res) => {
 
 // ?????? ??? ???
 
-app.post("/api/payments/incomplete", async (req, res) => {
+// Pi SDK 의 onIncompletePaymentFound 콜백은 로그인 세션이 만들어지기 전에도
+// 호출되므로 세션을 요구할 수 없다. 대신 요청 본문에서는 결제 id 만 쓰고
+// 금액·소유자·txid 등 나머지는 전부 Pi 서버 원본에서 다시 읽는다.
+app.post("/api/payments/incomplete", incompletePaymentLimiter, async (req, res) => {
   const { payment } = req.body;
 
-  if (!payment) return res.status(400).json({ error: "payment required" });
+  const paymentId = payment && payment.identifier;
+
+  if (!paymentId)
+    return res.status(400).json({ error: "payment.identifier required" });
+
+  // 남의 결제 id 를 찍어보며 취소시키는 시도를 막기 위해 형식부터 거른다.
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(paymentId)))
+    return res.status(400).json({ error: "invalid payment identifier" });
 
   try {
-    const paymentId = payment.identifier;
+    const info = await piApiCall("GET", "/payments/" + paymentId);
 
-    const txid = payment.transaction && payment.transaction.txid;
+    // Pi 계정으로 로그인한 상태라면 본인 결제만 정리할 수 있다.
+    // 게스트·비로그인은 아직 Pi uid 를 알 수 없는 복구 단계라 통과시키되,
+    // 처리에 쓰는 값은 전부 Pi 원본(info)뿐이라 위조할 여지가 없다.
+    const callerIsPiUser = req.authUserId && !isGuestId(req.authUserId);
+    if (callerIsPiUser && info.user_uid && info.user_uid !== req.authUserId) {
+      console.warn(
+        `[payments] incomplete rejected: ${paymentId} belongs to ${info.user_uid}, caller ${req.authUserId}`,
+      );
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const txid = info.transaction && info.transaction.txid;
 
     if (txid) {
       const result = await piApiCall(
@@ -1077,7 +1219,7 @@ app.post("/api/payments/incomplete", async (req, res) => {
       if (pool) {
         paymentInfo = await upsertPaymentRecord(paymentId, "completed", {
           txid,
-          paymentInfo: payment,
+          paymentInfo: info,
         });
         if (paymentInfo) await handleVerificationPaymentComplete(paymentInfo);
       }
@@ -1092,7 +1234,7 @@ app.post("/api/payments/incomplete", async (req, res) => {
 
       console.log("Incomplete payment cancelled:", paymentId);
 
-      await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: payment });
+      await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: info });
 
       res.json(result);
     }
@@ -1230,33 +1372,88 @@ app.get("/api/users/:id/disputes", requireDb, async (req, res) => {
   }
 });
 
-app.post("/api/users", requireDb, async (req, res) => {
+const ORDER_STATUS_COMPLETE = "완료";
+
+/**
+ * 신뢰도·평점·거래수는 클라이언트가 보내온 값을 믿지 않고
+ * 리뷰/주문 테이블에서 서버가 다시 계산한다.
+ */
+async function computeUserReputation(userId) {
+  const stats = { trust_score: 50, rating: 0, trade_count: 0 };
+  try {
+    const { rows } = await pool.query(
+      "SELECT COUNT(*) AS cnt, AVG(rating) AS avg_rating FROM reviews WHERE reviewee_id=$1",
+      [userId],
+    );
+    if (Number(rows[0]?.cnt || 0) > 0) {
+      const avg = Number(rows[0].avg_rating || 0);
+      stats.rating = Math.round(avg * 10) / 10;
+      stats.trust_score = Math.max(
+        0,
+        Math.min(100, Math.round((avg / 5) * 100)),
+      );
+    }
+  } catch (e) {
+    console.warn("[users] rating recompute failed:", e.message);
+  }
+  try {
+    // 무료 나눔은 거래 수에 넣지 않는다 (프론트 getTradeCount 와 동일 기준)
+    const { rows } = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM orders o
+       LEFT JOIN products p ON o.product_id = p.id
+       WHERE o.status = $1
+         AND (o.buyer_id = $2 OR o.seller_id = $2)
+         AND COALESCE(p.is_free_share, 0) = 0
+         AND COALESCE(NULLIF(o.proposed_price, 0), p.price, 0) > 0`,
+      [ORDER_STATUS_COMPLETE, userId],
+    );
+    stats.trade_count = Number(rows[0]?.cnt || 0);
+  } catch (e) {
+    console.warn("[users] trade count recompute failed:", e.message);
+  }
+  return stats;
+}
+
+app.post("/api/users", requireDb, requireAuth, async (req, res) => {
   const {
     id,
     nickname,
     profile_image,
     bio,
-    kyc_status,
-    trust_score,
-    rating,
-    trade_count,
     activity_region,
     verified_region,
     display_activity_badge_id,
     seller_type,
   } = req.body;
+  if (!id) return res.status(400).json({ error: "id required" });
   if (isGuestId(id)) {
     return res.status(400).json({
       error: "Guest accounts belong in guests until Pi verification payment completes",
     });
   }
+
+  // 거래 상대 프로필은 외래키용으로 "없으면 생성"만 하고 절대 덮어쓰지 않는다.
+  if (id !== req.authUserId) {
+    try {
+      await pool.query(
+        "INSERT INTO users (id, nickname) VALUES ($1, $1) ON DUPLICATE KEY UPDATE id = id",
+        [id],
+      );
+      const { rows } = await pool.query("SELECT * FROM users WHERE id=$1", [id]);
+      return res.json(stripPrivateUserFields(rows[0]) || { id });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   const isUuidLike = (s) => s && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s);
   const safeNickname =
     !nickname || nickname === id || isUuidLike(nickname) ? null : nickname;
   try {
+    const rep = await computeUserReputation(id);
     const { rows } = await queryReturning(
       `INSERT INTO users (id, nickname, profile_image, bio, kyc_status, trust_score, rating, trade_count, activity_region, verified_region, display_activity_badge_id, seller_type)
-       VALUES ($1, COALESCE($2, $1), $3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       VALUES ($1, COALESCE($2, $1), $3,$4,'unverified',$5,$6,$7,$8,$9,$10,$11)
        ON DUPLICATE KEY UPDATE
          nickname = CASE
            WHEN $2 IS NOT NULL THEN $2
@@ -1264,10 +1461,10 @@ app.post("/api/users", requireDb, async (req, res) => {
          END,
          profile_image=COALESCE(VALUES(profile_image), users.profile_image),
          bio=COALESCE(VALUES(bio), users.bio),
-         kyc_status=COALESCE(NULLIF(VALUES(kyc_status),'unverified'), users.kyc_status, VALUES(kyc_status)),
-         trust_score=GREATEST(VALUES(trust_score), users.trust_score),
-         rating=CASE WHEN VALUES(rating) > 0 THEN VALUES(rating) ELSE users.rating END,
-         trade_count=GREATEST(VALUES(trade_count), users.trade_count),
+         kyc_status=CASE WHEN users.pi_verified THEN 'verified' ELSE users.kyc_status END,
+         trust_score=VALUES(trust_score),
+         rating=VALUES(rating),
+         trade_count=VALUES(trade_count),
          activity_region=COALESCE(VALUES(activity_region), users.activity_region),
          verified_region=COALESCE(VALUES(verified_region), users.verified_region),
          display_activity_badge_id=COALESCE(VALUES(display_activity_badge_id), users.display_activity_badge_id),
@@ -1277,10 +1474,9 @@ app.post("/api/users", requireDb, async (req, res) => {
         safeNickname,
         profile_image,
         bio,
-        kyc_status || "unverified",
-        trust_score || 0,
-        rating || 0,
-        trade_count || 0,
+        rep.trust_score,
+        rep.rating,
+        rep.trade_count,
         activity_region,
         verified_region,
         display_activity_badge_id,
@@ -1556,15 +1752,11 @@ app.delete("/api/products/:id", requireDb, requireAuth, async (req, res) => {
 
 // ????????? ?? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/orders", requireDb, async (req, res) => {
-  const { buyer_id, seller_id, user_id, status } = req.query;
-  if (req.authUserId) {
-    if (user_id && req.authUserId !== user_id)
-      return res.status(403).json({ error: "Forbidden" });
-    if (buyer_id && req.authUserId !== buyer_id)
-      return res.status(403).json({ error: "Forbidden" });
-    if (seller_id && req.authUserId !== seller_id)
-      return res.status(403).json({ error: "Forbidden" });
-  }
+  const { buyer_id, seller_id, status } = req.query;
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.user_id, buyer_id, seller_id)) return;
+  // 필터가 없으면 전체 주문이 나가므로 항상 본인으로 범위를 좁힌다.
+  const user_id = buyer_id || seller_id ? req.query.user_id : req.authUserId;
   try {
     let query = `SELECT o.*,
       o.meetup_location AS meetup_place,
@@ -1634,6 +1826,7 @@ function mapOrderRowForApi(row) {
 }
 
 app.get("/api/orders/:id", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
   try {
     const { rows } = await pool.query(
       `SELECT o.*,
@@ -1654,6 +1847,12 @@ app.get("/api/orders/:id", requireDb, async (req, res) => {
       [req.params.id],
     );
     if (!rows.length) return res.status(404).json({ error: "Order not found" });
+    if (
+      rows[0].buyer_id !== req.authUserId &&
+      rows[0].seller_id !== req.authUserId
+    ) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const order = mapOrderRowForApi(rows[0]);
     const { rows: timeline } = await pool.query(
       "SELECT * FROM order_timeline_events WHERE order_id=$1 ORDER BY created_at ASC",
@@ -1919,9 +2118,10 @@ app.post(
 
 // ????????? ????? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/chat-rooms", requireDb, async (req, res) => {
-  const { user_id } = req.query;
-  if (req.authUserId && user_id && req.authUserId !== user_id)
-    return res.status(403).json({ error: "Forbidden" });
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.user_id)) return;
+  // 필터가 없으면 전체 채팅방이 나가므로 항상 본인으로 범위를 좁힌다.
+  const user_id = req.query.user_id || req.authUserId;
   try {
     let query = `SELECT cr.*,
       ${jsonObjectSql("bu", "users")} AS buyer_user,
@@ -1957,6 +2157,7 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
 });
 
 app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
   try {
     const { rows: roomCheck } = await pool.query(
       "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
@@ -1965,7 +2166,6 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
     if (!roomCheck.length)
       return res.status(404).json({ error: "Room not found" });
     if (
-      req.authUserId &&
       req.authUserId !== roomCheck[0].buyer_id &&
       req.authUserId !== roomCheck[0].seller_id
     ) {
@@ -2396,11 +2596,32 @@ function getDailyViewDate() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/**
+ * 하루 1회 집계용 열람자 키.
+ *
+ * 비로그인 사용자는 클라이언트가 보내오는 식별자를 쓰지 않는다. 그 값은
+ * 요청마다 마음대로 바꿀 수 있어 조회수를 무한히 부풀릴 수 있었다.
+ * 대신 서버가 직접 보는 IP 를 기준으로 하되, 같은 IP(공유기·통신사 NAT)
+ * 뒤의 서로 다른 기기가 전부 1명으로 합쳐지지 않도록 브라우저 정보를
+ * 16개 그룹으로 뭉뚱그려 섞는다. 그래서 한 IP 가 하루에 올릴 수 있는
+ * 조회수는 글 하나당 최대 16 으로 묶인다.
+ */
 function getDailyViewerKey(req) {
-  const rawViewer = req.authUserId
-    ? `user:${req.authUserId}`
-    : `device:${String(req.body?.viewer_id || req.ip || "unknown").slice(0, 255)}`;
-  return crypto.createHash("sha256").update(rawViewer).digest("hex");
+  if (req.authUserId) {
+    return crypto
+      .createHash("sha256")
+      .update(`user:${req.authUserId}`)
+      .digest("hex");
+  }
+  const uaBucket = crypto
+    .createHash("sha256")
+    .update(String(req.headers["user-agent"] || ""))
+    .digest("hex")
+    .slice(0, 1);
+  return crypto
+    .createHash("sha256")
+    .update(`client:${req.ip || "unknown"}|${uaBucket}`)
+    .digest("hex");
 }
 
 async function recordDailyContentView(req, targetType, targetId, tableName) {
@@ -2708,9 +2929,9 @@ app.post("/api/reviews", requireDb, requireAuth, async (req, res) => {
 
 // ????????? ???? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/notifications", requireDb, async (req, res) => {
-  const { target_user_id } = req.query;
-  if (req.authUserId && target_user_id && req.authUserId !== target_user_id)
-    return res.status(403).json({ error: "Forbidden" });
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.target_user_id)) return;
+  const target_user_id = req.query.target_user_id || req.authUserId;
   try {
     const { rows } = await pool.query(
       `SELECT * FROM notifications WHERE target_user_id=$1 ORDER BY created_at DESC LIMIT 100`,
@@ -2722,8 +2943,43 @@ app.get("/api/notifications", requireDb, async (req, res) => {
   }
 });
 
+/** 알림은 본인 또는 실제 거래(채팅방·주문) 상대에게만 보낼 수 있다. */
+async function hasTradeRelationship(actorId, targetId) {
+  if (!actorId || !targetId) return false;
+  if (actorId === targetId) return true;
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM chat_rooms
+       WHERE (buyer_id=$1 AND seller_id=$2) OR (buyer_id=$2 AND seller_id=$1)
+       LIMIT 1`,
+      [actorId, targetId],
+    );
+    if (rows.length) return true;
+    const { rows: orderRows } = await pool.query(
+      `SELECT 1 FROM orders
+       WHERE (buyer_id=$1 AND seller_id=$2) OR (buyer_id=$2 AND seller_id=$1)
+       LIMIT 1`,
+      [actorId, targetId],
+    );
+    return orderRows.length > 0;
+  } catch (e) {
+    // 조회 자체가 실패하면 알림을 잃지 않도록 통과시킨다 (인증은 이미 통과한 상태)
+    console.warn("[notifications] relationship check failed:", e.message);
+    return true;
+  }
+}
+
 app.post("/api/notifications", requireDb, async (req, res) => {
-  const { id, target_user_id, type, title, content, link } = req.body;
+  const { id, target_user_id, type, link } = req.body;
+  if (!requireSession(req, res)) return;
+  if (!target_user_id)
+    return res.status(400).json({ error: "target_user_id required" });
+  if (!(await hasTradeRelationship(req.authUserId, target_user_id)))
+    return res.status(403).json({ error: "Forbidden" });
+  const clamp = (v, max) =>
+    typeof v === "string" ? v.slice(0, max) : v == null ? null : String(v).slice(0, max);
+  const title = clamp(req.body.title, 200);
+  const content = clamp(req.body.content, 2000);
   console.log("[POST /api/notifications] REQUEST", {
     id,
     target_user_id,
@@ -2753,16 +3009,13 @@ app.post("/api/notifications", requireDb, async (req, res) => {
 });
 
 app.put("/api/notifications/:id/read", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
   try {
     const { rows: nCheck } = await pool.query(
       "SELECT target_user_id FROM notifications WHERE id=$1",
       [req.params.id],
     );
-    if (
-      req.authUserId &&
-      nCheck.length &&
-      nCheck[0].target_user_id !== req.authUserId
-    )
+    if (nCheck.length && nCheck[0].target_user_id !== req.authUserId)
       return res.status(403).json({ error: "Forbidden" });
     await pool.query("UPDATE notifications SET `read`=true WHERE id=$1", [
       req.params.id,
@@ -2775,13 +3028,11 @@ app.put("/api/notifications/:id/read", requireDb, async (req, res) => {
 
 // ????????? ????? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/disputes", requireDb, async (req, res) => {
-  const { buyer_id, seller_id } = req.query;
-  if (req.authUserId) {
-    if (buyer_id && req.authUserId !== buyer_id)
-      return res.status(403).json({ error: "Forbidden" });
-    if (seller_id && req.authUserId !== seller_id)
-      return res.status(403).json({ error: "Forbidden" });
-  }
+  const { seller_id } = req.query;
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.buyer_id, seller_id)) return;
+  // 필터가 없으면 전체 분쟁이 나가므로 항상 본인으로 범위를 좁힌다.
+  const buyer_id = seller_id ? req.query.buyer_id : req.authUserId;
   try {
     let query = "SELECT * FROM disputes WHERE 1=1";
     const params = [];
@@ -2886,9 +3137,9 @@ app.put("/api/disputes/:id", requireDb, requireAuth, async (req, res) => {
 
 // ????????? ???? ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/favorites", requireDb, async (req, res) => {
-  const { user_id } = req.query;
-  if (req.authUserId && user_id && req.authUserId !== user_id)
-    return res.status(403).json({ error: "Forbidden" });
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.user_id)) return;
+  const user_id = req.query.user_id || req.authUserId;
   try {
     const { rows } = await pool.query(
       `SELECT f.*, ${jsonObjectSql("p", "products")} AS product FROM favorites f
@@ -2903,9 +3154,10 @@ app.get("/api/favorites", requireDb, async (req, res) => {
 });
 
 app.post("/api/favorites", requireDb, async (req, res) => {
-  const { user_id, product_id } = req.body;
-  if (req.authUserId && user_id && req.authUserId !== user_id)
-    return res.status(403).json({ error: "Forbidden" });
+  const { product_id } = req.body;
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.body.user_id)) return;
+  const user_id = req.authUserId;
   try {
     const { rows } = await queryReturning(
       `INSERT INTO favorites (user_id, product_id) VALUES ($1,$2)
@@ -2923,9 +3175,10 @@ app.post("/api/favorites", requireDb, async (req, res) => {
 });
 
 app.delete("/api/favorites", requireDb, async (req, res) => {
-  const { user_id, product_id } = req.query;
-  if (req.authUserId && user_id && req.authUserId !== user_id)
-    return res.status(403).json({ error: "Forbidden" });
+  const { product_id } = req.query;
+  if (!requireSession(req, res)) return;
+  if (denyOtherUser(req, res, req.query.user_id)) return;
+  const user_id = req.authUserId;
   try {
     await pool.query(
       "DELETE FROM favorites WHERE user_id=$1 AND product_id=$2",
@@ -2940,12 +3193,11 @@ app.delete("/api/favorites", requireDb, async (req, res) => {
 // ????????? ?? ??? (??? ??? API DB) ???????????????????????????????????????????????????????????????????????????????????????????????????
 app.post("/api/inquiries", requireDb, async (req, res) => {
   const { user_id, email, category, title, content, images } = req.body;
+  if (!requireSession(req, res)) return;
   if (!title || !String(title).trim() || !content || !String(content).trim()) {
     return res.status(400).json({ error: "title and content are required" });
   }
-  if (req.authUserId && user_id && req.authUserId !== user_id) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (denyOtherUser(req, res, user_id)) return;
   const id = `inq_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   const cat = (category || "general").toString().slice(0, 200);
   const imgs = Array.isArray(images) ? images.slice(0, 5).map(String) : [];
@@ -2956,7 +3208,7 @@ app.post("/api/inquiries", requireDb, async (req, res) => {
       `,
       [
         id,
-        user_id || null,
+        req.authUserId,
         email || null,
         cat,
         String(title).trim(),
@@ -2989,13 +3241,48 @@ app.get("/api/inquiries", requireDb, requireAuth, async (req, res) => {
 });
 
 // ????????? ?????? API ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
 function requireAdmin(req, res, next) {
-  if (!ADMIN_PW) return res.status(503).json({ error: "Admin not configured" });
-  const pw = req.headers["x-admin-password"];
-  if (pw !== ADMIN_PW) return res.status(401).json({ error: "Unauthorized" });
-  next();
+  if (!process.env.ADMIN_PASSWORD)
+    return res.status(503).json({ error: "Admin not configured" });
+  if (isValidAdminToken(req.headers["x-admin-token"])) return next();
+
+  // Legacy header path: delete once every admin client sends a token.
+  if (req.headers["x-admin-password"]) {
+    if (adminLockedOut(req.ip))
+      return res.status(429).json({ error: "Too many attempts" });
+    if (matchesAdminPassword(req.headers["x-admin-password"])) {
+      console.warn(`[admin] legacy password header used path=${req.path}`);
+      return next();
+    }
+    recordAdminFailure(req.ip);
+  }
+  return res.status(401).json({ error: "Unauthorized" });
 }
+
+// 비밀번호를 단기 토큰으로 교환한다. 실패는 IP 단위로 누적 차단.
+app.post("/api/admin/login", (req, res) => {
+  if (!process.env.ADMIN_PASSWORD)
+    return res.status(503).json({ error: "Admin not configured" });
+  if (adminLockedOut(req.ip)) {
+    console.warn(`[admin] login locked out ip=${req.ip}`);
+    return res.status(429).json({ error: "Too many attempts" });
+  }
+  if (!matchesAdminPassword(req.body?.password)) {
+    recordAdminFailure(req.ip);
+    console.warn(`[admin] login failed ip=${req.ip}`);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  adminFailures.delete(req.ip);
+  const token = issueAdminToken();
+  console.log(`[admin] login ok ip=${req.ip} token=${token.slice(0, 8)}…`);
+  res.json({ token, expires_in: ADMIN_TOKEN_TTL_MS });
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  const token = req.headers["x-admin-token"];
+  if (typeof token === "string") adminTokens.delete(token);
+  res.json({ ok: true });
+});
 
 // ?????????? ?????
 app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
@@ -3091,7 +3378,9 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
         )
         .catch(emptyRows),
     ]);
+    const payments = await fetchPaymentSummary();
     res.json({
+      payments,
       users: +r[0].rows[0].count,
       products: +r[1].rows[0].count,
       orders: +r[2].rows[0].count,
@@ -3282,6 +3571,132 @@ app.delete(
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+// ── 결제 내역 ────────────────────────────────────────────────
+// orphan = 인증비 결제는 완료됐는데 users 계정이 만들어지지 않은 건.
+// 사용자가 "돈은 냈는데 가입이 안 된다"고 문의하는 경우가 여기에 잡힌다.
+const EMPTY_PAYMENT_SUMMARY = {
+  total_count: 0,
+  completed_count: 0,
+  completed_amount: 0,
+  cancelled_count: 0,
+  pending_count: 0,
+  verification_count: 0,
+  badge_count: 0,
+  orphan_count: 0,
+  week_count: 0,
+  week_amount: 0,
+};
+
+// payments 테이블이 없는 예전 DB 에서도 대시보드가 죽지 않도록 실패 시 0 을 돌려준다.
+async function fetchPaymentSummary() {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*) AS total_count,
+        SUM(p.status = 'completed') AS completed_count,
+        SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END) AS completed_amount,
+        SUM(p.status = 'cancelled') AS cancelled_count,
+        SUM(p.status NOT IN ('completed', 'cancelled')) AS pending_count,
+        SUM(p.status = 'completed' AND p.payment_type = 'profile_verification') AS verification_count,
+        SUM(p.status = 'completed' AND p.payment_type = 'badge_purchase') AS badge_count,
+        SUM(
+          p.status = 'completed'
+          AND p.payment_type = 'profile_verification'
+          AND p.user_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p.user_id)
+        ) AS orphan_count,
+        SUM(p.status = 'completed'
+            AND p.completed_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)) AS week_count,
+        SUM(CASE WHEN p.status = 'completed'
+                  AND p.completed_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                 THEN p.amount ELSE 0 END) AS week_amount
+      FROM payments p`);
+    const s = rows[0] || {};
+    return Object.fromEntries(
+      Object.keys(EMPTY_PAYMENT_SUMMARY).map((key) => [key, Number(s[key] || 0)]),
+    );
+  } catch (e) {
+    console.warn("[admin/payments] summary failed:", e.message);
+    return { ...EMPTY_PAYMENT_SUMMARY };
+  }
+}
+
+app.get("/api/admin/payments", requireDb, requireAdmin, async (_req, res) => {
+  try {
+    const [summary, { rows }] = await Promise.all([
+      fetchPaymentSummary(),
+      pool.query(
+        `SELECT p.id, p.user_id, p.payment_type, p.amount, p.memo, p.txid, p.status,
+                p.pi_username, p.wallet_address,
+                p.created_at, p.approved_at, p.completed_at, p.cancelled_at,
+                u.nickname AS user_nickname,
+                (u.id IS NOT NULL) AS account_exists
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.user_id
+         ORDER BY p.created_at DESC
+         LIMIT 500`,
+      ),
+    ]);
+    res.json({
+      summary,
+      rows: rows.map((row) => ({
+        ...row,
+        amount: Number(row.amount || 0),
+        account_exists: Boolean(Number(row.account_exists)),
+      })),
+    });
+  } catch (e) {
+    console.error("[admin/payments] error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Pi 서버에서 결제 원본을 다시 읽어 기록을 맞추고, 인증비 결제면 계정 생성을 재시도한다.
+app.post(
+  "/api/admin/payments/:id/repair",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const paymentId = req.params.id;
+    try {
+      const info = await piApiCall("GET", "/payments/" + paymentId);
+      const txid = info.transaction?.txid || null;
+      const cancelled = Boolean(
+        info.status?.cancelled || info.status?.user_cancelled,
+      );
+      const completed = Boolean(info.status?.developer_completed || txid);
+      const status = completed
+        ? "completed"
+        : cancelled
+          ? "cancelled"
+          : info.status?.developer_approved
+            ? "approved"
+            : "created";
+
+      await upsertPaymentRecord(paymentId, status, { txid, paymentInfo: info });
+      if (completed) await handleVerificationPaymentComplete(info);
+
+      const { rows } = await pool.query(
+        `SELECT p.*, u.nickname AS user_nickname, (u.id IS NOT NULL) AS account_exists
+         FROM payments p LEFT JOIN users u ON u.id = p.user_id
+         WHERE p.id = $1`,
+        [paymentId],
+      );
+      if (!rows.length)
+        return res.status(404).json({ error: "Payment not found" });
+      console.log(`[admin] payment repaired id=${paymentId} status=${status}`);
+      res.json({
+        ...rows[0],
+        amount: Number(rows[0].amount || 0),
+        account_exists: Boolean(Number(rows[0].account_exists)),
+      });
+    } catch (e) {
+      console.error("[admin/payments] repair failed:", paymentId, e.message);
+      res.status(502).json({ error: e.message });
     }
   },
 );

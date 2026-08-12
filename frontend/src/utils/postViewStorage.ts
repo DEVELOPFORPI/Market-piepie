@@ -1,6 +1,4 @@
 import { api } from '@/utils/api';
-import { getAnonymousViewerId } from '@/utils/viewerIdentity';
-
 const POST_VIEW_COUNTS_KEY = 'postViewCounts';
 
 const getCounts = (): Record<string, number> => {
@@ -68,7 +66,7 @@ export const incrementPostViewCount = async (postId: string): Promise<number> =>
   try {
     const res = await api.post<{ count: number; counted: boolean }>(
       `/api/posts/${postId}/view`,
-      { viewer_id: getAnonymousViewerId() },
+      {},
     );
     if (res.ok && res.data) {
       setLocalViewCount(postId, res.data.count);

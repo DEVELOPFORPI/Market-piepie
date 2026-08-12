@@ -6,6 +6,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
@@ -20,6 +21,7 @@ const CATEGORY_DEFS: { id: string; labelKey: AppMessageKey }[] = [
 ];
 
 export const InquiryWrite: React.FC = () => {
+  useGuestPageGuard('inquiry');
   const navigate = useNavigate();
   const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);

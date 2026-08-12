@@ -31,6 +31,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { notifyT } from '@/i18n/notifyMessages';
 import { localizeNotification } from '@/utils/notifyDisplay';
 import type { AppMessageKey } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const COMPLETION_TITLES = COMPLETION_TITLE_SET;
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
@@ -49,6 +50,7 @@ function relativeTimeLabel(
 }
 
 export const Notifications: React.FC = () => {
+  useGuestPageGuard('notification');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);

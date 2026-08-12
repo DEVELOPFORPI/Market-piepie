@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { NoticeContent } from '@/components/notice/NoticeContent';
 import { api } from '@/utils/api';
-import { getAnonymousViewerId } from '@/utils/viewerIdentity';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 
@@ -41,7 +40,7 @@ export const NoticeDetail: React.FC = () => {
         setLoading(false);
         const viewResponse = await api.post<{ count: number; counted: boolean }>(
           `/api/notices/${id}/view`,
-          { viewer_id: getAnonymousViewerId() },
+          {},
         );
         if (!cancelled && viewResponse.ok && viewResponse.data) {
           setNotice({ ...noticeData, view_count: viewResponse.data.count });

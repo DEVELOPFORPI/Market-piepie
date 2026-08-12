@@ -34,6 +34,7 @@ import { AdminDisputes } from './pages/AdminDisputes';
 import { AdminHomePopup } from './pages/AdminHomePopup';
 import { AdminNotices } from './pages/AdminNotices';
 import { AdminUsers } from './pages/AdminUsers';
+import { AdminPayments } from './pages/AdminPayments';
 import { AdminData } from './pages/AdminData';
 import { AdminInquiries } from './pages/AdminInquiries';
 import { AdminProducts } from './pages/AdminProducts';
@@ -448,6 +449,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
             <Route path="notices" element={<AdminNotices />} />
             <Route path="disputes" element={<AdminDisputes />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="payments" element={<AdminPayments />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="posts" element={<AdminPosts />} />
             <Route path="reports" element={<AdminReports />} />

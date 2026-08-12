@@ -9,6 +9,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { syncMyPostsFromDB } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
 import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 type CategoryFilter = PostCategory | 'all';
 
@@ -22,6 +23,7 @@ const CATEGORY_TABS: CategoryFilter[] = [
 ];
 
 export const MyPosts: React.FC = () => {
+  useGuestPageGuard('post');
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [posts, setPosts] = useState<Post[]>([]);

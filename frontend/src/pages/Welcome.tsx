@@ -75,6 +75,8 @@ export const Welcome: React.FC = () => {
     setPiLoading(true);
     setPiStep('Processing verification payment...');
     try {
+      // 결제 승인/완료 API 는 본인 확인을 하므로 Pi 세션을 먼저 저장해야 한다
+      if (pendingVerified.sessionToken) setSessionToken(pendingVerified.sessionToken);
       const paid = await piVerificationPayment(pendingVerified.username);
       if (!paid) {
         setPiError('Payment cancelled. Please try again.');
@@ -82,7 +84,6 @@ export const Welcome: React.FC = () => {
         return;
       }
       login(pendingVerified.uid, true);
-      if (pendingVerified.sessionToken) setSessionToken(pendingVerified.sessionToken);
       try { sessionStorage.setItem('pi_suggested_nickname', pendingVerified.username || ''); } catch {}
       localStorage.removeItem('marketpiepie_onboarding_v1_' + pendingVerified.uid);
       localStorage.removeItem('marketpiepie_device_profile_once_v1');

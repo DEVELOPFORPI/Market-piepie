@@ -22,7 +22,7 @@ import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
-import { API_BASE } from '@/utils/apiConfig';
+import { api } from '@/utils/api';
 import { syncRoomMessagesFromDB } from '@/utils/dbSync';
 import {
   displayChatMessageContent,
@@ -474,10 +474,10 @@ export const ChatRoom: React.FC = () => {
       try {
         const uid = getCurrentUserId();
         if (uid) {
-          const orderRes = await fetch(`${API_BASE}/api/orders?user_id=${uid}`);
+          const orderRes = await api.get<Record<string, unknown>[]>(`/api/orders?user_id=${uid}`);
           console.log('[ORDERSYNC] poll response', { ok: orderRes.ok, status: orderRes.status, uid });
           if (orderRes.ok) {
-            const rows = await orderRes.json();
+            const rows = orderRes.data;
             if (Array.isArray(rows)) {
               let ordersUpdated = false;
               for (const row of rows) {
@@ -490,9 +490,9 @@ export const ChatRoom: React.FC = () => {
                   if (!local) continue;
                 }
                 const dbStatus = String(row.status || '');
-                const dbMeetupPlace = row.meetup_place || row.meetup_location || '';
-                const dbMeetupDate = row.meetup_date || '';
-                const dbMeetupTime = row.meetup_time || '';
+                const dbMeetupPlace = String(row.meetup_place || row.meetup_location || '');
+                const dbMeetupDate = String(row.meetup_date || '');
+                const dbMeetupTime = String(row.meetup_time || '');
                 const changed = dbStatus !== local.status
                   || Boolean(row.buyer_completed) !== Boolean(local.buyerCompleted)
                   || Boolean(row.seller_completed) !== Boolean(local.sellerCompleted)

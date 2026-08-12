@@ -5,6 +5,7 @@ import { api } from '@/utils/api';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 interface Inquiry {
   id: string;
@@ -51,6 +52,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export const MyInquiries: React.FC = () => {
+  useGuestPageGuard('inquiry');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);

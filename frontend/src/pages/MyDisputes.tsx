@@ -8,6 +8,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 type FilterStatus = 'all' | 'active' | 'resolved';
 type FilterDirection = 'all' | 'sent' | 'received';
@@ -26,6 +27,7 @@ function disputeDetailPath(dispute: Dispute, myId: string): string {
 }
 
 export const MyDisputes: React.FC = () => {
+  useGuestPageGuard('dispute');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');

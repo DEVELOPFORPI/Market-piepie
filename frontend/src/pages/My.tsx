@@ -13,7 +13,7 @@ import {
   isPlaceholderProfileImage,
   ProfilePersonSilhouetteIcon,
 } from '@/components/common/profileAvatarPlaceholder';
-import { isGuest } from '@/utils/guestGate';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 
@@ -24,9 +24,7 @@ export const My: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  useEffect(() => {
-    if (isGuest()) navigate('/welcome', { replace: true });
-  }, [navigate]);
+  useGuestPageGuard('profile');
   const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState(() => getMyUser());
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);

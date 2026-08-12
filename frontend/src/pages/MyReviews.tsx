@@ -8,10 +8,12 @@ import { getMyWrittenReviews, getReceivedReviews } from '@/utils/reviewStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 type TabType = 'received' | 'written';
 
 export const MyReviews: React.FC = () => {
+  useGuestPageGuard('review');
   const navigate = useNavigate();
   const location = useLocation();
   const { lang, t } = useLanguage();

@@ -6,8 +6,10 @@ import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { createOrder } from '@/utils/orderStorage';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 export const Offer: React.FC = () => {
+  useGuestPageGuard('offer');
   const navigate = useNavigate();
   const { productId } = useParams();
   const { t } = useLanguage();

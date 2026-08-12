@@ -3,7 +3,20 @@ import { Link } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 
+interface PaymentSummary {
+  completed_count: number;
+  completed_amount: number;
+  cancelled_count: number;
+  pending_count: number;
+  verification_count: number;
+  badge_count: number;
+  orphan_count: number;
+  week_count: number;
+  week_amount: number;
+}
+
 interface Stats {
+  payments?: PaymentSummary;
   users: number;
   products: number;
   orders: number;
@@ -68,7 +81,7 @@ function StatCard({
   to,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   color?: string;
   sub?: string;
   to?: string;
@@ -77,7 +90,7 @@ function StatCard({
     <>
       <p className="mb-1 text-xs font-medium text-gray-400">{label}</p>
       <p className="text-3xl font-bold" style={{ color: color || '#1a1a1a' }}>
-        {value.toLocaleString()}
+        {typeof value === 'number' ? value.toLocaleString() : value}
       </p>
       {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
     </>
@@ -160,6 +173,9 @@ export const AdminData: React.FC = () => {
   const recentOpenReports = stats.recentOpenReports ?? [];
   const recentPendingInquiries = stats.recentPendingInquiries ?? [];
   const recentOpenDisputes = stats.recentOpenDisputes ?? [];
+  const payments = stats.payments;
+  const piAmount = (value: number) =>
+    `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} Pi`;
 
   return (
     <div className="p-6 lg:p-10">
@@ -214,6 +230,20 @@ export const AdminData: React.FC = () => {
           sub={`미답변 ${stats.pendingInquiries ?? 0}건`}
           to="/admin/inquiries"
         />
+        <StatCard
+          label="결제 수입"
+          value={piAmount(payments?.completed_amount ?? 0)}
+          color={TEAL}
+          sub={`완료 ${payments?.completed_count ?? 0}건 · 7일 ${piAmount(payments?.week_amount ?? 0)}`}
+          to="/admin/payments"
+        />
+        <StatCard
+          label="결제 후 가입 실패"
+          value={payments?.orphan_count ?? 0}
+          color={(payments?.orphan_count ?? 0) > 0 ? '#ef4444' : undefined}
+          sub="계정 복구 필요"
+          to="/admin/payments"
+        />
         <StatCard label="게시 공지" value={stats.publishedNotices ?? 0} to="/admin/notices" />
         <StatCard label="활성 홈팝업" value={stats.enabledPopups ?? 0} to="/admin/popup" />
       </div>
@@ -241,6 +271,21 @@ export const AdminData: React.FC = () => {
             <MiniStat label="진행중" value={stats.ordersInProgress ?? 0} />
             <MiniStat label="완료" value={stats.completedOrders} />
             <MiniStat label="분쟁" value={stats.ordersDispute ?? 0} />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-900">결제 현황</h2>
+            <Link to="/admin/payments" className="text-xs text-[#007f7b] hover:underline">
+              결제 내역
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MiniStat label="본인인증비" value={payments?.verification_count ?? 0} />
+            <MiniStat label="배지 구매" value={payments?.badge_count ?? 0} />
+            <MiniStat label="진행중" value={payments?.pending_count ?? 0} />
+            <MiniStat label="취소" value={payments?.cancelled_count ?? 0} />
           </div>
         </div>
       </div>

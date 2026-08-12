@@ -8,10 +8,12 @@ import { getMyProducts, deleteProduct } from '@/utils/productStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 type FilterStatus = 'all' | 'free' | ProductStatus;
 
 export const MyProducts: React.FC = () => {
+  useGuestPageGuard('sell');
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');

@@ -10,11 +10,13 @@ import { getProductById } from '@/utils/productStorage';
 import { labelOrderStatus, labelTradeMethod } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 type OrderType = 'all' | 'buying' | 'selling';
 type FilterStatus = 'all' | OrderStatus;
 
 export const MyOrders: React.FC = () => {
+  useGuestPageGuard('order');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [orderType, setOrderType] = useState<OrderType>('all');

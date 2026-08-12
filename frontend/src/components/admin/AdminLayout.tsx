@@ -41,6 +41,14 @@ function IconPopup() {
   );
 }
 
+function IconCard() {
+  return (
+    <svg className="h-5 w-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2zm2 9h4" />
+    </svg>
+  );
+}
+
 function IconBox() {
   return (
     <svg className="h-5 w-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -101,6 +109,10 @@ export const AdminLayout: React.FC = () => {
           <NavLink to="/admin/users" className={linkClass}>
             <IconUser />
             사용자
+          </NavLink>
+          <NavLink to="/admin/payments" className={linkClass}>
+            <IconCard />
+            결제 내역
           </NavLink>
           <NavLink to="/admin/products" className={linkClass}>
             <IconBox />

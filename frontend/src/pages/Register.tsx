@@ -8,7 +8,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getMyUser } from '@/utils/profileStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
-import { isGuest } from '@/utils/guestGate';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { useLanguage } from '@/hooks/useLanguage';
 
 const MAX_IMAGES = 5;
@@ -29,9 +29,7 @@ export const Register: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  useEffect(() => {
-    if (isGuest()) navigate('/welcome', { replace: true });
-  }, [navigate]);
+  useGuestPageGuard('sell');
   const { id: editId } = useParams<{ id: string }>();
   const isEdit = !!editId;
 

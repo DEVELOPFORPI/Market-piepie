@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUnreadCount } from '@/utils/notificationStorage';
 import { useLanguage } from '@/hooks/useLanguage';
+import { guestGuard } from '@/utils/guestGate';
 
 type NotificationBellButtonProps = {
   className?: string;
@@ -26,7 +27,7 @@ export const NotificationBellButton: React.FC<NotificationBellButtonProps> = ({ 
   return (
     <button
       type="button"
-      onClick={() => navigate('/notifications')}
+      onClick={() => { if (guestGuard('notification')) return; navigate('/notifications'); }}
       className={`relative p-2 ${unreadCount > 0 ? 'text-[#00A8A3]' : 'text-gray-900 hover:text-gray-600'} ${className}`}
       aria-label={t('notifications')}
     >

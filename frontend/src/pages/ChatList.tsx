@@ -6,7 +6,7 @@ import { getProductById } from '@/utils/productStorage';
 import { ChatRoom } from '@/types';
 import { displayChatMessageContent, relativeTimeShort } from '@/locale/enUI';
 import { connectChatSocket, onNewMessage, onRoomUpdated, onNewRoom } from '@/utils/chatSocket';
-import { isGuest } from '@/utils/guestGate';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
@@ -18,9 +18,7 @@ export const ChatList: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  useEffect(() => {
-    if (isGuest()) navigate('/welcome', { replace: true });
-  }, [navigate]);
+  useGuestPageGuard('chat');
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [contextMenu, setContextMenu] = useState<{ roomId: string; x: number; y: number } | null>(null);

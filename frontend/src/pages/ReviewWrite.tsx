@@ -10,10 +10,12 @@ import { addNotification } from '@/utils/notificationStorage';
 import { NOTIFY_REVIEW_WRITTEN, labelTradeMethod } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
+import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 const reviewTags = ['Quick response', 'On time', 'Kind', 'As described', 'Recommend'];
 
 export const ReviewWrite: React.FC = () => {
+  useGuestPageGuard('review');
   const navigate = useNavigate();
   const { orderId } = useParams();
   const { lang, t } = useLanguage();
