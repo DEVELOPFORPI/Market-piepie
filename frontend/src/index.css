@@ -61,9 +61,14 @@ body {
   --pt-in-x: 22%;
   --pt-back-x: -10%;
   position: relative;
-  isolation: isolate;
-  min-height: 100dvh;
+  min-height: 100vh;
   background: #fff;
+}
+
+@supports (min-height: 100dvh) {
+  .pt-stage {
+    min-height: 100dvh;
+  }
 }
 
 .pt-stage.pt-rtl {
@@ -71,31 +76,38 @@ body {
   --pt-back-x: 10%;
 }
 
+/* Pinned to the viewport while animating: page scroll cannot hide the motion. */
 .pt-stage--busy {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .pt-layer {
   width: 100%;
   background: #fff;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
 }
 
 .pt-stage--busy .pt-layer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
   will-change: transform, opacity;
 }
 
 .pt-layer--leave {
-  position: absolute;
-  left: 0;
-  width: 100%;
   z-index: 1;
   pointer-events: none;
 }
 
 .pt-layer--enter {
-  position: relative;
   z-index: 2;
 }
 
@@ -237,9 +249,11 @@ body {
   to { opacity: 0; }
 }
 
+/* Android battery saver / "remove animations" reports reduce, which would kill
+   navigation feedback entirely. Shorten instead of disabling. */
 @media (prefers-reduced-motion: reduce) {
   .pt-layer {
-    animation: none !important;
+    animation-duration: 200ms !important;
   }
 }
 
@@ -288,7 +302,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .modal-shell-backdrop,
   .modal-shell-panel {
-    transition: none !important;
+    transition-duration: 140ms !important;
   }
 }
 
@@ -345,7 +359,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .image-lightbox,
   .image-lightbox-image {
-    transition: none !important;
+    transition-duration: 140ms !important;
   }
 }
 

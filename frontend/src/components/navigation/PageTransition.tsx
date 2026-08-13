@@ -54,18 +54,13 @@ export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ chi
       data-pt={kind}
     >
       {leave ? (
-        <div
-          className={`pt-layer pt-layer--leave pt-${kind}`}
-          style={{ top: -leave.scroll }}
-          aria-hidden
-        >
-          {React.cloneElement(children, { location: leave.location })}
+        <div className={`pt-layer pt-layer--leave pt-${kind}`} aria-hidden>
+          <div style={{ marginTop: -leave.scroll }}>
+            {React.cloneElement(children, { location: leave.location })}
+          </div>
         </div>
       ) : null}
-      <div
-        key={animating ? `${kind}:${live.key}:${live.pathname}` : 'live'}
-        className={`pt-layer pt-layer--enter${animating ? ` pt-${kind}` : ''}`}
-      >
+      <div className={`pt-layer pt-layer--enter${animating ? ` pt-${kind}` : ''}`}>
         {React.cloneElement(children, { location: live })}
       </div>
     </div>

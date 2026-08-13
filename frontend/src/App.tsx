@@ -70,7 +70,7 @@ import {
 } from './utils/onboardingStorage';
 import { getDisputes } from './utils/disputeStorage';
 import { preloadHeavyStorage } from './utils/heavyStorage';
-import { syncActivityBadgesFromStats } from './utils/activityBadgeStorage';
+import { syncActivityBadgesFromStats, syncPurchasedBadgesFromDB } from './utils/activityBadgeStorage';
 import { pruneInvalidDisplayActivityBadge } from './utils/profileStorage';
 import { isAdminVerified } from './utils/adminAccessStorage';
 
@@ -279,14 +279,16 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     syncDeviceProfileOnceFromLegacyOnboarding();
   }, [heavyReady]);
 
-  /** Activity badges: sync stats after heavy storage ready and orders/posts/likes change */
+  const loggedIn = isLoggedIn();
+
+  /** Activity badges: restore paid unlocks, then merge earned stats */
   useEffect(() => {
     if (!heavyReady) return;
     const run = () => {
       syncActivityBadgesFromStats();
       pruneInvalidDisplayActivityBadge();
     };
-    run();
+    void syncPurchasedBadgesFromDB().then(run);
     const events = [
       'ordersChanged',
       'postsChanged',
@@ -295,11 +297,9 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     ] as const;
     events.forEach((e) => window.addEventListener(e, run));
     return () => events.forEach((e) => window.removeEventListener(e, run));
-  }, [heavyReady]);
+  }, [heavyReady, loggedIn]);
 
   const hideNav = shouldHideNav(location.pathname, location.search);
-
-  const loggedIn = isLoggedIn();
   const isAdminPath = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const isAdminAuthPage = location.pathname === '/admin-auth';
 

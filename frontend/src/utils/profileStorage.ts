@@ -203,7 +203,7 @@ export function getEffectiveDisplayActivityBadgeIdForUser(
     prof?.displayActivityBadgeId ?? (mine ? getProfile().displayActivityBadgeId : undefined);
 
   if (typeof displayStored !== 'string' || displayStored.length === 0) return null;
-  if (!isUnlockedActivityBadgeForUser(userId, displayStored)) return null;
+  if (mine && !isUnlockedActivityBadgeForUser(userId, displayStored)) return null;
   return displayStored;
 }
 

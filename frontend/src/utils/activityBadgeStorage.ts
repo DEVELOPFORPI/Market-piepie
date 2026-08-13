@@ -2,18 +2,19 @@ import { userKey, getCurrentUserId } from '@/utils/authStorage';
 import { computeUnlockedActivityBadgeIds } from '@/utils/activityBadgeRules';
 import { addNotification } from '@/utils/notificationStorage';
 import { ACTIVITY_BADGE_DEFINITIONS } from '@/constants/activityBadges';
+import { api } from '@/utils/api';
 
 const STORAGE_KEY = 'unlocked_activity_badges';
+const PURCHASED_KEY = 'purchased_activity_badges';
 const NOTIFIED_KEY = 'notified_badge_ids';
 import { NOTIFY_BADGE_UNLOCKED } from '@/locale/enUI';
 const badgeLabelMap: Map<string, string> = new Map(
   ACTIVITY_BADGE_DEFINITIONS.map((b) => [b.id, b.label] as const)
 );
 
-/** Unlocked badge ids (e.g. ['01','02']) */
-export function getUnlockedBadgeIds(): Set<string> {
+function readIdSet(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(userKey(STORAGE_KEY));
+    const raw = localStorage.getItem(userKey(key));
     if (!raw) return new Set();
     const arr = JSON.parse(raw) as unknown;
     if (!Array.isArray(arr)) return new Set();
@@ -21,6 +22,30 @@ export function getUnlockedBadgeIds(): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+function writeIdSet(key: string, ids: Iterable<string>): void {
+  try {
+    localStorage.setItem(userKey(key), JSON.stringify([...ids]));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getPurchasedBadgeIds(): Set<string> {
+  return readIdSet(PURCHASED_KEY);
+}
+
+export function addPurchasedBadgeIds(ids: string[]): void {
+  if (ids.length === 0) return;
+  const next = getPurchasedBadgeIds();
+  ids.forEach((id) => next.add(id));
+  writeIdSet(PURCHASED_KEY, next);
+}
+
+/** Unlocked badge ids (earned + purchased) */
+export function getUnlockedBadgeIds(): Set<string> {
+  return readIdSet(STORAGE_KEY);
 }
 
 export function setUnlockedBadgeIds(ids: string[]): void {
@@ -32,12 +57,31 @@ export function setUnlockedBadgeIds(ids: string[]): void {
   }
 }
 
-/** Dev: force-unlock a badge (next sync overwrites from stats) */
+function mergeUnlocked(extra: Iterable<string> = []): string[] {
+  const merged = new Set([
+    ...getUnlockedBadgeIds(),
+    ...getPurchasedBadgeIds(),
+    ...extra,
+  ]);
+  return [...merged];
+}
+
+/** Unlock a purchased badge. Stats sync must not wipe this. */
 export function unlockActivityBadge(id: string): void {
-  const cur = getUnlockedBadgeIds();
-  if (cur.has(id)) return;
-  cur.add(id);
-  setUnlockedBadgeIds([...cur]);
+  addPurchasedBadgeIds([id]);
+  setUnlockedBadgeIds(mergeUnlocked([id]));
+}
+
+/** Restore paid badges from completed Pi payments, then merge into unlocks */
+export async function syncPurchasedBadgesFromDB(): Promise<void> {
+  const userId = getCurrentUserId();
+  if (!userId) return;
+  const res = await api.get<{ badgeIds?: string[] }>('/api/payments/my-badges');
+  if (!res.ok || !Array.isArray(res.data?.badgeIds)) return;
+  const ids = res.data.badgeIds.filter((id) => typeof id === 'string' && id.length > 0);
+  if (ids.length === 0) return;
+  addPurchasedBadgeIds(ids);
+  setUnlockedBadgeIds(mergeUnlocked(ids));
 }
 
 function getNotifiedBadgeIds(userId: string): Set<string> {
@@ -62,30 +106,24 @@ function addNotifiedBadgeIds(userId: string, ids: string[]): void {
   }
 }
 
-/** Recompute badges from stats after orders, posts, favorites, etc. change */
+/** Recompute earned badges from stats; keep purchased unlocks */
 export function syncActivityBadgesFromStats(): void {
   const userId = getCurrentUserId();
   if (!userId) return;
-  const next = computeUnlockedActivityBadgeIds(userId);
+  const earned = computeUnlockedActivityBadgeIds(userId);
+  const purchased = getPurchasedBadgeIds();
+  const next = [...new Set([...earned, ...purchased])];
   const current = getUnlockedBadgeIds();
   const curKey = [...current].sort().join(',');
   const nextKey = [...next].sort().join(',');
   if (curKey === nextKey) return;
   const alreadyNotified = getNotifiedBadgeIds(userId);
-  const gained = next.filter((id) => !current.has(id) && !alreadyNotified.has(id));
-  // Only notify for brand-new unlocks (not in current set AND not previously notified)
-
-
-  // If this is first run (no current badges but user has some), treat all as already notified
+  const gained = next.filter((id) => !current.has(id) && !alreadyNotified.has(id) && !purchased.has(id));
 
   if (current.size === 0 && next.length > 0 && alreadyNotified.size === 0) {
-
     addNotifiedBadgeIds(userId, next);
-
     setUnlockedBadgeIds(next);
-
     return;
-
   }
   gained.forEach((id) => {
     const badgeLabel = badgeLabelMap.get(id) ?? id;

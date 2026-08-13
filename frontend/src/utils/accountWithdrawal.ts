@@ -16,6 +16,7 @@ function removeUserScopedKeys(userId: string): void {
     `userRegion_${userId}`,
     `${ONBOARDING_PREFIX}${userId}`,
     `unlocked_activity_badges_${userId}`,
+    `purchased_activity_badges_${userId}`,
   ];
   for (const k of keys) {
     try {
