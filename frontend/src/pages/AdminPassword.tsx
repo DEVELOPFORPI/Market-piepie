@@ -11,7 +11,7 @@ export const AdminPassword: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const search = new URLSearchParams(location.search);
-  const returnTo = search.get('next') || '/admin/popup';
+  const returnTo = search.get('next') || '/admin/data';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -336,7 +336,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
   }
 
   if (isAdminAuthPage && isAdminVerified()) {
-    return <Navigate to="/admin/popup" replace />;
+    return <Navigate to="/admin/data" replace />;
   }
 
   // Hide test user bar on post detail (match requested white header)
@@ -444,7 +444,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/settings" element={<Settings />} />
           <Route path="/inquiry" element={<InquiryWrite />} />
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Navigate to="popup" replace />} />
+            <Route index element={<Navigate to="data" replace />} />
             <Route path="popup" element={<AdminHomePopup />} />
             <Route path="notices" element={<AdminNotices />} />
             <Route path="disputes" element={<AdminDisputes />} />
