@@ -49,6 +49,7 @@ import { RegionSelect } from './pages/RegionSelect';
 import { NoticeDetail } from './pages/NoticeDetail';
 import { NoticeList } from './pages/NoticeList';
 import { Welcome } from './pages/Welcome';
+import { LegalDocument } from './pages/LegalDocument';
 import { SignupProfile } from './pages/SignupProfile';
 import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
@@ -85,6 +86,8 @@ const HIDE_NAV_PATHS = [
   '/settings',
   '/admin-auth',
   '/inquiry',
+  '/terms',
+  '/privacy',
 ];
 
 const HIDE_NAV_PREFIXES = [
@@ -459,8 +462,8 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/meetup/:orderId" element={<MeetupSchedule />} />
           <Route path="/receive/:orderId" element={<ReceiveConfirm />} />
           <Route path="/region/select" element={<RegionSelect />} />
-          <Route path="/terms" element={<div className="p-4 min-h-screen">Terms of service</div>} />
-          <Route path="/privacy" element={<div className="p-4 min-h-screen">Privacy policy</div>} />
+          <Route path="/terms" element={<LegalDocument kind="terms" />} />
+          <Route path="/privacy" element={<LegalDocument kind="privacy" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         {!showSplash && !hideNav && <BottomTab />}

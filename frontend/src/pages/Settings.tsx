@@ -6,10 +6,11 @@ import { markExplicitLogout } from '@/utils/authStorage';
 import { isTestLoginEnabled } from '@/config/features';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
+import { legalUi } from '@/i18n/legalUiMessages';
 
 export const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [storedRegion, setStoredRegion] = useState('');
   const localizedRegion = useLocalizedRegion(storedRegion || null);
 
@@ -42,6 +43,18 @@ export const Settings: React.FC = () => {
       description: t('inquiryMenuHint'),
       onClick: () => navigate('/inquiry'),
     },
+    {
+      key: 'terms',
+      label: legalUi(lang, 'terms'),
+      description: '',
+      onClick: () => navigate('/terms'),
+    },
+    {
+      key: 'privacy',
+      label: legalUi(lang, 'privacy'),
+      description: '',
+      onClick: () => navigate('/privacy'),
+    },
   ];
 
   return (
@@ -68,7 +81,9 @@ export const Settings: React.FC = () => {
             >
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5 truncate">{item.description}</p>
+                {item.description ? (
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{item.description}</p>
+                ) : null}
               </div>
               <svg
                 className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2"
