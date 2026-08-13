@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { showToast } from '@/utils/toast';
+import { ModalShell } from '@/components/common/ModalShell';
 
 export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment';
 
@@ -131,7 +132,7 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
     };
   }, [open, targetType, targetId]);
 
-  if (!open || checkingPending) return null;
+  if (checkingPending && open) return null;
 
   const handleSubmit = async () => {
     if (!reason || sending) return;
@@ -157,9 +158,12 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
   const reasons = REASONS[targetType];
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 px-4" onClick={close}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}>
+    <ModalShell
+      open={open && !checkingPending}
+      onClose={close}
+      zIndex={10000}
+      panelClassName="w-full max-w-md p-6 max-h-[85vh] overflow-y-auto"
+    >
         {done ? (
           <>
             <div className="flex flex-col items-center text-center py-4">
@@ -237,7 +241,6 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };

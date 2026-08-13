@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ModalShell } from '@/components/common/ModalShell';
 import {
   ACTIVITY_BADGE_DEFINITIONS,
   ACTIVITY_BADGE_SVG_SIZE_PX,
@@ -31,6 +32,9 @@ export const ActivityBadgesPanel: React.FC = () => {
   const [displayBadgeId, setDisplayBadgeIdState] = useState(() => getDisplayActivityBadgeId());
   const [purchaseModal, setPurchaseModal] = useState<PurchaseModal | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const purchaseHeldRef = useRef<PurchaseModal | null>(null);
+  if (purchaseModal) purchaseHeldRef.current = purchaseModal;
+  const purchaseShown = purchaseModal ?? purchaseHeldRef.current;
 
   useEffect(() => {
     const sync = () => setUnlocked(getUnlockedBadgeIds());
@@ -153,16 +157,14 @@ export const ActivityBadgesPanel: React.FC = () => {
         })}
       </div>
 
-      {/* Badge Purchase Modal */}
-      {purchaseModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => !purchasing && setPurchaseModal(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl mx-6 w-full max-w-sm overflow-hidden animate-[fadeInUp_0.25s_ease-out]"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalShell
+        open={!!purchaseModal}
+        onClose={() => { if (!purchasing) setPurchaseModal(null); }}
+        zIndex={50}
+        panelClassName="w-full max-w-sm overflow-hidden"
+      >
+        {purchaseShown ? (
+          <>
             <div className="flex flex-col items-center px-6 pt-8 pb-4">
               <div
                 className="rounded-full bg-gray-200 flex items-center justify-center mb-4"
@@ -170,7 +172,7 @@ export const ActivityBadgesPanel: React.FC = () => {
               >
                 <LockIcon />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-1">{purchaseModal.badgeLabel}</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">{purchaseShown.badgeLabel}</h3>
               <p className="text-sm text-gray-500 text-center leading-relaxed">
                 {t('badgeEarnFree')}
               </p>
@@ -203,9 +205,9 @@ export const ActivityBadgesPanel: React.FC = () => {
                 {purchasing ? t('processing') : t('payPi')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </ModalShell>
     </div>
   );
 };

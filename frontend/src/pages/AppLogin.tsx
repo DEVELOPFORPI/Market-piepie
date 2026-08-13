@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/hooks/useLanguage';
 import { legalUi } from '@/i18n/legalUiMessages';
+import { ModalShell } from '@/components/common/ModalShell';
 
 import { isTestLoginEnabled } from '@/config/features';
 
@@ -300,9 +301,12 @@ export const AppLogin: React.FC = () => {
 
       )}
 
-      {showPaymentNotice && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+      <ModalShell
+        open={showPaymentNotice}
+        onClose={() => { setShowPaymentNotice(false); setPendingVerified(null); }}
+        zIndex={50}
+        panelClassName="w-full max-w-sm p-6"
+      >
             <div className="flex items-center justify-center w-14 h-14 rounded-full mx-auto mb-4" style={{ backgroundColor: '#F0FDFA' }}>
               <svg className="w-7 h-7" style={{ color: TEAL }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -330,9 +334,7 @@ export const AppLogin: React.FC = () => {
             >
               {t('cancel')}
             </button>
-          </div>
-        </div>
-      )}
+      </ModalShell>
 
     </div>
 

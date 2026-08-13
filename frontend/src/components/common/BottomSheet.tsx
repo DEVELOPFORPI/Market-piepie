@@ -52,19 +52,19 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-black/50 transition-opacity ease-out ${
+        className={`fixed inset-0 z-40 bg-black/50 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{ transitionDuration: `${ANIM_MS}ms` }}
+        style={{ transition: `opacity ${ANIM_MS}ms cubic-bezier(0.32, 0.72, 0, 1)` }}
         onClick={onClose}
         aria-hidden
       />
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl transition-transform ease-out will-change-transform safe-area-bottom ${
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl will-change-transform safe-area-bottom ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{
-          transitionDuration: `${ANIM_MS}ms`,
+          transition: `transform ${ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
           ...(isAuto ? { maxHeight: '90vh' } : { height, maxHeight: '90vh' }),
         }}
         role="dialog"

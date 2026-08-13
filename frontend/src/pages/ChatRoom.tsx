@@ -21,6 +21,8 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
+import { ModalShell } from '@/components/common/ModalShell';
+import { ImageLightbox } from '@/components/common/ImageLightbox';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { api } from '@/utils/api';
 import { syncRoomMessagesFromDB } from '@/utils/dbSync';
@@ -242,6 +244,9 @@ export const ChatRoom: React.FC = () => {
   const chatMenuRef = useRef<HTMLDivElement>(null);
   useDismissOnClickOutside(chatMenuRef, showMenu, () => setShowMenu(false));
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
+  const meetupDetailHeldRef = useRef<ChatMessage | null>(null);
+  if (meetupDetailMessage) meetupDetailHeldRef.current = meetupDetailMessage;
+  const meetupDetailShown = meetupDetailMessage ?? meetupDetailHeldRef.current;
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [ordersRevision, setOrdersRevision] = useState(0);
@@ -1188,23 +1193,24 @@ export const ChatRoom: React.FC = () => {
         )}
       </div>
 
-      {/* Partner started meetup (realtime popup) */}
-      {showMeetupStartedPopup && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-label={t('meetupStartedAria')}>
-          <div className="bg-white rounded-xl shadow-lg max-w-sm w-full p-6 text-center">
-            <p className="text-base font-semibold text-gray-900 mb-1">{t('meetupStartedTitle')}</p>
-            <p className="text-sm text-gray-600 mb-5">{t('meetupStartedHint')}</p>
-            <button
-              type="button"
-              onClick={() => setShowMeetupStartedPopup(false)}
-              className="w-full px-4 py-3 text-white rounded-lg font-medium"
-              style={{ backgroundColor: '#00A8A3' }}
-            >
-              {t('ok')}
-            </button>
-          </div>
-        </div>
-      )}
+      <ModalShell
+        open={showMeetupStartedPopup}
+        onClose={() => setShowMeetupStartedPopup(false)}
+        zIndex={100}
+        labelledBy="meetup-started-title"
+        panelClassName="max-w-sm w-full p-6 text-center"
+      >
+        <p id="meetup-started-title" className="text-base font-semibold text-gray-900 mb-1">{t('meetupStartedTitle')}</p>
+        <p className="text-sm text-gray-600 mb-5">{t('meetupStartedHint')}</p>
+        <button
+          type="button"
+          onClick={() => setShowMeetupStartedPopup(false)}
+          className="w-full px-4 py-3 text-white rounded-lg font-medium"
+          style={{ backgroundColor: '#00A8A3' }}
+        >
+          {t('ok')}
+        </button>
+      </ModalShell>
 
       {/* Listing + buyer/seller actions */}
       {room?.product && (
@@ -1728,42 +1734,23 @@ export const ChatRoom: React.FC = () => {
         </div>
       )}
 
-      {/* Full-screen Image Viewer */}
-      {viewImage && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center"
-          onClick={() => setViewImage(null)}
-        >
-          <button
-            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center text-white text-2xl z-10"
-            onClick={() => setViewImage(null)}
-          >
-            ??          </button>
-          <img
-            src={viewImage}
-            alt="Full size"
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox src={viewImage} onClose={() => setViewImage(null)} />
 
-      {meetupDetailMessage && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
-          onClick={() => setMeetupDetailMessage(null)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-lg max-w-sm w-full p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalShell
+        open={!!meetupDetailMessage}
+        onClose={() => setMeetupDetailMessage(null)}
+        zIndex={100}
+        panelClassName="max-w-sm w-full p-5"
+      >
+        {meetupDetailShown ? (
+          <>
             <h3 className="font-semibold text-gray-900 mb-3">
-              {displayChatMessageContent(meetupDetailMessage.content, lang)}
+              {displayChatMessageContent(meetupDetailShown.content, lang)}
             </h3>
             {(() => {
-              const place = currentOrder?.meetupPlace ?? meetupDetailMessage.meetupPlace;
-              const date = currentOrder?.meetupDate ?? meetupDetailMessage.meetupDate;
-              const time = currentOrder?.meetupTime ?? meetupDetailMessage.meetupTime;
+              const place = currentOrder?.meetupPlace ?? meetupDetailShown.meetupPlace;
+              const date = currentOrder?.meetupDate ?? meetupDetailShown.meetupDate;
+              const time = currentOrder?.meetupTime ?? meetupDetailShown.meetupTime;
               const hasAny = !!(place || date || time);
               return (
                 <>
@@ -1794,9 +1781,9 @@ export const ChatRoom: React.FC = () => {
             >
               {t('close')}
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </ModalShell>
     </div>
   );
 };

@@ -49,13 +49,14 @@ export function showGuestLoginPrompt(reason: GuestGuardReason = 'default'): void
   overlay.id = 'guest-gate-overlay';
   overlay.style.cssText =
     'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
-    'background:rgba(0,0,0,0.45);animation:guestFadeIn 0.2s ease';
+    'background:rgba(0,0,0,0.45);opacity:0;transition:opacity 280ms cubic-bezier(0.32, 0.72, 0, 1)';
 
   const modal = document.createElement('div');
   modal.style.cssText =
     'background:#fff;border-radius:20px;padding:36px 28px 24px;text-align:center;' +
     'max-width:300px;width:calc(100% - 48px);box-shadow:0 16px 48px rgba(0,0,0,0.2);' +
-    'animation:guestSlideUp 0.25s ease';
+    'transform:translateY(18px) scale(0.96);opacity:0;' +
+    'transition:transform 280ms cubic-bezier(0.22, 1, 0.36, 1),opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)';
 
   modal.innerHTML = `
     <div style="width:56px;height:56px;border-radius:50%;background:#F0FDFA;margin:0 auto 16px;display:flex;align-items:center;justify-content:center">
@@ -77,18 +78,19 @@ export function showGuestLoginPrompt(reason: GuestGuardReason = 'default'): void
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes guestFadeIn{from{opacity:0}to{opacity:1}}
-    @keyframes guestSlideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-  `;
-  overlay.appendChild(style);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      modal.style.opacity = '1';
+      modal.style.transform = 'none';
+    });
+  });
 
   const close = () => {
     overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.2s';
-    setTimeout(() => overlay.remove(), 200);
+    modal.style.opacity = '0';
+    modal.style.transform = 'translateY(14px) scale(0.96)';
+    setTimeout(() => overlay.remove(), 280);
   };
 
   document.getElementById('guest-gate-close')!.onclick = close;

@@ -14,6 +14,7 @@ import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload
 import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { BottomSheet } from '@/components/common/BottomSheet';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -331,54 +332,43 @@ export const PostWrite: React.FC = () => {
         </button>
       </div>
 
-      {/* Product Select Modal */}
-      {showProductSelect && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-          <div className="bg-white rounded-t-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">{t('chooseYourListing')}</h3>
+      <BottomSheet
+        isOpen={showProductSelect}
+        onClose={() => setShowProductSelect(false)}
+        title={t('chooseYourListing')}
+        height="80vh"
+      >
+        <div className="p-4 space-y-3">
+          {myProducts.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              <p>{t('noListings')}</p>
               <button
-                onClick={() => setShowProductSelect(false)}
-                className="p-2 text-gray-600"
+                onClick={() => {
+                  setShowProductSelect(false);
+                  navigate('/register');
+                }}
+                className="mt-3 px-4 py-2 rounded-lg text-white text-sm font-medium"
+                style={{ backgroundColor: '#00A8A3' }}
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                {t('createListing')}
               </button>
             </div>
-            <div className="p-4 space-y-3">
-              {myProducts.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 text-sm">
-                  <p>{t('noListings')}</p>
-                  <button
-                    onClick={() => {
-                      setShowProductSelect(false);
-                      navigate('/register');
-                    }}
-                    className="mt-3 px-4 py-2 rounded-lg text-white text-sm font-medium"
-                    style={{ backgroundColor: '#00A8A3' }}
-                  >
-                    {t('createListing')}
-                  </button>
-                </div>
-              ) : (
-                myProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    onClick={() => {
-                      setAttachedProduct(product);
-                      setShowProductSelect(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <ListingCard product={product} layout="list" />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          ) : (
+            myProducts.map((product) => (
+              <div
+                key={product.id}
+                onClick={() => {
+                  setAttachedProduct(product);
+                  setShowProductSelect(false);
+                }}
+                className="cursor-pointer"
+              >
+                <ListingCard product={product} layout="list" />
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </BottomSheet>
     </div>
   );
 };

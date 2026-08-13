@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ModalShell } from '@/components/common/ModalShell';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { api } from '@/utils/api';
@@ -59,6 +60,9 @@ export const MyInquiries: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Inquiry | null>(null);
+  const selectedHeldRef = useRef<Inquiry | null>(null);
+  if (selected) selectedHeldRef.current = selected;
+  const selectedShown = selected ?? selectedHeldRef.current;
   const [filterCategory, setFilterCategory] = useState<CategoryFilter>('all');
 
   const categoryLabel = (value: string) => {
@@ -207,14 +211,18 @@ export const MyInquiries: React.FC = () => {
         )}
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg overflow-x-hidden overflow-y-auto rounded-2xl bg-white shadow-xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
+      <ModalShell
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        zIndex={50}
+        panelClassName="w-full max-w-lg overflow-x-hidden overflow-y-auto max-h-[85vh] p-6"
+      >
+        {selectedShown ? (
+          <>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-900">{t('inquiryDetail')}</h2>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[selected.status] || ''}`}>
-                  {statusLabel(selected.status)}
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[selectedShown.status] || ''}`}>
+                  {statusLabel(selectedShown.status)}
                 </span>
               </div>
 
@@ -222,31 +230,31 @@ export const MyInquiries: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="min-w-0">
                     <span className="text-gray-400 text-xs">{t('labelCategory')}</span>
-                    <p className="font-medium">{categoryLabel(selected.category)}</p>
+                    <p className="font-medium">{categoryLabel(selectedShown.category)}</p>
                   </div>
                   <div className="min-w-0">
                     <span className="text-gray-400 text-xs">{t('labelSubmitted')}</span>
                     <p className="break-words font-medium">
-                      {new Date(selected.created_at).toLocaleString(localeForAppLanguage(lang))}
+                      {new Date(selectedShown.created_at).toLocaleString(localeForAppLanguage(lang))}
                     </p>
                   </div>
                 </div>
 
                 <div>
                   <span className="text-gray-400 text-xs">{t('labelTitle')}</span>
-                  <p className="break-all font-medium text-gray-900">{selected.title}</p>
+                  <p className="break-all font-medium text-gray-900">{selectedShown.title}</p>
                 </div>
 
                 <div>
                   <span className="text-gray-400 text-xs">{t('labelContent')}</span>
-                  <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-700">{selected.content}</p>
+                  <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-700">{selectedShown.content}</p>
                 </div>
 
-                {selected.images && selected.images.length > 0 && (
+                {selectedShown.images && selectedShown.images.length > 0 && (
                   <div>
                     <span className="text-gray-400 text-xs">{t('labelImages')}</span>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {selected.images.map((img, idx) => (
+                      {selectedShown.images.map((img, idx) => (
                         <img key={idx} src={img} alt={`attachment-${idx}`}
                           className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
                       ))}
@@ -254,15 +262,15 @@ export const MyInquiries: React.FC = () => {
                   </div>
                 )}
 
-                {selected.admin_reply ? (
+                {selectedShown.admin_reply ? (
                   <div>
                     <span className="text-gray-400 text-xs">
                       {t('labelAdminReply')}
-                      {selected.replied_at
-                        ? ` · ${new Date(selected.replied_at).toLocaleString(localeForAppLanguage(lang))}`
+                      {selectedShown.replied_at
+                        ? ` · ${new Date(selectedShown.replied_at).toLocaleString(localeForAppLanguage(lang))}`
                         : ''}
                     </span>
-                    <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-green-50 p-3 text-gray-700">{selected.admin_reply}</p>
+                    <p className="mt-1 break-all whitespace-pre-wrap rounded-lg bg-green-50 p-3 text-gray-700">{selectedShown.admin_reply}</p>
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400 italic">{t('awaitingAdmin')}</p>
@@ -273,10 +281,9 @@ export const MyInquiries: React.FC = () => {
                 className="w-full mt-6 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                 {t('close')}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </ModalShell>
     </div>
   );
 };

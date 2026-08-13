@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { ToastHost } from './components/common/ToastHost';
 import { SplashScreen } from './components/SplashScreen';
 import { BottomTab } from './components/navigation/BottomTab';
+import { PageTransition } from './components/navigation/PageTransition';
 import { useLanguage } from './hooks/useLanguage';
 import { Home } from './pages/Home';
 import { Search } from './pages/Search';
@@ -406,6 +407,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
         );
       })()}
       <div style={{ paddingTop: mainPaddingTop }}>
+        <PageTransition>
         <Routes>
           <Route
             path="/login"
@@ -466,6 +468,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/privacy" element={<LegalDocument kind="privacy" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </PageTransition>
         {!showSplash && !hideNav && <BottomTab />}
         <ToastHost />
       </div>
