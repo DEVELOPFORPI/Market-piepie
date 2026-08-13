@@ -36,7 +36,11 @@ export const My: React.FC = () => {
       void syncMyProfileFromDB(uid).then(refresh);
     }
     window.addEventListener('profileSaved', refresh);
-    return () => window.removeEventListener('profileSaved', refresh);
+    window.addEventListener('profileDisplayBadgeChanged', refresh);
+    return () => {
+      window.removeEventListener('profileSaved', refresh);
+      window.removeEventListener('profileDisplayBadgeChanged', refresh);
+    };
   }, []);
   /** Sync with bottom nav: App hides nav when ?tab=badges */
   const profileTab: ProfileTab =

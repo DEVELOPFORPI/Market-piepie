@@ -1540,17 +1540,27 @@ export async function checkMyProfileInDB(
 /** 프로필을 DB에 저장하고 성공 여부 반환 (가입 완료 시 필수 경로) */
 export async function saveMyProfileToDB(
   userId: string,
-  profile: { nickname: string; bio?: string; profileImage?: string; activityRegion?: string },
+  profile: {
+    nickname: string;
+    bio?: string;
+    profileImage?: string;
+    activityRegion?: string;
+    displayActivityBadgeId?: string | null;
+  },
 ): Promise<boolean> {
   try {
-    const res = await api.post('/api/users', {
+    const payload: Record<string, unknown> = {
       id: userId,
       nickname: profile.nickname,
       profile_image: profile.profileImage,
       bio: profile.bio,
       activity_region: profile.activityRegion,
       kyc_status: 'unverified',
-    });
+    };
+    if ('displayActivityBadgeId' in profile) {
+      payload.display_activity_badge_id = profile.displayActivityBadgeId || '';
+    }
+    const res = await api.post('/api/users', payload);
     return res.ok;
   } catch {
     return false;
@@ -1577,6 +1587,10 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
           profileImage: String(u.profile_image || '') || (existing?.profileImage as string) || '/default-avatar.jpg',
           bio: String(u.bio || '') || (existing?.bio as string) || '',
           activityRegion: String(u.activity_region || '') || (existing?.activityRegion as string) || '',
+          displayActivityBadgeId:
+            u.display_activity_badge_id != null
+              ? String(u.display_activity_badge_id).trim() || undefined
+              : (existing?.displayActivityBadgeId as string | undefined),
         };
         localStorage.setItem(profileKey, JSON.stringify(profile));
         const dbRegion = String(u.activity_region || '').trim();

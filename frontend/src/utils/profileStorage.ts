@@ -49,12 +49,18 @@ export const getProfileByUserId = (userId: string): StoredProfile | null => {
   }
 };
 
-/** Prefer per-user stored avatar over embedded snapshot on products/posts */
+export function activityBadgeAvatarUrl(badgeId: string): string {
+  return `/Batch/${badgeId}.svg`;
+}
+
+/** Prefer featured badge as the avatar; otherwise stored/embedded photo */
 export function resolveProfileAvatarUrl(
   userId: string | undefined | null,
   embeddedProfileImage: string | undefined | null
 ): string {
   if (userId) {
+    const badgeId = getEffectiveDisplayActivityBadgeIdForUser(userId);
+    if (badgeId) return activityBadgeAvatarUrl(badgeId);
     const stored = getProfileByUserId(userId)?.profileImage;
     if (stored != null && String(stored).trim() !== '') return stored;
   }
@@ -94,6 +100,10 @@ export function cacheUserProfileFromRow(
         bio: row.bio != null ? String(row.bio) : existing.bio,
         activityRegion:
           row.activity_region != null ? String(row.activity_region) : existing.activityRegion,
+        displayActivityBadgeId:
+          row.display_activity_badge_id != null
+            ? String(row.display_activity_badge_id).trim() || undefined
+            : existing.displayActivityBadgeId,
       }),
     );
   } catch {
@@ -139,15 +149,16 @@ export function resolveDisplayNickname(
 export const saveProfile = async (profile: StoredProfile): Promise<boolean> => {
   const userId = getCurrentUserId();
   if (!userId) return false;
+  const merged = { ...getProfile(), ...profile };
   const ok = await saveMyProfileToDB(userId, {
-    nickname: profile.nickname || 'My nickname',
-    bio: profile.bio,
-    profileImage: profile.profileImage,
-    activityRegion: profile.activityRegion,
+    nickname: merged.nickname || 'My nickname',
+    bio: merged.bio,
+    profileImage: merged.profileImage,
+    activityRegion: merged.activityRegion,
+    displayActivityBadgeId: merged.displayActivityBadgeId ?? '',
   });
   if (!ok) return false;
   const key = userKey(BASE_KEY);
-  const merged = { ...getProfile(), ...profile };
   localStorage.setItem(key, JSON.stringify(merged));
   localStorage.setItem(`${BASE_KEY}_${userId}`, JSON.stringify(merged));
   window.dispatchEvent(new Event('profileSaved'));
@@ -277,7 +288,7 @@ export const getMyUser = () => {
   return {
     id: userId,
     nickname: p.nickname || 'My nickname',
-    profileImage: p.profileImage || '/default-avatar.jpg',
+    profileImage: resolveProfileAvatarUrl(userId, p.profileImage),
     kycStatus: (isGuest ? 'unverified' : 'verified') as 'verified' | 'unverified',
     trustScore: stats.trustScore,
     rating: stats.rating,

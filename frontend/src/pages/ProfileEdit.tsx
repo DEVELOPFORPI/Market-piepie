@@ -36,6 +36,7 @@ export const ProfileEdit: React.FC = () => {
   const navigate = useNavigate();
   const stored = getProfile();
   const [profileImage, setProfileImage] = useState(stored.profileImage ?? DEFAULT_AVATAR_PATH);
+  const [uploadedNewPhoto, setUploadedNewPhoto] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [nickname, setNickname] = useState(stored.nickname ?? 'My nickname');
   const [bio, setBio] = useState(stored.bio ?? 'I value safe, quick trades.');
@@ -75,6 +76,7 @@ export const ProfileEdit: React.FC = () => {
     try {
       const url = await uploadImageToR2(file, { folder: 'profiles' });
       setProfileImage(url);
+      setUploadedNewPhoto(true);
       setHasChanges(true);
     } catch {
       alert(t('couldNotUpload'));
@@ -98,6 +100,7 @@ export const ProfileEdit: React.FC = () => {
         nickname,
         bio,
         activityRegion,
+        ...(uploadedNewPhoto ? { displayActivityBadgeId: undefined } : {}),
       };
       const ok = await saveProfile(profileData);
       if (!ok) {
@@ -144,7 +147,11 @@ export const ProfileEdit: React.FC = () => {
         {/* Profile Image */}
         <div className="flex flex-col items-center">
           <div className="relative">
-            <AvatarWithBadgeOverlay userId={getCurrentUserId()} sizePx={96}>
+            <AvatarWithBadgeOverlay
+              userId={getCurrentUserId()}
+              sizePx={96}
+              useFeaturedBadge={!uploadedNewPhoto}
+            >
               <div
                 className={`w-full h-full flex items-center justify-center ${
                   isProfileImageActivityBadge(profileImage) ? 'bg-white' : 'bg-gray-200'
