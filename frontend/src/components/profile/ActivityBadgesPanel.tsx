@@ -4,6 +4,7 @@ import {
   ACTIVITY_BADGE_DEFINITIONS,
   ACTIVITY_BADGE_SVG_SIZE_PX,
 } from '@/constants/activityBadges';
+import { getLiveBadgePricePi, useAppPrices } from '@/utils/appPrices';
 import { getUnlockedBadgeIds, unlockActivityBadge } from '@/utils/activityBadgeStorage';
 import { getDisplayActivityBadgeId, setDisplayActivityBadgeId } from '@/utils/profileStorage';
 import { piBadgePurchasePayment } from '@/utils/piAuth';
@@ -28,6 +29,7 @@ interface PurchaseModal {
 
 export const ActivityBadgesPanel: React.FC = () => {
   const { t } = useLanguage();
+  useAppPrices();
   const [unlocked, setUnlocked] = useState(() => getUnlockedBadgeIds());
   const [displayBadgeId, setDisplayBadgeIdState] = useState(() => getDisplayActivityBadgeId());
   const [purchaseModal, setPurchaseModal] = useState<PurchaseModal | null>(null);
@@ -181,7 +183,9 @@ export const ActivityBadgesPanel: React.FC = () => {
               </p>
               <div className="flex items-center gap-1.5 mt-2 mb-2">
                 <img src="/pi_logo.svg" alt="Pi" className="w-5 h-5" />
-                <span className="text-xl font-bold" style={{ color: TEAL }}>0.01 Pi</span>
+                <span className="text-xl font-bold" style={{ color: TEAL }}>
+                  {getLiveBadgePricePi(purchaseShown.badgeId) ?? 0} Pi
+                </span>
               </div>
             </div>
 
@@ -202,7 +206,9 @@ export const ActivityBadgesPanel: React.FC = () => {
                 className="flex-1 py-3.5 text-sm font-bold text-white transition-colors disabled:opacity-60"
                 style={{ backgroundColor: TEAL }}
               >
-                {purchasing ? t('processing') : t('payPi')}
+                {purchasing
+                  ? t('processing')
+                  : t('payPi', { n: getLiveBadgePricePi(purchaseShown.badgeId) ?? 0 })}
               </button>
             </div>
           </>

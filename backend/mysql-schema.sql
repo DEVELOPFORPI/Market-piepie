@@ -384,6 +384,12 @@ CREATE TABLE IF NOT EXISTS content_views (
 CREATE INDEX idx_content_views_target ON content_views(target_type, target_id);
 CREATE INDEX idx_content_views_date ON content_views(view_date);
 
+CREATE TABLE IF NOT EXISTS app_prices (
+  price_key VARCHAR(32) PRIMARY KEY,
+  amount DECIMAL(12,4) NOT NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Existing DB migration (run once on live DBs):
 -- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified; -- now 015_users_pi_username.sql
 -- CREATE TABLE guests (...);  -- copy from CREATE TABLE guests above

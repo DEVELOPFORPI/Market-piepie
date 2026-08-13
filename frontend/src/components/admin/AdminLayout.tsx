@@ -73,6 +73,14 @@ function IconFlag() {
   );
 }
 
+function IconPrice() {
+  return (
+    <svg className="h-5 w-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 7h.01M4 7a3 3 0 013-3h6l7 7-9 9-7-7V7z" />
+    </svg>
+  );
+}
+
 const asideLink =
   'mx-2 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors';
 
@@ -113,6 +121,10 @@ export const AdminLayout: React.FC = () => {
           <NavLink to="/admin/payments" className={linkClass}>
             <IconCard />
             결제 내역
+          </NavLink>
+          <NavLink to="/admin/prices" className={linkClass}>
+            <IconPrice />
+            요금 설정
           </NavLink>
           <NavLink to="/admin/products" className={linkClass}>
             <IconBox />

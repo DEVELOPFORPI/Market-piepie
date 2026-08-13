@@ -1094,7 +1094,18 @@ app.post("/api/payments/approve", async (req, res) => {
 
   if (!paymentId) return res.status(400).json({ error: "paymentId required" });
 
-  if (!(await requirePaymentOwner(req, res, paymentId))) return;
+  const info = await requirePaymentOwner(req, res, paymentId);
+  if (!info) return;
+
+  if (!isValidPricedPayment(info)) {
+    try {
+      await piApiCall("POST", "/payments/" + paymentId + "/cancel", {});
+      await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: info });
+    } catch {
+      /* ignore */
+    }
+    return res.status(400).json({ error: "Invalid payment amount" });
+  }
 
   try {
     const result = await piApiCall(
@@ -1206,6 +1217,12 @@ app.post("/api/payments/incomplete", incompletePaymentLimiter, async (req, res) 
 
     const txid = info.transaction && info.transaction.txid;
 
+    if (!txid && !isValidPricedPayment(info)) {
+      await piApiCall("POST", "/payments/" + paymentId + "/cancel", {});
+      await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: info });
+      return res.status(400).json({ error: "Invalid payment amount" });
+    }
+
     if (txid) {
       const result = await piApiCall(
         "POST",
@@ -1245,6 +1262,75 @@ app.post("/api/payments/incomplete", incompletePaymentLimiter, async (req, res) 
   }
 });
 
+const DEFAULT_APP_PRICES = {
+  signup: 3.14,
+  badges: {
+    "01": 15,
+    "02": 75,
+    "03": 150,
+    "04": 10,
+    "05": 50,
+    "06": 100,
+    "07": 12,
+    "08": 60,
+    "09": 120,
+    "10": 180,
+    "11": 240,
+    "12": 80,
+    "13": 200,
+    "14": 10,
+  },
+};
+
+let appPricesCache = {
+  signup: DEFAULT_APP_PRICES.signup,
+  badges: { ...DEFAULT_APP_PRICES.badges },
+};
+
+function cloneAppPrices(src) {
+  return { signup: src.signup, badges: { ...src.badges } };
+}
+
+function getAppPrices() {
+  return appPricesCache;
+}
+
+function publicAppPrices() {
+  const prices = getAppPrices();
+  return { signupFee: prices.signup, badges: { ...prices.badges } };
+}
+
+function amountsEqual(a, b) {
+  return Math.abs(Number(a) - Number(b)) < 0.00005;
+}
+
+function parsePriceAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > 10000) return null;
+  return Math.round(n * 10000) / 10000;
+}
+
+async function loadAppPrices() {
+  if (!pool) return getAppPrices();
+  try {
+    const { rows } = await pool.query("SELECT price_key, amount FROM app_prices");
+    const next = cloneAppPrices(DEFAULT_APP_PRICES);
+    for (const row of rows) {
+      const amount = parsePriceAmount(row.amount);
+      if (amount == null) continue;
+      if (row.price_key === "signup") next.signup = amount;
+      else if (typeof row.price_key === "string" && row.price_key.startsWith("badge_")) {
+        const id = row.price_key.slice(6);
+        if (DEFAULT_APP_PRICES.badges[id] != null) next.badges[id] = amount;
+      }
+    }
+    appPricesCache = next;
+  } catch (e) {
+    console.error("[prices] load failed:", e.message);
+  }
+  return getAppPrices();
+}
+
 function extractPurchasedBadgeId(metadata) {
   if (!metadata) return null;
   try {
@@ -1255,6 +1341,22 @@ function extractPurchasedBadgeId(metadata) {
     /* ignore */
   }
   return null;
+}
+
+function isValidBadgePurchaseAmount(info) {
+  if (normalizePaymentType(info?.metadata) !== PAYMENT_TYPE.BADGE_PURCHASE) return true;
+  const id = extractPurchasedBadgeId(info.metadata);
+  const expected = id ? getAppPrices().badges[id] : null;
+  return expected != null && amountsEqual(info.amount, expected);
+}
+
+function isValidVerificationAmount(info) {
+  if (normalizePaymentType(info?.metadata) !== PAYMENT_TYPE.PROFILE_VERIFICATION) return true;
+  return amountsEqual(info.amount, getAppPrices().signup);
+}
+
+function isValidPricedPayment(info) {
+  return isValidBadgePurchaseAmount(info) && isValidVerificationAmount(info);
 }
 
 app.get("/api/payments/my-badges", requireDb, async (req, res) => {
@@ -1271,6 +1373,59 @@ app.get("/api/payments/my-badges", requireDb, async (req, res) => {
       if (id) ids.add(id);
     }
     res.json({ badgeIds: [...ids] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/prices", async (_req, res) => {
+  if (pool) await loadAppPrices();
+  res.json(publicAppPrices());
+});
+
+app.get("/api/admin/prices", requireAdmin, async (_req, res) => {
+  if (pool) await loadAppPrices();
+  res.json(publicAppPrices());
+});
+
+app.put("/api/admin/prices", requireDb, requireAdmin, async (req, res) => {
+  await loadAppPrices();
+  const next = cloneAppPrices(getAppPrices());
+  const rows = [];
+
+  if (req.body?.signupFee != null) {
+    const signupFee = parsePriceAmount(req.body.signupFee);
+    if (signupFee == null) return res.status(400).json({ error: "Invalid signup fee" });
+    next.signup = signupFee;
+    rows.push(["signup", signupFee]);
+  }
+
+  const incoming = req.body?.badges;
+  if (incoming && typeof incoming === "object") {
+    for (const [id, raw] of Object.entries(incoming)) {
+      if (DEFAULT_APP_PRICES.badges[id] == null) {
+        return res.status(400).json({ error: "Unknown badge: " + id });
+      }
+      const amount = parsePriceAmount(raw);
+      if (amount == null) return res.status(400).json({ error: "Invalid badge price: " + id });
+      next.badges[id] = amount;
+      rows.push(["badge_" + id, amount]);
+    }
+  }
+
+  if (!rows.length) return res.status(400).json({ error: "No prices to update" });
+
+  try {
+    for (const [key, amount] of rows) {
+      await pool.query(
+        `INSERT INTO app_prices (price_key, amount)
+         VALUES ($1, $2)
+         ON DUPLICATE KEY UPDATE amount = $2, updated_at = CURRENT_TIMESTAMP(3)`,
+        [key, amount],
+      );
+    }
+    appPricesCache = next;
+    res.json(publicAppPrices());
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4448,6 +4603,7 @@ io.on("connection", async (socket) => {
 });
 
 migrationsReady.finally(() => {
+  void loadAppPrices();
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(
       `[backend] http://0.0.0.0:${PORT}  (health: /api/health, ws: enabled)`,

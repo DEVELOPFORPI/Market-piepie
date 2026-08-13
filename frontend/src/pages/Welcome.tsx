@@ -4,7 +4,8 @@ import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { isTestLoginEnabled } from '@/config/features';
 import { isLoggedIn, clearImplicitSessionSkip, ensureImplicitSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
 import { isOnboardingComplete } from '@/utils/onboardingStorage';
-import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser, PI_VERIFICATION_AMOUNT } from '@/utils/piAuth';
+import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
+import { useAppPrices } from '@/utils/appPrices';
 import { checkMyProfileInDB } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
 import { legalUi } from '@/i18n/legalUiMessages';
@@ -16,6 +17,7 @@ const PI_PURPLE = '#7B2D8E';
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
+  const { signupFee } = useAppPrices();
   const [piLoading, setPiLoading] = useState(false);
   const [piError, setPiError] = useState<string | null>(null);
   const [piStep, setPiStep] = useState('');
@@ -215,7 +217,7 @@ export const Welcome: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold text-gray-900 text-center mb-2">{legalUi(lang, 'oneTimeFee')}</h3>
             <p className="text-sm text-gray-600 text-center leading-relaxed mb-1">
-              {legalUi(lang, 'payOnceToJoin', { n: PI_VERIFICATION_AMOUNT })}
+              {legalUi(lang, 'payOnceToJoin', { n: signupFee })}
             </p>
             <p className="text-xs text-gray-400 text-center mb-6">
               {legalUi(lang, 'noRefundAfterAccount')}
@@ -226,7 +228,7 @@ export const Welcome: React.FC = () => {
               className="w-full py-3.5 rounded-full text-white text-sm font-bold mb-2"
               style={{ backgroundColor: PI_PURPLE }}
             >
-              {legalUi(lang, 'payPi', { n: PI_VERIFICATION_AMOUNT })}
+              {legalUi(lang, 'payPi', { n: signupFee })}
             </button>
             <button
               type="button"

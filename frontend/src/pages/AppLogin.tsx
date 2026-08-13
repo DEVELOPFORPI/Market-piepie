@@ -12,7 +12,8 @@ import { clearImplicitSessionSkip, ensureImplicitSession, getCurrentUserId, logi
 
 import { isDeviceProfileOnce, isOnboardingComplete } from '@/utils/onboardingStorage';
 
-import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser, PI_VERIFICATION_AMOUNT } from '@/utils/piAuth';
+import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
+import { useAppPrices } from '@/utils/appPrices';
 
 import { checkMyProfileInDB } from '@/utils/dbSync';
 
@@ -28,6 +29,7 @@ export const AppLogin: React.FC = () => {
 
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
+  const { signupFee } = useAppPrices();
 
   const testMode = isTestLoginEnabled();
 
@@ -162,7 +164,7 @@ export const AppLogin: React.FC = () => {
 
         Verify your identity with Pi Network to start trading.
 
-        <br />A small verification fee of {PI_VERIFICATION_AMOUNT} Pi is required.
+        <br />A small verification fee of {signupFee} Pi is required.
 
       </p>
 
@@ -314,7 +316,7 @@ export const AppLogin: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold text-gray-900 text-center mb-2">{legalUi(lang, 'oneTimeFee')}</h3>
             <p className="text-sm text-gray-600 text-center leading-relaxed mb-1">
-              {legalUi(lang, 'payOnceToJoin', { n: PI_VERIFICATION_AMOUNT })}
+              {legalUi(lang, 'payOnceToJoin', { n: signupFee })}
             </p>
             <p className="text-xs text-gray-400 text-center mb-6">
               {legalUi(lang, 'noRefundAfterAccount')}
@@ -325,7 +327,7 @@ export const AppLogin: React.FC = () => {
               className="w-full py-3.5 rounded-full text-white text-sm font-bold mb-2"
               style={{ backgroundColor: PI_PURPLE }}
             >
-              {legalUi(lang, 'payPi', { n: PI_VERIFICATION_AMOUNT })}
+              {legalUi(lang, 'payPi', { n: signupFee })}
             </button>
             <button
               type="button"

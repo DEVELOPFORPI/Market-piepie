@@ -1,4 +1,5 @@
 import { API_BASE } from '@/utils/apiConfig';
+import { getLiveBadgePricePi, getSignupFeePi } from '@/utils/appPrices';
 import { getSessionToken } from '@/utils/authStorage';
 
 type PiSdk = {
@@ -150,7 +151,7 @@ export const PI_VERIFICATION_AMOUNT = 3.14;
 
 export function piVerificationPayment(piUsername?: string): Promise<boolean> {
   return runPiPayment({
-    amount: PI_VERIFICATION_AMOUNT,
+    amount: getSignupFeePi(),
     memo: 'MarketPiePie identity verification',
     metadata: {
       type: 'profile_verification',
@@ -160,8 +161,10 @@ export function piVerificationPayment(piUsername?: string): Promise<boolean> {
 }
 
 export function piBadgePurchasePayment(badgeId: string, badgeLabel: string): Promise<boolean> {
+  const amount = getLiveBadgePricePi(badgeId);
+  if (amount == null) return Promise.reject(new Error('Unknown badge'));
   return runPiPayment({
-    amount: 0.01,
+    amount,
     memo: `Unlock badge: ${badgeLabel}`,
     metadata: { type: 'badge_purchase', badgeId },
   });

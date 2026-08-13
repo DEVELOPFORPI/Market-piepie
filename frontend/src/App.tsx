@@ -41,6 +41,7 @@ import { AdminInquiries } from './pages/AdminInquiries';
 import { AdminProducts } from './pages/AdminProducts';
 import { AdminPosts } from './pages/AdminPosts';
 import { AdminReports } from './pages/AdminReports';
+import { AdminPrices } from './pages/AdminPrices';
 import { InquiryWrite } from './pages/InquiryWrite';
 import { AdminPassword } from './pages/AdminPassword';
 import { RegisterComplete } from './pages/RegisterComplete';
@@ -71,6 +72,7 @@ import {
 import { getDisputes } from './utils/disputeStorage';
 import { preloadHeavyStorage } from './utils/heavyStorage';
 import { syncActivityBadgesFromStats, syncPurchasedBadgesFromDB } from './utils/activityBadgeStorage';
+import { syncAppPricesFromDB } from './utils/appPrices';
 import { pruneInvalidDisplayActivityBadge } from './utils/profileStorage';
 import { isAdminVerified } from './utils/adminAccessStorage';
 
@@ -279,6 +281,10 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     syncDeviceProfileOnceFromLegacyOnboarding();
   }, [heavyReady]);
 
+  useEffect(() => {
+    void syncAppPricesFromDB();
+  }, []);
+
   const loggedIn = isLoggedIn();
 
   /** Activity badges: restore paid unlocks, then merge earned stats */
@@ -455,6 +461,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
             <Route path="disputes" element={<AdminDisputes />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="payments" element={<AdminPayments />} />
+            <Route path="prices" element={<AdminPrices />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="posts" element={<AdminPosts />} />
             <Route path="reports" element={<AdminReports />} />
