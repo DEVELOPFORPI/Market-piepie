@@ -199,12 +199,12 @@ export const Welcome: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <h3 className="text-lg font-bold text-gray-900 text-center mb-2">Identity Verification</h3>
+            <h3 className="text-lg font-bold text-gray-900 text-center mb-2">One-time fee</h3>
             <p className="text-sm text-gray-600 text-center leading-relaxed mb-1">
-              A one-time verification fee of <strong className="text-gray-900">{PI_VERIFICATION_AMOUNT} Pi</strong> is required to confirm your identity and prevent fraud.
+              Pay <strong className="text-gray-900">{PI_VERIFICATION_AMOUNT} Pi</strong> once to join.
             </p>
             <p className="text-xs text-gray-400 text-center mb-6">
-              This is charged only once and cannot be refunded.
+              No refund after your account is created.
             </p>
             <button
               type="button"
@@ -212,7 +212,7 @@ export const Welcome: React.FC = () => {
               className="w-full py-3.5 rounded-full text-white text-sm font-bold mb-2"
               style={{ backgroundColor: PI_PURPLE }}
             >
-              Proceed with {PI_VERIFICATION_AMOUNT} Pi
+              Pay {PI_VERIFICATION_AMOUNT} Pi
             </button>
             <button
               type="button"
