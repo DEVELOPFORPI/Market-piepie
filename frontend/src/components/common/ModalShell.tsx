@@ -32,10 +32,8 @@ export const ModalShell: React.FC<ModalShellProps> = ({
       setMounted(true);
       setVisible(false);
       document.body.style.overflow = 'hidden';
-      const frame = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setVisible(true));
-      });
-      return () => cancelAnimationFrame(frame);
+      const timer = window.setTimeout(() => setVisible(true), 32);
+      return () => window.clearTimeout(timer);
     }
 
     if (!wasOpenRef.current) return;

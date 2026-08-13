@@ -1,11 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, type Location } from 'react-router-dom';
 import { getAppLanguage } from '@/utils/languageStorage';
 import { resolveTransition, transitionMs, type TransitionKind } from '@/utils/pageTransition';
-
-function prefersReducedMotion(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
 
 type LeaveState = {
   location: Location;
@@ -21,13 +17,11 @@ export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ chi
   const lang = getAppLanguage();
   const rtl = lang === 'ar' || lang === 'fa' || lang === 'ur';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const prev = liveRef.current;
     if (prev.pathname === location.pathname && prev.search === location.search) return;
 
-    const nextKind = prefersReducedMotion()
-      ? 'none'
-      : resolveTransition(prev.pathname, location.pathname);
+    const nextKind = resolveTransition(prev.pathname, location.pathname);
 
     if (nextKind === 'none') {
       liveRef.current = location;
@@ -68,7 +62,10 @@ export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ chi
           {React.cloneElement(children, { location: leave.location })}
         </div>
       ) : null}
-      <div className={`pt-layer pt-layer--enter${animating ? ` pt-${kind}` : ''}`}>
+      <div
+        key={animating ? `${kind}:${live.key}:${live.pathname}` : 'live'}
+        className={`pt-layer pt-layer--enter${animating ? ` pt-${kind}` : ''}`}
+      >
         {React.cloneElement(children, { location: live })}
       </div>
     </div>

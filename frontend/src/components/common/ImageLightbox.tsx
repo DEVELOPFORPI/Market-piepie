@@ -24,10 +24,8 @@ export const ImageLightbox: React.FC<Props> = ({ src, onClose, alt = 'Full size'
       setMounted(true);
       setVisible(false);
       document.body.style.overflow = 'hidden';
-      const frame = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setVisible(true));
-      });
-      return () => cancelAnimationFrame(frame);
+      const timer = window.setTimeout(() => setVisible(true), 32);
+      return () => window.clearTimeout(timer);
     }
 
     if (!wasOpenRef.current) return;

@@ -58,7 +58,8 @@ body {
 }
 
 .pt-stage {
-  --pt-dir: 1;
+  --pt-in-x: 22%;
+  --pt-back-x: -10%;
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
@@ -66,7 +67,8 @@ body {
 }
 
 .pt-stage.pt-rtl {
-  --pt-dir: -1;
+  --pt-in-x: -22%;
+  --pt-back-x: 10%;
 }
 
 .pt-stage--busy {
@@ -76,6 +78,12 @@ body {
 .pt-layer {
   width: 100%;
   background: #fff;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.pt-stage--busy .pt-layer {
+  will-change: transform, opacity;
 }
 
 .pt-layer--leave {
@@ -133,53 +141,45 @@ body {
 
 @keyframes pt-stack-in-enter {
   from {
-    transform: translate3d(calc(22% * var(--pt-dir)), 0, 0);
+    transform: translate3d(var(--pt-in-x), 0, 0);
     opacity: 0.78;
-    box-shadow: calc(-16px * var(--pt-dir)) 0 48px rgba(15, 23, 42, 0.1);
   }
   to {
-    transform: none;
+    transform: translate3d(0, 0, 0);
     opacity: 1;
-    box-shadow: none;
   }
 }
 
 @keyframes pt-stack-in-leave {
   from {
-    transform: none;
+    transform: translate3d(0, 0, 0);
     opacity: 1;
-    filter: brightness(1);
   }
   to {
-    transform: translate3d(calc(-10% * var(--pt-dir)), 0, 0);
-    opacity: 0.92;
-    filter: brightness(0.96);
+    transform: translate3d(var(--pt-back-x), 0, 0);
+    opacity: 0.88;
   }
 }
 
 @keyframes pt-stack-out-enter {
   from {
-    transform: translate3d(calc(-10% * var(--pt-dir)), 0, 0);
-    opacity: 0.92;
-    filter: brightness(0.96);
+    transform: translate3d(var(--pt-back-x), 0, 0);
+    opacity: 0.88;
   }
   to {
-    transform: none;
+    transform: translate3d(0, 0, 0);
     opacity: 1;
-    filter: brightness(1);
   }
 }
 
 @keyframes pt-stack-out-leave {
   from {
-    transform: none;
+    transform: translate3d(0, 0, 0);
     opacity: 1;
-    box-shadow: calc(-16px * var(--pt-dir)) 0 48px rgba(15, 23, 42, 0.1);
   }
   to {
-    transform: translate3d(calc(22% * var(--pt-dir)), 0, 0);
+    transform: translate3d(var(--pt-in-x), 0, 0);
     opacity: 0.78;
-    box-shadow: none;
   }
 }
 
@@ -207,23 +207,23 @@ body {
 
 @keyframes pt-sheet-dim-leave {
   from {
-    transform: none;
-    filter: brightness(1);
+    transform: scale(1);
+    opacity: 1;
   }
   to {
     transform: scale(0.985);
-    filter: brightness(0.96);
+    opacity: 0.88;
   }
 }
 
 @keyframes pt-sheet-dim-enter {
   from {
     transform: scale(0.985);
-    filter: brightness(0.96);
+    opacity: 0.88;
   }
   to {
-    transform: none;
-    filter: brightness(1);
+    transform: scale(1);
+    opacity: 1;
   }
 }
 
