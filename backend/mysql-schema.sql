@@ -385,7 +385,7 @@ CREATE INDEX idx_content_views_target ON content_views(target_type, target_id);
 CREATE INDEX idx_content_views_date ON content_views(view_date);
 
 -- Existing DB migration (run once on live DBs):
--- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified;
+-- ALTER TABLE users ADD COLUMN pi_username VARCHAR(255) NULL AFTER pi_verified; -- now 015_users_pi_username.sql
 -- CREATE TABLE guests (...);  -- copy from CREATE TABLE guests above
 -- ALTER TABLE sessions DROP FOREIGN KEY fk_sessions_user;
 -- CREATE TABLE payments (...);  -- backend/migrations/002_payments.sql
