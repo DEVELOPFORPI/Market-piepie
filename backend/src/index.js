@@ -3245,17 +3245,6 @@ function requireAdmin(req, res, next) {
   if (!process.env.ADMIN_PASSWORD)
     return res.status(503).json({ error: "Admin not configured" });
   if (isValidAdminToken(req.headers["x-admin-token"])) return next();
-
-  // Legacy header path: delete once every admin client sends a token.
-  if (req.headers["x-admin-password"]) {
-    if (adminLockedOut(req.ip))
-      return res.status(429).json({ error: "Too many attempts" });
-    if (matchesAdminPassword(req.headers["x-admin-password"])) {
-      console.warn(`[admin] legacy password header used path=${req.path}`);
-      return next();
-    }
-    recordAdminFailure(req.ip);
-  }
   return res.status(401).json({ error: "Unauthorized" });
 }
 
