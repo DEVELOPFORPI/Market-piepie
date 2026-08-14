@@ -15,6 +15,8 @@ export interface StoredProfile {
   activityRegion?: string;
   /** Featured activity badge id (01–14) for profile card; must be unlocked */
   displayActivityBadgeId?: string;
+  /** Last real photo, restored when a badge avatar is cleared */
+  lastProfilePhoto?: string;
 }
 
 const defaultProfile: StoredProfile = {
@@ -53,14 +55,12 @@ export function activityBadgeAvatarUrl(badgeId: string): string {
   return `/Batch/${badgeId}.svg`;
 }
 
-/** Prefer featured badge as the avatar; otherwise stored/embedded photo */
+/** Stored/embedded photo only — overlay badge is separate */
 export function resolveProfileAvatarUrl(
   userId: string | undefined | null,
   embeddedProfileImage: string | undefined | null
 ): string {
   if (userId) {
-    const badgeId = getEffectiveDisplayActivityBadgeIdForUser(userId);
-    if (badgeId) return activityBadgeAvatarUrl(badgeId);
     const stored = getProfileByUserId(userId)?.profileImage;
     if (stored != null && String(stored).trim() !== '') return stored;
   }
@@ -68,6 +68,21 @@ export function resolveProfileAvatarUrl(
     return embeddedProfileImage;
   }
   return '/default-avatar.jpg';
+}
+
+/** Keep a usable photo so clearing a badge avatar can restore it */
+export function rememberLastProfilePhoto(url: string | undefined | null): string | undefined {
+  if (!url || isProfileImageActivityBadge(url)) return undefined;
+  const trimmed = String(url).trim();
+  if (!trimmed || trimmed === '/default-avatar.jpg') return undefined;
+  return trimmed;
+}
+
+/** Badge id if the profile image itself is an activity badge SVG */
+export function profileImageToBadgeId(url: string | undefined | null): string | null {
+  if (typeof url !== 'string') return null;
+  const match = url.match(/^\/Batch\/(0[1-9]|1[0-4])\.svg$/i);
+  return match ? match[1] : null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;

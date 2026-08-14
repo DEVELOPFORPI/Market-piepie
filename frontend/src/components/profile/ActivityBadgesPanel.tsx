@@ -85,12 +85,10 @@ export const ActivityBadgesPanel: React.FC = () => {
 
   return (
     <div className="px-4 pt-6 pb-28 bg-white min-h-[50vh]">
-      <p className="text-center text-sm text-gray-500 mb-3 px-2">
-        {t('badgesEarnHint')}
-      </p>
-      <p className="text-center text-xs text-gray-400 mb-8 px-3">
-        {t('badgesTapHint')}
-      </p>
+      <div className="text-center text-xs text-gray-500 mb-8 px-2 space-y-1">
+        <p>{t('badgesEarnHint')}</p>
+        <p>{t('badgesTapHint').split(/(?<=[.。．?!])\s+/)[0]?.trim()}</p>
+      </div>
 
       <div className="grid grid-cols-3 gap-x-3 gap-y-6 max-w-md mx-auto">
         {ACTIVITY_BADGE_DEFINITIONS.map(({ id, label }) => {
@@ -108,15 +106,12 @@ export const ActivityBadgesPanel: React.FC = () => {
                     : handleLockedBadgeClick(id, displayLabel)
                 }
                 className={`relative rounded-full flex items-center justify-center mb-2 shrink-0 transition-transform active:scale-[0.97] ${
-                  isOn
-                    ? isProfilePick
-                      ? 'bg-white ring-[3px] ring-amber-400 cursor-pointer'
-                      : 'bg-white ring-2 ring-[#00A8A3] cursor-pointer'
-                    : 'bg-gray-200 cursor-pointer'
+                  isOn ? 'bg-white cursor-pointer' : 'bg-gray-200 cursor-pointer'
                 }`}
                 style={{
                   width: ACTIVITY_BADGE_SVG_SIZE_PX,
                   height: ACTIVITY_BADGE_SVG_SIZE_PX,
+                  boxShadow: isOn ? `0 0 0 ${isProfilePick ? 3 : 2}px ${TEAL}` : undefined,
                 }}
                 aria-pressed={isProfilePick}
                 aria-label={
@@ -141,10 +136,13 @@ export const ActivityBadgesPanel: React.FC = () => {
                 )}
                 {isProfilePick && (
                   <span
-                    className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 rounded-full bg-amber-400 text-[10px] font-bold text-white flex items-center justify-center shadow"
+                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow"
+                    style={{ backgroundColor: TEAL }}
                     aria-hidden
                   >
-                    {t('badgeMain')}
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
                   </span>
                 )}
               </button>

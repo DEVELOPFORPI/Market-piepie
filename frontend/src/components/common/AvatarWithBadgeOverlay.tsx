@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { UserAvatarImage } from '@/components/common/UserAvatarImage';
-import { isPlaceholderProfileImage } from '@/components/common/profileAvatarPlaceholder';
 import {
   activityBadgeAvatarUrl,
   getEffectiveDisplayActivityBadgeIdForUser,
-  getProfileByUserId,
 } from '@/utils/profileStorage';
 
 type Props = {
@@ -12,13 +9,15 @@ type Props = {
   /** Avatar diameter (px) */
   sizePx: number;
   className?: string;
-  /** When false, always show children (used while picking a new photo) */
+  /** When false, hide the small overlay (e.g. while picking a new photo) */
   useFeaturedBadge?: boolean;
   /** Inner content (image or placeholder) */
   children: React.ReactNode;
 };
 
-/** Avatar: featured badge replaces the photo; otherwise shows children */
+const TEAL = '#00A8A3';
+
+/** Avatar photo plus optional small overlay from Activity badges */
 export const AvatarWithBadgeOverlay: React.FC<Props> = ({
   userId,
   sizePx,
@@ -45,12 +44,8 @@ export const AvatarWithBadgeOverlay: React.FC<Props> = ({
     () => (useFeaturedBadge ? getEffectiveDisplayActivityBadgeIdForUser(userId ?? undefined) : null),
     [userId, bump, useFeaturedBadge],
   );
-  const cachedPhoto = useMemo(() => {
-    if (!userId || badgeId) return null;
-    const stored = getProfileByUserId(userId)?.profileImage;
-    if (!stored || isPlaceholderProfileImage(stored)) return null;
-    return stored;
-  }, [userId, badgeId, bump]);
+
+  const markPx = Math.max(22, Math.round(sizePx * 0.5));
 
   return (
     <div
@@ -58,19 +53,19 @@ export const AvatarWithBadgeOverlay: React.FC<Props> = ({
       style={{ width: sizePx, height: sizePx }}
     >
       <div className="w-full h-full rounded-full overflow-hidden">
-        {badgeId ? (
-          <img
-            src={activityBadgeAvatarUrl(badgeId)}
-            alt=""
-            className="w-full h-full object-contain bg-white"
-            draggable={false}
-          />
-        ) : useFeaturedBadge && cachedPhoto ? (
-          <UserAvatarImage src={cachedPhoto} />
-        ) : (
-          children
-        )}
+        {children}
       </div>
+      {badgeId ? (
+        <img
+          src={activityBadgeAvatarUrl(badgeId)}
+          alt=""
+          width={markPx}
+          height={markPx}
+          className="absolute -bottom-1 -right-1 rounded-full object-contain shadow-sm"
+          style={{ backgroundColor: '#fff', boxShadow: `0 0 0 2px ${TEAL}` }}
+          draggable={false}
+        />
+      ) : null}
     </div>
   );
 };

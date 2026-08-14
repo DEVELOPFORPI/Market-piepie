@@ -7,6 +7,9 @@ import {
   getMyUser,
   isProfileImageActivityBadge,
   profileAvatarObjectClass,
+  activityBadgeAvatarUrl,
+  profileImageToBadgeId,
+  rememberLastProfilePhoto,
 } from '@/utils/profileStorage';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import {
@@ -21,6 +24,7 @@ import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderS
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
 import { KYCBadge } from '@/components/common/KYCBadge';
+import { CollectedBadgesRow } from '@/components/profile/CollectedBadgesRow';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
@@ -36,7 +40,9 @@ export const ProfileEdit: React.FC = () => {
   const navigate = useNavigate();
   const stored = getProfile();
   const [profileImage, setProfileImage] = useState(stored.profileImage ?? DEFAULT_AVATAR_PATH);
-  const [uploadedNewPhoto, setUploadedNewPhoto] = useState(false);
+  const [lastPhoto, setLastPhoto] = useState(
+    () => rememberLastProfilePhoto(stored.profileImage) ?? stored.lastProfilePhoto,
+  );
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [nickname, setNickname] = useState(stored.nickname ?? 'My nickname');
   const [bio, setBio] = useState(stored.bio ?? 'I value safe, quick trades.');
@@ -76,7 +82,7 @@ export const ProfileEdit: React.FC = () => {
     try {
       const url = await uploadImageToR2(file, { folder: 'profiles' });
       setProfileImage(url);
-      setUploadedNewPhoto(true);
+      setLastPhoto(url);
       setHasChanges(true);
     } catch {
       alert(t('couldNotUpload'));
@@ -100,7 +106,7 @@ export const ProfileEdit: React.FC = () => {
         nickname,
         bio,
         activityRegion,
-        ...(uploadedNewPhoto ? { displayActivityBadgeId: undefined } : {}),
+        lastProfilePhoto: rememberLastProfilePhoto(img) ?? lastPhoto,
       };
       const ok = await saveProfile(profileData);
       if (!ok) {
@@ -147,11 +153,7 @@ export const ProfileEdit: React.FC = () => {
         {/* Profile Image */}
         <div className="flex flex-col items-center">
           <div className="relative">
-            <AvatarWithBadgeOverlay
-              userId={getCurrentUserId()}
-              sizePx={96}
-              useFeaturedBadge={!uploadedNewPhoto}
-            >
+            <AvatarWithBadgeOverlay userId={getCurrentUserId()} sizePx={96}>
               <div
                 className={`w-full h-full flex items-center justify-center ${
                   isProfileImageActivityBadge(profileImage) ? 'bg-white' : 'bg-gray-200'
@@ -207,6 +209,20 @@ export const ProfileEdit: React.FC = () => {
 
         {/* Editable Fields */}
         <div className="space-y-5">
+          <CollectedBadgesRow
+            selectedId={profileImageToBadgeId(profileImage)}
+            onSelect={(id) => {
+              if (profileImageToBadgeId(profileImage) === id) {
+                setProfileImage(lastPhoto || DEFAULT_AVATAR_PATH);
+              } else {
+                const currentPhoto = rememberLastProfilePhoto(profileImage);
+                if (currentPhoto) setLastPhoto(currentPhoto);
+                setProfileImage(activityBadgeAvatarUrl(id));
+              }
+              setHasChanges(true);
+            }}
+          />
+
           <div>
             <label className="block text-sm font-semibold text-gray-800 mb-2">
               {t('nicknameLabel')}
