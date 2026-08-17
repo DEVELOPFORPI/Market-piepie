@@ -11,6 +11,7 @@ import { piBadgePurchasePayment } from '@/utils/piAuth';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { activityBadgeLabelKey } from '@/i18n/badgeNameMessages';
+import { showToast } from '@/utils/toast';
 
 const TEAL = '#00A8A3';
 
@@ -74,10 +75,10 @@ export const ActivityBadgesPanel: React.FC = () => {
         setUnlocked(getUnlockedBadgeIds());
         setPurchaseModal(null);
       } else {
-        alert(t('paymentCancelled'));
+        showToast(t('paymentCancelled'));
       }
     } catch {
-      alert(t('paymentFailed'));
+      showToast(t('paymentFailed'));
     } finally {
       setPurchasing(false);
     }

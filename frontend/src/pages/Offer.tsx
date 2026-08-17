@@ -8,6 +8,7 @@ import { createOrder } from '@/utils/orderStorage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { showToast } from '@/utils/toast';
 
 export const Offer: React.FC = () => {
   useGuestPageGuard('offer');
@@ -22,13 +23,13 @@ export const Offer: React.FC = () => {
     const found = allProducts.find((p) => p.id === productId);
     if (found) {
       if (found.status === PRODUCT_STATUS_VALUE.SOLD) {
-        alert(t('cannotOfferSold'));
+        showToast(t('cannotOfferSold'));
         navigate(-1);
         return;
       }
       void isListingHeldByOtherBuyerDispute(found.id).then((held) => {
         if (held) {
-          alert(t('bannerListingOtherDispute'));
+          showToast(t('bannerListingOtherDispute'));
           navigate(-1);
         }
       });
@@ -46,11 +47,11 @@ export const Offer: React.FC = () => {
       tradeMethod: TRADE_METHOD_VALUE.IN_PERSON,
     });
     if (!order) {
-      alert(t('couldNotSendOffer'));
+      showToast(t('couldNotSendOffer'));
       return;
     }
 
-    alert(t('offerSent'));
+    showToast(t('offerSent'));
     navigate(`/order/${order.id}`, { replace: true });
   };
 

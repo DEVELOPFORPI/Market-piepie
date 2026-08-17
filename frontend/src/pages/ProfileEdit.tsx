@@ -27,6 +27,7 @@ import { KYCBadge } from '@/components/common/KYCBadge';
 import { CollectedBadgesRow } from '@/components/profile/CollectedBadgesRow';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { showToast } from '@/utils/toast';
 
 export const ProfileEdit: React.FC = () => {
   useGuestPageGuard('profile');
@@ -85,7 +86,7 @@ export const ProfileEdit: React.FC = () => {
       setLastPhoto(url);
       setHasChanges(true);
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
@@ -98,7 +99,7 @@ export const ProfileEdit: React.FC = () => {
       try {
         img = await uploadImageReferenceToR2(profileImage, { folder: 'profiles' });
       } catch {
-        alert(t('couldNotUpload'));
+        showToast(t('couldNotUpload'));
         return;
       }
       const profileData = {
@@ -110,7 +111,7 @@ export const ProfileEdit: React.FC = () => {
       };
       const ok = await saveProfile(profileData);
       if (!ok) {
-        alert(t('couldNotSaveProfile'));
+        showToast(t('couldNotSaveProfile'));
         return;
       }
       navigate('/my');

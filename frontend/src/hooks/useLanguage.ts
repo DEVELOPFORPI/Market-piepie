@@ -60,6 +60,7 @@ const REGION_KEYS = new Set<string>([
   'regionHint',
   'saveRegionFailed',
   'detectLocationFailed',
+  'locationPermissionDenied',
   'locationConsentTitle',
   'locationConsentBody',
   'locationConsentNote',

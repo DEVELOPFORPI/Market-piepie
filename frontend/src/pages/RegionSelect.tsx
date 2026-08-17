@@ -4,6 +4,7 @@ import { TopBar } from '@/components/common/TopBar';
 import { ModalShell } from '@/components/common/ModalShell';
 import { hasLocationConsent, saveRegion, setLocationConsent } from '@/utils/regionStorage';
 import { detectLocation } from '@/utils/geoLocation';
+import { showToast } from '@/utils/toast';
 import { useLanguage } from '@/hooks/useLanguage';
 
 export const RegionSelect: React.FC = () => {
@@ -22,7 +23,7 @@ export const RegionSelect: React.FC = () => {
     const ok = await saveRegion(value, null);
     setSaving(false);
     if (!ok) {
-      alert(t('saveRegionFailed'));
+      showToast(t('saveRegionFailed'));
       return;
     }
     setTimeout(() => navigate(-1), 100);
@@ -32,17 +33,21 @@ export const RegionSelect: React.FC = () => {
     setAutoDetectError(null);
     setAutoDetectLoading(true);
     try {
-      const location = await detectLocation(lang);
-      if (location?.region) {
-        const ok = await saveRegion(location.region, location.coords ?? null);
+      const result = await detectLocation(lang);
+      if (result.ok) {
+        const ok = await saveRegion(result.location.region, result.location.coords ?? null);
         if (!ok) {
           setAutoDetectError(t('saveRegionFailed'));
           return;
         }
         navigate(-1);
-      } else {
-        setAutoDetectError(t('detectLocationFailed'));
+        return;
       }
+      if (result.reason === 'permission') {
+        showToast(t('locationPermissionDenied'));
+        return;
+      }
+      setAutoDetectError(t('detectLocationFailed'));
     } catch {
       setAutoDetectError(t('detectLocationFailed'));
     } finally {

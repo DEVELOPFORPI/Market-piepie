@@ -16,6 +16,7 @@ interface Props {
 
 const TEAL = '#00A8A3';
 const PENDING_REPORT_TOAST = '이미 신고한 항목입니다. 처리 중입니다.';
+const REPORT_SUBMIT_FAILED_TOAST = '신고를 보내지 못했습니다.';
 
 const REASONS: Record<ReportTargetType, string[]> = {
   product: [
@@ -149,7 +150,7 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
         notifyPendingReport();
         return;
       }
-      alert(res.error || `Failed to submit (HTTP ${res.status})`);
+      showToast(res.error || REPORT_SUBMIT_FAILED_TOAST);
       return;
     }
     setDone(true);

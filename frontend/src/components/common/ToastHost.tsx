@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TOAST_EVENT, type ToastDetail } from '@/utils/toast';
+import { TOAST_BG, TOAST_EVENT, type ToastDetail } from '@/utils/toast';
 
 export const ToastHost: React.FC = () => {
   const [toast, setToast] = useState<ToastDetail | null>(null);
@@ -26,7 +26,7 @@ export const ToastHost: React.FC = () => {
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[10001] flex justify-center px-4">
       <div
         className="max-w-sm rounded-xl px-4 py-3 text-center text-sm font-semibold text-white shadow-2xl"
-        style={{ backgroundColor: '#00A8A3' }}
+        style={{ backgroundColor: TOAST_BG }}
       >
         {toast.message}
       </div>

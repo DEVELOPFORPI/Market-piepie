@@ -42,6 +42,7 @@ import {
 } from '@/locale/enUI';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 import { useLanguage } from '@/hooks/useLanguage';
+import { showToast } from '@/utils/toast';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 
@@ -349,7 +350,7 @@ export const ChatRoom: React.FC = () => {
     if (!roomId || !isProductDeleted) return;
     if (deletedProductPopupShownRef.current) return;
     deletedProductPopupShownRef.current = true;
-    alert(t('listingRemovedAlert'));
+    showToast(t('listingRemovedAlert'));
     navigate('/chat', { replace: true });
   }, [isProductDeleted, roomId, navigate]);
 
@@ -735,13 +736,13 @@ export const ChatRoom: React.FC = () => {
 
   const handleSellerStartMeetup = () => {
     if (!room?.product) {
-      alert(t('couldNotLoadListing'));
+      showToast(t('couldNotLoadListing'));
       return;
     }
     const product = room.product;
     const buyer = getOtherUser(room);
     if (!buyer?.id) {
-      alert(t('couldNotLoadPartner'));
+      showToast(t('couldNotLoadPartner'));
       return;
     }
     void (async () => {
@@ -752,17 +753,17 @@ export const ChatRoom: React.FC = () => {
         }
         const order = await createOrderBySeller({ product, buyer });
         if (!order) {
-          alert(t('couldNotStartMeetup'));
+          showToast(t('couldNotStartMeetup'));
           return;
         }
         await ensureChatRoomForOrder(order, getCurrentUserId() ?? undefined);
         navigate(`/meetup/${order.id}`);
       } catch (e) {
         if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-          alert(ORDER_QUOTA_EXCEEDED_MESSAGE);
+          showToast(ORDER_QUOTA_EXCEEDED_MESSAGE);
         } else {
           console.error(e);
-          alert(t('couldNotStartMeetupScheduling'));
+          showToast(t('couldNotStartMeetupScheduling'));
         }
       }
     })();
@@ -1053,7 +1054,7 @@ export const ChatRoom: React.FC = () => {
       const urls = await uploadImagesToR2(fileArray, { folder: 'chat' });
       setPreviewImages((prev) => [...prev, ...urls]);
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingImages(false);
       e.target.value = '';
@@ -1100,7 +1101,7 @@ export const ChatRoom: React.FC = () => {
         setInput('');
         scrollAfterSend();
       } else {
-        alert(t('couldNotSendPhotos'));
+        showToast(t('couldNotSendPhotos'));
       }
       return;
     }
@@ -1118,7 +1119,7 @@ export const ChatRoom: React.FC = () => {
       setInput('');
       scrollAfterSend();
     } else {
-      alert(t('messageSendFailed'));
+      showToast(t('messageSendFailed'));
     }
   };
 
@@ -1644,7 +1645,7 @@ export const ChatRoom: React.FC = () => {
                           void addPriceOfferResultToChat(order, 'rejected').then(async () => {
                             const ok = await deleteOrder(order.id);
                             if (!ok) {
-                              alert(t('couldNotDeclineOffer'));
+                              showToast(t('couldNotDeclineOffer'));
                               return;
                             }
                             setMessages(getMessages(roomId!));

@@ -380,46 +380,69 @@ export async function detectLocationByIp(
   return null;
 }
 
-function readDevicePosition(options: PositionOptions): Promise<GeolocationPosition | null> {
-  if (!navigator?.geolocation) return Promise.resolve(null);
+type PositionRead =
+  | { ok: true; position: GeolocationPosition }
+  | { ok: false; code: number };
+
+const GEO_PERMISSION_DENIED = 1;
+
+function readDevicePosition(options: PositionOptions): Promise<PositionRead> {
+  if (!navigator?.geolocation) {
+    return Promise.resolve({ ok: false, code: GEO_PERMISSION_DENIED });
+  }
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => resolve(position),
-      () => resolve(null),
+      (position) => resolve({ ok: true, position }),
+      (error) => resolve({ ok: false, code: error.code }),
       options,
     );
   });
 }
 
-/** GPS via browser API; needs permission. Never uses IP. */
-export async function detectLocationByGPS(
-  lang: AppLanguage = getAppLanguage(),
-): Promise<DetectedLocation | null> {
-  const position =
-    (await readDevicePosition({
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    })) ??
-    (await readDevicePosition({
-      enableHighAccuracy: false,
-      timeout: 10000,
-      maximumAge: 0,
-    }));
-  if (!position) return null;
+export type DetectLocationResult =
+  | { ok: true; location: DetectedLocation }
+  | { ok: false; reason: 'permission' | 'unavailable' };
 
+async function locationFromPosition(
+  position: GeolocationPosition,
+  lang: AppLanguage,
+): Promise<DetectLocationResult> {
   const coords = {
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
   };
   const region = await reverseGeocode(coords.latitude, coords.longitude, lang);
-  return region ? { region, coords } : null;
+  return region
+    ? { ok: true, location: { region, coords } }
+    : { ok: false, reason: 'unavailable' };
+}
+
+/** GPS via browser API; needs permission. Never uses IP. */
+export async function detectLocationByGPS(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<DetectLocationResult> {
+  const first = await readDevicePosition({
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 0,
+  });
+  if (first.ok) return locationFromPosition(first.position, lang);
+  if (first.code === GEO_PERMISSION_DENIED) return { ok: false, reason: 'permission' };
+
+  const second = await readDevicePosition({
+    enableHighAccuracy: false,
+    timeout: 10000,
+    maximumAge: 0,
+  });
+  if (second.ok) return locationFromPosition(second.position, lang);
+  if (second.code === GEO_PERMISSION_DENIED) return { ok: false, reason: 'permission' };
+  return { ok: false, reason: 'unavailable' };
 }
 
 /** Device GPS only — IP fallback would map many Korean networks to Seoul. */
 export async function detectLocation(
   lang: AppLanguage = getAppLanguage(),
-): Promise<DetectedLocation | null> {
+): Promise<DetectLocationResult> {
   return detectLocationByGPS(lang);
 }
 

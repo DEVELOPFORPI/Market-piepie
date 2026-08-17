@@ -11,6 +11,7 @@ import { NOTIFY_REVIEW_WRITTEN, labelTradeMethod } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { showToast } from '@/utils/toast';
 
 const reviewTags = ['Quick response', 'On time', 'Kind', 'As described', 'Recommend'];
 
@@ -40,7 +41,7 @@ export const ReviewWrite: React.FC = () => {
 
       const existing = await ensureMyReviewForOrder(orderId);
       if (existing) {
-        alert(t('alreadyReviewed'));
+        showToast(t('alreadyReviewed'));
         navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
         return;
       }
@@ -97,7 +98,7 @@ export const ReviewWrite: React.FC = () => {
       };
     } catch (e) {
       console.log('[REVIEW] build review FAILED', e);
-      alert(`${t('couldNotSaveReview')} ${String(e)}`);
+      showToast(`${t('couldNotSaveReview')} ${String(e)}`);
       return;
     }
 
@@ -106,7 +107,7 @@ export const ReviewWrite: React.FC = () => {
       console.log('[REVIEW] sync + received map', { revieweeId: reviewee?.id });
       const synced = await addReceivedReviewForUser(reviewee.id, review);
       if (!synced) {
-        alert(t('reviewSubmitFailed'));
+        showToast(t('reviewSubmitFailed'));
         return;
       }
       try {
@@ -129,11 +130,11 @@ export const ReviewWrite: React.FC = () => {
     } catch (e) {
       console.log('[REVIEW] saveReview FAILED', e);
       const message = e instanceof Error ? e.message : t('couldNotSaveReview');
-      alert(message);
+      showToast(message);
       return;
     }
 
-    alert(t('reviewSubmitted'));
+    showToast(t('reviewSubmitted'));
     navigate('/my/reviews', { replace: true, state: { showWrittenTab: true } });
   };
 

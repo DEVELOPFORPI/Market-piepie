@@ -18,6 +18,7 @@ import { getDisputeByOrderId, getDisputeByPostId, ensureDisputeByOrderId, fetchD
 import { api } from '@/utils/api';
 import { cacheUserProfileFromRow } from '@/utils/profileStorage';
 import { ensureOrderById, getOrderById } from '@/utils/orderStorage';
+import { showToast } from '@/utils/toast';
 import { getProductById } from '@/utils/productStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { guestGuard } from '@/utils/guestGate';
@@ -440,7 +441,7 @@ export const PostDetail: React.FC = () => {
   const handleDeletePost = () => {
     if (!post) return;
     if (post.category === POST_CATEGORY_VALUE.DISPUTE && post.orderId) {
-      alert(t('cannotDeleteDispute'));
+      showToast(t('cannotDeleteDispute'));
       return;
     }
     if (confirm(t('deletePostConfirm', { title: post.title }))) {

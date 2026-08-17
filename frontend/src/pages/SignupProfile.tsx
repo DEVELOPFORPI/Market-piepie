@@ -9,6 +9,7 @@ import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { suggestPiePieNickname } from '@/utils/nickname';
 import { saveMyProfileToDB } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
+import { showToast } from '@/utils/toast';
 
 const TEAL = '#00A8A3';
 
@@ -86,7 +87,7 @@ export const SignupProfile: React.FC = () => {
     try {
       setProfileImage(await uploadImageToR2(file, { folder: 'profiles' }));
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
@@ -96,11 +97,11 @@ export const SignupProfile: React.FC = () => {
   const handleSubmit = async () => {
     const n = nickname.trim();
     if (n.length < 2) {
-      alert(t('nicknameMin2'));
+      showToast(t('nicknameMin2'));
       return;
     }
     if (n.length > 20) {
-      alert(t('nicknameMax20'));
+      showToast(t('nicknameMax20'));
       return;
     }
     const region = activityRegion.trim() || getRegion() || '';
@@ -109,7 +110,7 @@ export const SignupProfile: React.FC = () => {
       try {
         uploadedProfileImage = await uploadImageReferenceToR2(uploadedProfileImage, { folder: 'profiles' });
       } catch {
-        alert(t('couldNotUpload'));
+        showToast(t('couldNotUpload'));
         return;
       }
     }
@@ -128,7 +129,7 @@ export const SignupProfile: React.FC = () => {
       const ok = await saveMyProfileToDB(uid, profileData);
       setSavingProfile(false);
       if (!ok) {
-        alert(t('couldNotSaveProfile'));
+        showToast(t('couldNotSaveProfile'));
         return;
       }
     }

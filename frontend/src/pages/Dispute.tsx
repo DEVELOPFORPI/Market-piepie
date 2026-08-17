@@ -31,6 +31,7 @@ import { disputeOpenedTimelineText } from '@/utils/orderTimelineDisplay';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { scrollAppToTop } from '@/utils/appScroll';
+import { showToast } from '@/utils/toast';
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -201,7 +202,7 @@ export const Dispute: React.FC = () => {
     if (order) {
       const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
       if (isShare) {
-        alert(t('freeShareNoDispute'));
+        showToast(t('freeShareNoDispute'));
         navigate(orderId ? `/order/${orderId}` : '/my/orders', { replace: true });
       }
     }
@@ -215,7 +216,7 @@ export const Dispute: React.FC = () => {
       const urls = await uploadImagesToR2(files, { folder: 'disputes' });
       setEvidence((prev) => [...prev, ...urls]);
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingEvidence(false);
       e.target.value = '';
@@ -231,7 +232,7 @@ export const Dispute: React.FC = () => {
         ? await uploadImageReferencesToR2(evidence, { folder: 'disputes' })
         : [];
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
       return;
     }
     const currentUserId = getCurrentUserId();
@@ -254,7 +255,7 @@ export const Dispute: React.FC = () => {
       evidence: evidenceToSave,
     });
     if (!newDispute) {
-      alert(t('couldNotFileDispute'));
+      showToast(t('couldNotFileDispute'));
       return;
     }
 
@@ -293,7 +294,7 @@ export const Dispute: React.FC = () => {
       orderId,
     });
     if (!postSaved) {
-      alert(t('disputeFiledButPostFailed'));
+      showToast(t('disputeFiledButPostFailed'));
     } else {
       addNotification({
         targetUserId: otherUser.id,
@@ -311,13 +312,13 @@ export const Dispute: React.FC = () => {
     if (!dispute) return;
     const uid = getCurrentUserId();
     if (!dispute.openedByUserId || dispute.openedByUserId !== uid) {
-      alert(t('onlyOpenerCanResolve'));
+      showToast(t('onlyOpenerCanResolve'));
       return;
     }
     if (!confirm(t('markResolvedConfirm'))) return;
     const ok = await updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
     if (!ok) {
-      alert(t('couldNotUpdateDisputeStatus'));
+      showToast(t('couldNotUpdateDisputeStatus'));
       return;
     }
     setDispute({

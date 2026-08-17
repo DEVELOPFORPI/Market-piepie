@@ -7,6 +7,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/types';
 import { useLanguage } from '@/hooks/useLanguage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
+import { showToast } from '@/utils/toast';
 
 export const ReceiveConfirm: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ export const ReceiveConfirm: React.FC = () => {
         return;
       }
       if (o.status === ORDER_STATUS_VALUE.DISPUTE) {
-        alert(t('cannotConfirmDuringDispute'));
+        showToast(t('cannotConfirmDuringDispute'));
         navigate(`/dispute/${orderId}`, { replace: true });
         return;
       }
@@ -50,7 +51,7 @@ export const ReceiveConfirm: React.FC = () => {
         excludeSellerId: o.seller.id,
       });
       if (held) {
-        alert(t('bannerListingOtherDispute'));
+        showToast(t('bannerListingOtherDispute'));
         navigate(-1);
         return;
       }
@@ -71,11 +72,11 @@ export const ReceiveConfirm: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!isBuyer) {
-      alert(t('onlyBuyerCanConfirm'));
+      showToast(t('onlyBuyerCanConfirm'));
       return;
     }
     if (!confirmed) {
-      alert(t('confirmYouReceived'));
+      showToast(t('confirmYouReceived'));
       return;
     }
     if (price !== 0 && !condition) {
@@ -84,7 +85,7 @@ export const ReceiveConfirm: React.FC = () => {
     if (!orderId) return;
     const o = getOrderById(orderId);
     if (o?.status === ORDER_STATUS_VALUE.DISPUTE) {
-      alert(t('cannotConfirmDuringDispute'));
+      showToast(t('cannotConfirmDuringDispute'));
       return;
     }
 
@@ -106,15 +107,15 @@ export const ReceiveConfirm: React.FC = () => {
     if (isShare) {
       const completed = await completeShareOrderOnReceive(orderId);
       if (completed) void addTradeCompletedToChat(completed);
-      alert(t('receiptConfirmedLeaveReview'));
+      showToast(t('receiptConfirmedLeaveReview'));
       navigate(`/review/${orderId}`, { replace: true });
     } else {
       if (completedOrder?.status === ORDER_STATUS_VALUE.COMPLETE) {
         void addTradeCompletedToChat(completedOrder);
-        alert(t('receiptConfirmedLeaveReview'));
+        showToast(t('receiptConfirmedLeaveReview'));
         navigate(`/review/${orderId}`, { replace: true });
       } else {
-        alert(t('receiptConfirmedWaitSeller'));
+        showToast(t('receiptConfirmedWaitSeller'));
         navigate(`/order/${orderId}`, { replace: true });
       }
     }

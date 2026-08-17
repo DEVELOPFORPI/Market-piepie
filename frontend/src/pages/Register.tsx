@@ -10,6 +10,7 @@ import { getMyUser } from '@/utils/profileStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { useLanguage } from '@/hooks/useLanguage';
+import { showToast } from '@/utils/toast';
 
 const MAX_IMAGES = 5;
 const REGISTER_DRAFT_KEY_PREFIX = 'pipi_register_draft_v1_';
@@ -68,12 +69,12 @@ export const Register: React.FC = () => {
       const found = products.find((p) => p.id === editId);
       if (found) {
         if (found.status === PRODUCT_STATUS_VALUE.SOLD) {
-          alert(t('soldCannotEdit'));
+          showToast(t('soldCannotEdit'));
           navigate(`/product/${editId}`, { replace: true });
           return;
         }
         if (hasProductActiveDispute(found.id)) {
-          alert(t('cannotEditDispute'));
+          showToast(t('cannotEditDispute'));
           navigate(`/product/${editId}`, { replace: true });
           return;
         }
@@ -149,7 +150,7 @@ export const Register: React.FC = () => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     if (images.length + files.length > MAX_IMAGES) {
-      alert(t('upToPhotos', { n: MAX_IMAGES }));
+      showToast(t('upToPhotos', { n: MAX_IMAGES }));
       return;
     }
     setUploadingImages(true);
@@ -157,7 +158,7 @@ export const Register: React.FC = () => {
       const urls = await uploadImagesToR2(files, { folder: 'products' });
       setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingImages(false);
       e.target.value = '';
@@ -170,7 +171,7 @@ export const Register: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!title || (!isFreeShare && !price) || !region || images.length === 0) {
-      alert(t('fillRequired'));
+      showToast(t('fillRequired'));
       return;
     }
 
@@ -178,11 +179,11 @@ export const Register: React.FC = () => {
     try {
       imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
       return;
     }
     if (imagesToSave.length === 0) {
-      alert(t('addOnePhoto'));
+      showToast(t('addOnePhoto'));
       return;
     }
 
@@ -207,12 +208,12 @@ export const Register: React.FC = () => {
     try {
       const saved = await saveProduct(product);
       if (!saved) {
-        alert(t('couldNotSaveListing'));
+        showToast(t('couldNotSaveListing'));
         return;
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : t('couldNotSaveListing');
-      alert(message);
+      showToast(message);
       return;
     }
     try {
@@ -224,7 +225,7 @@ export const Register: React.FC = () => {
     window.dispatchEvent(new Event('productRegistered'));
 
     if (isEdit) {
-      alert(t('listingUpdated'));
+      showToast(t('listingUpdated'));
       navigate(-1);
     } else {
       navigate('/register/complete', { state: { productId: product.id, ...product }, replace: true });

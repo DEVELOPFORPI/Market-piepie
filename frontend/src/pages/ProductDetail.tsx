@@ -21,6 +21,7 @@ import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
+import { showToast } from '@/utils/toast';
 
 const fallbackProduct: Product = {
   id: '0',
@@ -211,7 +212,7 @@ export const ProductDetail: React.FC = () => {
       };
       const ok = await saveProduct(updated);
       if (!ok) {
-        alert(t('couldNotUpdateListing'));
+        showToast(t('couldNotUpdateListing'));
         return;
       }
       setProduct(updated);
@@ -222,7 +223,7 @@ export const ProductDetail: React.FC = () => {
       if (!isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) return;
       if (isFreeShareListing(product)) {
         if (!product.price || product.price <= 0) {
-          alert(t('setPriceBeforeForSale'));
+          showToast(t('setPriceBeforeForSale'));
           navigate(`/register/edit/${product.id}`);
           return;
         }
@@ -234,7 +235,7 @@ export const ProductDetail: React.FC = () => {
         };
         const ok = await saveProduct(updated);
         if (!ok) {
-          alert(t('couldNotUpdateListing'));
+          showToast(t('couldNotUpdateListing'));
           return;
         }
         setProduct(updated);
@@ -242,7 +243,7 @@ export const ProductDetail: React.FC = () => {
       }
       const ok = await updateProductStatus(product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
       if (!ok) {
-        alert(t('couldNotUpdateStatus'));
+        showToast(t('couldNotUpdateStatus'));
         return;
       }
       setProduct((prev) => ({ ...prev, status: PRODUCT_STATUS_VALUE.FOR_SALE }));
@@ -252,7 +253,7 @@ export const ProductDetail: React.FC = () => {
     const status = key as ProductStatus;
     const ok = await updateProductStatus(product.id, status);
     if (!ok) {
-      alert(t('couldNotUpdateStatus'));
+      showToast(t('couldNotUpdateStatus'));
       return;
     }
     setProduct((prev) => ({ ...prev, status }));

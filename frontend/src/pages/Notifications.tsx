@@ -12,6 +12,7 @@ import { ORDER_STATUS_VALUE } from '@/types';
 import { ensureOrderById } from '@/utils/orderStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
+import { showToast } from '@/utils/toast';
 import { getChatRoomByOrder } from '@/utils/chatStorage';
 import { syncNotificationsFromDB, syncChatRoomsFromDB } from '@/utils/dbSync';
 import {
@@ -149,7 +150,7 @@ export const Notifications: React.FC = () => {
     if (title === NOTIFY_TRADE_COMPLETE_CHECK && order?.status === ORDER_STATUS_VALUE.COMPLETE) {
       const existingReview = orderId ? getReviewByOrderId(orderId) : undefined;
       if (existingReview) {
-        alert(notifyT(lang, 'alertTradeDoneReviewed'));
+        showToast(notifyT(lang, 'alertTradeDoneReviewed'));
         navigate(destinationLink);
         return;
       }
@@ -162,7 +163,7 @@ export const Notifications: React.FC = () => {
       const userId = getCurrentUserId();
       const isBuyer = userId && order.buyer?.id === userId;
       if (isBuyer) {
-        alert(notifyT(lang, 'alertReceiptConfirmed'));
+        showToast(notifyT(lang, 'alertReceiptConfirmed'));
       }
       navigate(destinationLink);
       return;

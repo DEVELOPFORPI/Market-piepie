@@ -7,6 +7,7 @@ import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { showToast } from '@/utils/toast';
 
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
@@ -46,7 +47,7 @@ export const InquiryWrite: React.FC = () => {
       const urls = await uploadImagesToR2(picks, { folder: 'inquiries' });
       setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert(t('uploadImageFailed'));
+      showToast(t('uploadImageFailed'));
     } finally {
       setUploadingImages(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -70,7 +71,7 @@ export const InquiryWrite: React.FC = () => {
     });
     setSending(false);
     if (!res.ok) {
-      alert(res.error || t('submitInquiryFailed'));
+      showToast(res.error || t('submitInquiryFailed'));
       return;
     }
     setDone(true);

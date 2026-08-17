@@ -15,6 +15,7 @@ import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { BottomSheet } from '@/components/common/BottomSheet';
+import { showToast } from '@/utils/toast';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -62,7 +63,7 @@ export const PostWrite: React.FC = () => {
       if (cancelled) return;
       if (existing) {
         if (existing.category === POST_CATEGORY_VALUE.DISPUTE && existing.orderId) {
-          alert(t('cannotEditDispute'));
+          showToast(t('cannotEditDispute'));
           navigate('/community', { replace: true });
           return;
         }
@@ -72,7 +73,7 @@ export const PostWrite: React.FC = () => {
         setImages(existing.images || []);
         setAttachedProduct(existing.attachedProduct || null);
       } else {
-        alert(t('postNotFound'));
+        showToast(t('postNotFound'));
         navigate('/community', { replace: true });
       }
     })();
@@ -83,7 +84,7 @@ export const PostWrite: React.FC = () => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     if (images.length + files.length > 5) {
-      alert(t('upTo5ImagesAlert'));
+      showToast(t('upTo5ImagesAlert'));
       return;
     }
     setUploadingImages(true);
@@ -91,7 +92,7 @@ export const PostWrite: React.FC = () => {
       const urls = await uploadImagesToR2(files, { folder: 'posts' });
       setImages((prev) => [...prev, ...urls]);
     } catch {
-      alert(t('couldNotUpload'));
+      showToast(t('couldNotUpload'));
     } finally {
       setUploadingImages(false);
       e.target.value = '';
@@ -100,7 +101,7 @@ export const PostWrite: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) {
-      alert(t('enterTitleBody'));
+      showToast(t('enterTitleBody'));
       return;
     }
 
@@ -139,31 +140,31 @@ export const PostWrite: React.FC = () => {
       if (isEdit) {
         if (existingForEdit?.category === POST_CATEGORY_VALUE.DISPUTE && existingForEdit?.orderId) {
           updateDisputePost(post);
-          alert(t('postUpdated'));
+          showToast(t('postUpdated'));
         } else {
           const ok = await updateUserPost(post);
           if (!ok) {
-            alert(t('couldNotSave'));
+            showToast(t('couldNotSave'));
             return;
           }
           await syncPostsFromDB();
-          alert(t('postUpdated'));
+          showToast(t('postUpdated'));
         }
       } else {
         const ok = await addUserPost(post);
         if (!ok) {
-          alert(t('couldNotSave'));
+          showToast(t('couldNotSave'));
           return;
         }
         await syncPostsFromDB();
-        alert(t('postPublished'));
+        showToast(t('postPublished'));
       }
       navigate('/community', { replace: true });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        alert(COMMUNITY_QUOTA_EXCEEDED_MESSAGE);
+        showToast(COMMUNITY_QUOTA_EXCEEDED_MESSAGE);
       } else {
-        alert(t('couldNotSave'));
+        showToast(t('couldNotSave'));
       }
     } finally {
       setIsSubmitting(false);

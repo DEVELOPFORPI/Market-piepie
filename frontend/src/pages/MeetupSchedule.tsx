@@ -8,6 +8,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { NOTIFY_MEETUP_CANCELED, NOTIFY_MEETUP_CONFIRMED, NOTIFY_MEETUP_UPDATED } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
+import { showToast } from '@/utils/toast';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** 24h H:MM or HH:MM (built from English AM/PM selects) */
@@ -89,7 +90,7 @@ export const MeetupSchedule: React.FC = () => {
       });
       if (cancelled) return;
       if (held) {
-        alert(t('bannerListingOtherDispute'));
+        showToast(t('bannerListingOtherDispute'));
         navigate(-1);
         setLoading(false);
         return;
@@ -123,21 +124,21 @@ export const MeetupSchedule: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!place || !date || !time || !orderId) {
-      alert(t('fillAllFields'));
+      showToast(t('fillAllFields'));
       return;
     }
 
     if (!DATE_PATTERN.test(date.trim())) {
-      alert(t('dateFormatHint'));
+      showToast(t('dateFormatHint'));
       return;
     }
     if (!TIME_PATTERN.test(time.trim())) {
-      alert(t('timeFormatHint'));
+      showToast(t('timeFormatHint'));
       return;
     }
 
     if (date.trim() < minDateStr) {
-      alert(t('dateNotPast'));
+      showToast(t('dateNotPast'));
       return;
     }
 
@@ -172,7 +173,7 @@ export const MeetupSchedule: React.FC = () => {
           : `Meetup for "${updatedOrder.product.title}" is set: ${place}, ${date.trim()} ${normalizedTime}`,
         link: `/order/${orderId}`,
       });
-      alert(wasEdit ? t('meetupUpdatedAlert') : t('meetupConfirmedAlert'));
+      showToast(wasEdit ? t('meetupUpdatedAlert') : t('meetupConfirmedAlert'));
     }
     navigate(-1);
   };
@@ -194,7 +195,7 @@ export const MeetupSchedule: React.FC = () => {
         content: `The meetup for "${orderBefore.product.title}" was canceled.`,
         link: `/chat`,
       });
-      alert(t('meetupCanceledAlert'));
+      showToast(t('meetupCanceledAlert'));
       navigate(-1);
     }
   };
