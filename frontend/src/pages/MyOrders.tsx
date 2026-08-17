@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { OrderStatusChip } from '@/components/common/OrderStatusChip';
-import { Order, OrderStatus, ORDER_STATUS_VALUE } from '@/types';
+import { Order, ORDER_STATUS_VALUE } from '@/types';
 import { getOrders } from '@/utils/orderStorage';
 import { syncOrdersFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
-import { labelOrderStatus, labelTradeMethod } from '@/locale/enUI';
+import { labelDisplayOrderStatus, labelTradeMethod } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { DISPLAY_IN_PROGRESS, getDisplayOrderStatus, type DisplayOrderStatus } from '@/utils/orderStatusDisplay';
 
 type OrderType = 'all' | 'buying' | 'selling';
-type FilterStatus = 'all' | OrderStatus;
+type FilterStatus = 'all' | DisplayOrderStatus;
 
 export const MyOrders: React.FC = () => {
   useGuestPageGuard('order');
@@ -51,7 +52,7 @@ export const MyOrders: React.FC = () => {
       orderType === 'all' ||
       (orderType === 'buying' && order.buyer.id === userId) ||
       (orderType === 'selling' && order.seller.id === userId);
-    const statusMatch = filterStatus === 'all' || order.status === filterStatus;
+    const statusMatch = filterStatus === 'all' || getDisplayOrderStatus(order) === filterStatus;
     return typeMatch && statusMatch;
   });
 
@@ -103,11 +104,12 @@ export const MyOrders: React.FC = () => {
           [
             ORDER_STATUS_VALUE.PENDING_OFFER,
             ORDER_STATUS_VALUE.ACCEPTED,
+            DISPLAY_IN_PROGRESS,
             ORDER_STATUS_VALUE.MEETUP_SET,
             ORDER_STATUS_VALUE.RECEIVED,
             ORDER_STATUS_VALUE.COMPLETE,
             ORDER_STATUS_VALUE.DISPUTE,
-          ] as OrderStatus[]
+          ] as DisplayOrderStatus[]
         ).map((status) => (
           <button
             key={status}
@@ -120,7 +122,7 @@ export const MyOrders: React.FC = () => {
             }`}
             style={filterStatus === status ? { backgroundColor: '#00A8A3' } : undefined}
           >
-            {labelOrderStatus(status)}
+            {labelDisplayOrderStatus(status)}
           </button>
         ))}
       </div>
@@ -180,7 +182,7 @@ export const MyOrders: React.FC = () => {
                         : `${Number(order.proposedPrice ?? 0).toLocaleString()} Pi`}
                     </p>
                     <div className="flex items-center gap-2">
-                      <OrderStatusChip status={order.status} />
+                      <OrderStatusChip status={getDisplayOrderStatus(order)} />
                       <span className="text-xs text-gray-500">
                         {order.tradeMethod ? labelTradeMethod(order.tradeMethod) : ''}
                       </span>

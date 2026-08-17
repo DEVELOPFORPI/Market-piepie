@@ -111,6 +111,9 @@ export const MyProducts: React.FC = () => {
                   <ListingCard
                     product={product}
                     layout="list"
+                    hideLikeCount
+                    hideLikeButton
+                    hideSeller
                   />
                 </div>
                 {product.adminHidden ? (

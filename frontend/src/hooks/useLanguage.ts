@@ -340,6 +340,7 @@ const ACCOUNT_KEYS = new Set<string>([
   'listingFallback',
   'orderStatusPendingOffer',
   'orderStatusAccepted',
+  'orderStatusInProgress',
   'orderStatusAwaitingShipping',
   'orderStatusMeetupSet',
   'orderStatusShipped',

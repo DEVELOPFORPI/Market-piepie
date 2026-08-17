@@ -11,6 +11,7 @@ import { resolveDisplayNickname } from '@/utils/profileStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { displayOrderTimelineDescription, timelineWithPartyDisputes } from '@/utils/orderTimelineDisplay';
+import { getDisplayOrderStatus } from '@/utils/orderStatusDisplay';
 import { fetchDisputeSummariesForOrder, getDisputesByOrderId, mergeDisputesById, type Dispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
@@ -115,7 +116,7 @@ export const OrderTimeline: React.FC = () => {
         <div className="p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">{t('statusHeading')}</span>
-            <OrderStatusChip status={order.status} />
+            <OrderStatusChip status={getDisplayOrderStatus(order)} />
           </div>
           <p className="text-lg font-bold text-gray-900 mt-2">
             {order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0

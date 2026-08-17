@@ -105,6 +105,11 @@ export function labelOrderStatus(s: OrderStatus): string {
   return map[s];
 }
 
+export function labelDisplayOrderStatus(s: OrderStatus | 'IN_PROGRESS'): string {
+  if (s === 'IN_PROGRESS') return accountT(getAppLanguage(), 'orderStatusInProgress');
+  return labelOrderStatus(s);
+}
+
 export function labelTradeMethod(method: TradeMethod): string {
   const lang = getAppLanguage();
   const map: Record<TradeMethod, string> = {

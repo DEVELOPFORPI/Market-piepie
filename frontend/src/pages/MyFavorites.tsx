@@ -155,6 +155,9 @@ export const MyFavorites: React.FC = () => {
                   <ListingCard
                     product={stillExists}
                     layout="list"
+                    hideLikeCount
+                    hideLikeButton
+                    hideSeller
                     onClick={() => navigate(`/product/${product.id}`)}
                   />
                   <button

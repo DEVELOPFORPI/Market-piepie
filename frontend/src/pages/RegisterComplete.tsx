@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { Product, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
-import { labelTradeMethod } from '@/locale/enUI';
+import { Product, PRODUCT_STATUS_VALUE } from '@/types';
 import { getMyUser } from '@/utils/profileStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { scrollAppToTop } from '@/utils/appScroll';
@@ -80,21 +79,13 @@ export const RegisterComplete: React.FC = () => {
                   {mockProduct.price.toLocaleString()} Pi
                 </p>
               )}
-              <div className="flex flex-wrap gap-1">
-                {mockProduct.tradeMethods.map((method) => (
-                  <span
-                    key={method}
-                    className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
-                  >
-                    {labelTradeMethod(method as TradeMethod)}
-                  </span>
-                ))}
-                {mockProduct.todayTradeAvailable && (
+              {mockProduct.todayTradeAvailable && (
+                <div className="flex flex-wrap gap-1">
                   <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">
                     {t('sameDayOk')}
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

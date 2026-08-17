@@ -13,8 +13,8 @@ import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatSt
 import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, hasHomeVisibleDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
-import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
-import { labelProductStatus, labelProductAvailability, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
+import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
+import { labelProductStatus, labelProductAvailability, labelInDispute, isFreeShareListing, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
@@ -518,14 +518,9 @@ export const ProductDetail: React.FC = () => {
             <Badge variant="success" size="sm">🎁 {t('freeShare')}</Badge>
           </div>
         )}
-        {(product.tradeMethods?.length > 0 || product.todayTradeAvailable) && (
+        {product.todayTradeAvailable && (
           <div className="flex flex-wrap gap-2 mt-2">
-            {product.tradeMethods?.map((method: TradeMethod) => (
-              <Badge key={method} variant="info" size="sm">{labelTradeMethod(method)}</Badge>
-            ))}
-            {product.todayTradeAvailable && (
-              <Badge variant="success" size="sm">{t('sameDayOk')}</Badge>
-            )}
+            <Badge variant="success" size="sm">{t('sameDayOk')}</Badge>
           </div>
         )}
       </div>

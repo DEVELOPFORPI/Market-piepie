@@ -18,6 +18,9 @@ interface ListingCardProps {
   product: Product;
   layout?: 'grid' | 'list';
   onClick?: () => void;
+  hideLikeCount?: boolean;
+  hideLikeButton?: boolean;
+  hideSeller?: boolean;
 }
 
 function relativeTimeLocalized(
@@ -37,15 +40,18 @@ function ListingCardMeta({
   chatCount,
   productDisputeCount,
   timeLabel,
+  hideLikeCount,
 }: {
   product: Product;
   likeCount: number;
   chatCount: number;
   productDisputeCount: number;
   timeLabel: string;
+  hideLikeCount?: boolean;
 }) {
   const localizedRegion = useLocalizedRegion(product.region);
-  const hasStats = likeCount > 0 || chatCount > 0 || productDisputeCount > 0;
+  const shownLikeCount = hideLikeCount ? 0 : likeCount;
+  const hasStats = shownLikeCount > 0 || chatCount > 0 || productDisputeCount > 0;
 
   return (
     <>
@@ -55,12 +61,12 @@ function ListingCardMeta({
       </div>
       {hasStats && (
         <div className="flex items-center gap-3 text-xs text-gray-400">
-          {likeCount > 0 && (
+          {shownLikeCount > 0 && (
             <span className="flex items-center gap-1 text-red-400">
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden>
                 <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
-              {likeCount}
+              {shownLikeCount}
             </span>
           )}
           {chatCount > 0 && (
@@ -85,6 +91,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   product,
   layout = 'grid',
   onClick,
+  hideLikeCount,
+  hideLikeButton,
+  hideSeller,
 }) => {
   const { t } = useLanguage();
   const statusVariant: Record<ProductStatus, 'success' | 'warning' | 'default'> = {
@@ -225,8 +234,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             chatCount={chatCount}
             productDisputeCount={productDisputeCount}
             timeLabel={timeLabel}
+            hideLikeCount={hideLikeCount}
           />
-          {seller?.id && (
+          {!hideSeller && seller?.id && (
             <div className="flex items-center gap-2 mt-2">
               <AvatarWithBadgeOverlay userId={seller.id} sizePx={28}>
                 <UserAvatarImage src={sellerAvatarSrc} />
@@ -235,6 +245,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </div>
           )}
         </div>
+        {!hideLikeButton && (
         <button
           onClick={handleLike}
           className="self-start p-1 text-gray-400 hover:text-red-500"
@@ -254,6 +265,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             />
           </svg>
         </button>
+        )}
       </div>
     );
   }
@@ -328,6 +340,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         chatCount={chatCount}
         productDisputeCount={productDisputeCount}
         timeLabel={timeLabel}
+        hideLikeCount={hideLikeCount}
       />
     </div>
   );
