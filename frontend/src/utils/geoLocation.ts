@@ -380,46 +380,47 @@ export async function detectLocationByIp(
   return null;
 }
 
-/** GPS via browser API; needs permission */
-export async function detectLocationByGPS(
-  lang: AppLanguage = getAppLanguage(),
-): Promise<DetectedLocation | null> {
-  if (!navigator?.geolocation) {
-    return null;
-  }
-
+function readDevicePosition(options: PositionOptions): Promise<GeolocationPosition | null> {
+  if (!navigator?.geolocation) return Promise.resolve(null);
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const coords = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        };
-        const region = await reverseGeocode(coords.latitude, coords.longitude, lang);
-        resolve(region ? { region, coords } : null);
-      },
-      () => {
-        resolve(null);
-      },
-      {
-        timeout: 10000,
-        enableHighAccuracy: false,
-      },
+      (position) => resolve(position),
+      () => resolve(null),
+      options,
     );
   });
 }
 
-/** Try GPS first, then IP — labels follow the selected app language */
+/** GPS via browser API; needs permission. Never uses IP. */
+export async function detectLocationByGPS(
+  lang: AppLanguage = getAppLanguage(),
+): Promise<DetectedLocation | null> {
+  const position =
+    (await readDevicePosition({
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    })) ??
+    (await readDevicePosition({
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 0,
+    }));
+  if (!position) return null;
+
+  const coords = {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+  };
+  const region = await reverseGeocode(coords.latitude, coords.longitude, lang);
+  return region ? { region, coords } : null;
+}
+
+/** Device GPS only — IP fallback would map many Korean networks to Seoul. */
 export async function detectLocation(
   lang: AppLanguage = getAppLanguage(),
 ): Promise<DetectedLocation | null> {
-  const gpsResult = await detectLocationByGPS(lang);
-  if (gpsResult) return gpsResult;
-
-  const ipResult = await detectLocationByIp(lang);
-  if (ipResult) return ipResult;
-
-  return null;
+  return detectLocationByGPS(lang);
 }
 
 /** Re-label stored region into the new app language (needs saved GPS/IP coords) */

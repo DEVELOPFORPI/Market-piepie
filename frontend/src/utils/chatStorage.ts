@@ -761,17 +761,39 @@ export const clearOrderFromRoom = (orderId: string) => {
   if (updated.some((r, i) => r !== rooms[i])) saveAllChatRooms(updated);
 };
 
-/** Leave room: end for both parties, unlock listing, cancel meetup if needed */
+/** Hide room from my list immediately (other party still sees it until they leave). */
+function hideRoomForCurrentUser(roomId: string): { leftUserIds: string[]; alreadyEnded: boolean } | null {
+  const userId = getCurrentUserId();
+  if (!userId) return null;
+  const rooms = getAllChatRooms();
+  const idx = rooms.findIndex((r) => r.id === roomId);
+  if (idx < 0) return null;
+  const room = rooms[idx];
+  const alreadyEnded = isChatRoomEnded(room);
+  if ((room.leftUserIds || []).includes(userId)) {
+    return { leftUserIds: room.leftUserIds || [], alreadyEnded };
+  }
+  const leftUserIds = Array.from(new Set([...(room.leftUserIds || []), userId]));
+  rooms[idx] = { ...room, leftUserIds };
+  saveAllChatRooms(rooms, roomId);
+  void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+  window.dispatchEvent(new Event('chatRoomsChanged'));
+  return { leftUserIds, alreadyEnded };
+}
+
+/** Leave room: hide from my list first, then notify / unlock if I am the first to leave */
 export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
-  const allRooms = getAllChatRooms();
-  const room = allRooms.find((r) => r.id === roomId);
+  const room = getChatRoom(roomId);
   if (!room) return false;
-  if (isChatRoomEnded(room)) return true;
+
+  const hidden = hideRoomForCurrentUser(roomId);
+  if (!hidden) return false;
+  // Other party already left — just drop it from my list (no second leave message).
+  if (hidden.alreadyEnded) return true;
 
   const userId = getCurrentUserId();
   const myUser = getMyUser();
   const nickname = myUser?.nickname ?? CHAT_FALLBACK_NICKNAME;
-
   const msg: ChatMessage = {
     id: `left_${Date.now()}`,
     senderId: userId || '',
@@ -779,31 +801,32 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
     timestamp: new Date().toISOString(),
     type: 'system',
   };
-  const messageSaved = await addMessage(roomId, msg);
-  if (!messageSaved) return false;
+  // Room is already marked left, so addMessage would reject it — write the notice directly.
+  const dbOk = await syncMessageToDB(roomId, msg);
+  if (dbOk) {
+    const rooms = getAllChatRooms();
+    const idx = rooms.findIndex((r) => r.id === roomId);
+    if (idx >= 0) {
+      const next = rooms[idx];
+      const messages = [...(next.messages || []), msg];
+      rooms[idx] = {
+        ...next,
+        messages,
+        lastMessage: msg.content,
+        lastMessageTime: msg.timestamp,
+      };
+      saveAllChatRooms(rooms, roomId);
+    }
+  }
 
-  // Only the leaver is removed from their list; room stays for the other party (read-only / gray)
-  const leftUserIds = Array.from(
-    new Set(
-      [...(room.leftUserIds || []), userId].filter((id): id is string => !!id),
-    ),
-  );
-
-  const roomsAfterMessage = getAllChatRooms();
-  const idx = roomsAfterMessage.findIndex((r) => r.id === roomId);
-  if (idx < 0) return false;
-  roomsAfterMessage[idx] = { ...roomsAfterMessage[idx], leftUserIds };
-  const saved = saveAllChatRooms(roomsAfterMessage, roomId);
-  void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
-
-  // Unlock trade/listing: cancel meetup if set, set product back to for sale when reserved
-  const linked = getRoomLinkedOrder(roomsAfterMessage[idx]);
+  const latest = getChatRoom(roomId) || room;
+  const linked = getRoomLinkedOrder(latest);
   if (linked?.id) {
     const hasMeetup =
       linked.status === ORDER_STATUS_VALUE.MEETUP_SET ||
       !!(linked.meetupPlace && linked.meetupDate && linked.meetupTime);
     if (hasMeetup && linked.status !== ORDER_STATUS_VALUE.COMPLETE && linked.status !== ORDER_STATUS_VALUE.DISPUTE) {
-      await cancelOrderMeetup(linked.id);
+      void cancelOrderMeetup(linked.id);
     } else {
       const productId = linked.product?.id || room.product?.id;
       if (productId) {
@@ -820,8 +843,7 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
     }
   }
 
-  window.dispatchEvent(new Event('chatRoomsChanged'));
-  return saved;
+  return true;
 };
 
 /** Delete room entirely for both parties */

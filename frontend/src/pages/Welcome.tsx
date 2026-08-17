@@ -109,7 +109,7 @@ export const Welcome: React.FC = () => {
     void ensureImplicitSession({ allowAutoGuest: true }).then(() => navigate('/', { replace: true }));
   };
 
-  const handleLocalTestLogin = (userId: 'user1' | 'user2') => {
+  const handleLocalTestLogin = (userId: 'user1' | 'user2' | 'user3') => {
     clearImplicitSessionSkip();
     login(userId);
     navigate('/', { replace: true });
@@ -199,6 +199,15 @@ export const Welcome: React.FC = () => {
               style={{ borderColor: TEAL, color: TEAL }}
             >
               Local account 2
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLocalTestLogin('user3')}
+              disabled={piLoading}
+              className="w-full py-3.5 rounded-full text-sm font-bold border-2 active:opacity-90 transition-opacity disabled:opacity-50 bg-gray-50"
+              style={{ borderColor: TEAL, color: TEAL }}
+            >
+              Local account 3
             </button>
           </div>
         )}

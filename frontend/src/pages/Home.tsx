@@ -21,7 +21,8 @@ import type { HomeMessageKey } from '@/i18n/homeMessages';
 import { HOME_PROMO_SHOWN_SESSION_KEY } from '@/utils/authStorage';
 
 const defaultMockProducts: Product[] = [];
-const PRODUCT_CATEGORIES = ['Electronics', 'Furniture', 'Clothes', 'Hobby', 'Books', 'Other'] as const;
+
+type FilterListingType = 'all' | 'free' | 'sale';
 
 const CHIP_I18N: Record<HomeFeedChip, HomeMessageKey> = {
   [HOME_FEED_CHIP_VALUE.ALL]: 'chipAll',
@@ -34,20 +35,15 @@ const CHIP_I18N: Record<HomeFeedChip, HomeMessageKey> = {
   [HOME_FEED_CHIP_VALUE.OLDEST]: 'chipOldest',
 };
 
-const CATEGORY_I18N: Record<(typeof PRODUCT_CATEGORIES)[number], HomeMessageKey> = {
-  Electronics: 'catElectronics',
-  Furniture: 'catFurniture',
-  Clothes: 'catClothes',
-  Hobby: 'catHobby',
-  Books: 'catBooks',
-  Other: 'catOther',
-};
+const FILTER_LISTING_TYPES: { value: FilterListingType; labelKey: HomeMessageKey }[] = [
+  { value: 'all', labelKey: 'chipAll' },
+  { value: 'free', labelKey: 'chipFree' },
+  { value: 'sale', labelKey: 'listingSale' },
+];
 
 const feedChips: HomeFeedChip[] = [
   HOME_FEED_CHIP_VALUE.ALL,
   HOME_FEED_CHIP_VALUE.LATEST,
-  HOME_FEED_CHIP_VALUE.FREE,
-  HOME_FEED_CHIP_VALUE.FOR_SALE,
   HOME_FEED_CHIP_VALUE.POPULAR,
   HOME_FEED_CHIP_VALUE.PRICE_LOW,
   HOME_FEED_CHIP_VALUE.PRICE_HIGH,
@@ -85,8 +81,6 @@ function sortHomeProducts(products: Product[], chip: HomeFeedChip): Product[] {
       });
     case HOME_FEED_CHIP_VALUE.ALL:
     case HOME_FEED_CHIP_VALUE.LATEST:
-    case HOME_FEED_CHIP_VALUE.FREE:
-    case HOME_FEED_CHIP_VALUE.FOR_SALE:
     default:
       return sorted.sort(byNewest);
   }
@@ -99,8 +93,7 @@ export const Home: React.FC = () => {
   const [activeChip, setActiveChip] = useState<HomeFeedChip>(HOME_FEED_CHIP_VALUE.ALL);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
-  const [freeOnly, setFreeOnly] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [listingType, setListingType] = useState<FilterListingType>('all');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [allProducts, setAllProducts] = useState<Product[]>(defaultMockProducts);
@@ -229,33 +222,24 @@ export const Home: React.FC = () => {
       );
     }
 
-    if (freeOnly) {
+    if (listingType === 'free') {
       filtered = filtered.filter((p) => isFreeShareListing(p));
-    }
-
-    if (selectedCategory) {
-      filtered = filtered.filter((p) => p.category === selectedCategory);
+    } else if (listingType === 'sale') {
+      filtered = filtered.filter((p) => !isFreeShareListing(p));
     }
 
     // Price range (paid listings only)
-    if (!freeOnly && minPrice) {
+    if (listingType !== 'free' && minPrice) {
       filtered = filtered.filter((p) => p.price >= Number(minPrice));
     }
-    if (!freeOnly && maxPrice) {
+    if (listingType !== 'free' && maxPrice) {
       filtered = filtered.filter((p) => p.price <= Number(maxPrice));
     }
 
-    // Chip filter + sort
-    if (activeChip === HOME_FEED_CHIP_VALUE.FREE) {
-      filtered = filtered.filter((p) => p.isFreeShare || p.price === 0);
-    }
-    if (activeChip === HOME_FEED_CHIP_VALUE.FOR_SALE) {
-      filtered = filtered.filter((p) => p.status === PRODUCT_STATUS_VALUE.FOR_SALE);
-    }
     filtered = sortHomeProducts(filtered, activeChip);
 
     return filtered;
-  }, [allProducts, searchQuery, freeOnly, selectedCategory, minPrice, maxPrice, activeChip, favoritesVersion]);
+  }, [allProducts, searchQuery, listingType, minPrice, maxPrice, activeChip, favoritesVersion]);
 
   const handlePullRefresh = useCallback(async () => {
     await syncProductsFromDB();
@@ -445,47 +429,30 @@ export const Home: React.FC = () => {
         <div className="px-4 py-6 space-y-6">
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('listingType')}</h3>
-            <button
-              type="button"
-              onClick={() => {
-                setFreeOnly((current) => {
-                  const next = !current;
-                  if (next) {
-                    setMinPrice('');
-                    setMaxPrice('');
-                  }
-                  return next;
-                });
-              }}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
-                freeOnly ? 'text-white' : 'bg-gray-100 text-gray-700'
-              }`}
-              style={freeOnly ? { backgroundColor: '#00A8A3' } : undefined}
-            >
-              {t('freeOnly')}
-            </button>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('category')}</h3>
             <div className="flex flex-wrap gap-2">
-              {PRODUCT_CATEGORIES.map((cat) => (
+              {FILTER_LISTING_TYPES.map(({ value, labelKey }) => (
                 <button
-                  key={cat}
+                  key={value}
                   type="button"
-                  onClick={() => setSelectedCategory((current) => (current === cat ? '' : cat))}
+                  onClick={() => {
+                    setListingType(value);
+                    if (value === 'free') {
+                      setMinPrice('');
+                      setMaxPrice('');
+                    }
+                  }}
                   className={`rounded-full px-4 py-2 text-sm font-medium ${
-                    selectedCategory === cat ? 'text-white' : 'bg-gray-100 text-gray-700'
+                    listingType === value ? 'text-white' : 'bg-gray-100 text-gray-700'
                   }`}
-                  style={selectedCategory === cat ? { backgroundColor: '#00A8A3' } : undefined}
+                  style={listingType === value ? { backgroundColor: '#00A8A3' } : undefined}
                 >
-                  {t(CATEGORY_I18N[cat])}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className={freeOnly ? 'opacity-50' : undefined}>
+          <div className={listingType === 'free' ? 'opacity-50' : undefined}>
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('priceRange')}</h3>
             <div className="flex items-center gap-1">
               <input
@@ -493,7 +460,7 @@ export const Home: React.FC = () => {
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
                 placeholder={t('min')}
-                disabled={freeOnly}
+                disabled={listingType === 'free'}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-gray-500 shrink-0">~</span>
@@ -502,19 +469,18 @@ export const Home: React.FC = () => {
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
                 placeholder={t('max')}
-                disabled={freeOnly}
+                disabled={listingType === 'free'}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-gray-500 shrink-0">Pi</span>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4">
+          {/* Actions — sit above home indicator; sheet covers the tab bar */}
+          <div className="flex gap-3 pt-4 pb-2">
             <button
               onClick={() => {
-                setFreeOnly(false);
-                setSelectedCategory('');
+                setListingType('all');
                 setMinPrice('');
                 setMaxPrice('');
               }}

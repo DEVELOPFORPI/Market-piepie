@@ -11,7 +11,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
-import { hasProductActiveDispute } from '@/utils/disputeStorage';
+import { hasProductActiveDispute, hasHomeVisibleDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelProductStatus, labelProductAvailability, labelInDispute, isFreeShareListing, labelTradeMethod, relativeTimeShort } from '@/locale/enUI';
@@ -259,18 +259,19 @@ export const ProductDetail: React.FC = () => {
   };
 
   const productMeetupReserved = hasProductReservedOrder(product.id);
-  const productDisputeOpen = hasProductActiveDispute(product.id);
-  const sellerStatusLocked = productDisputeOpen || productMeetupReserved;
-  const sellerHeaderStatusLabel = productDisputeOpen
+  const anyActiveDispute = hasProductActiveDispute(product.id);
+  const publicDisputeOpen = hasHomeVisibleDispute(product.id);
+  const sellerStatusLocked = anyActiveDispute || productMeetupReserved;
+  const sellerHeaderStatusLabel = publicDisputeOpen
     ? labelInDispute()
     : productMeetupReserved
       ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
       : labelProductAvailability(product);
-  const buyerHeaderStatusLabel = productDisputeOpen
+  const buyerHeaderStatusLabel = publicDisputeOpen
     ? labelInDispute()
     : labelProductAvailability(product);
   const headerStatusLabel = isMine ? sellerHeaderStatusLabel : buyerHeaderStatusLabel;
-  const headerStatusLocked = isMine ? sellerStatusLocked : productDisputeOpen;
+  const headerStatusLocked = isMine ? sellerStatusLocked : publicDisputeOpen;
 
   const chatCount = getChatRoomCountByProductId(product.id);
   const uid = getCurrentUserId();
@@ -501,7 +502,7 @@ export const ProductDetail: React.FC = () => {
               <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
                 {labelProductAvailability(product)}
               </Badge>
-              {productDisputeOpen && (
+              {publicDisputeOpen && (
                 <Badge variant="danger" size="sm">{t('inDispute')}</Badge>
               )}
             </div>
@@ -596,7 +597,7 @@ export const ProductDetail: React.FC = () => {
           <p className="text-sm text-gray-500 py-2">{t('listingSold')}</p>
         ) : product.status === PRODUCT_STATUS_VALUE.RESERVED ? (
           <p className="text-sm text-gray-500 py-2">{t('itemReserved')}</p>
-        ) : hasProductActiveDispute(product.id) ? (
+        ) : hasHomeVisibleDispute(product.id) ? (
           <p className="text-sm text-gray-500 py-2">{t('listingOpenDispute')}</p>
         ) : (
           <div className="flex gap-3">

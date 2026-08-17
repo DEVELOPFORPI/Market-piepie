@@ -4,6 +4,24 @@ import { saveMyProfileToDB } from '@/utils/dbSync';
 
 const BASE_KEY = 'userRegion';
 const COORDS_KEY = 'userRegionCoords';
+/** Device-level: GPS consent popup is shown once, before the browser permission prompt. */
+const LOCATION_CONSENT_KEY = 'marketpiepie_location_consent_v1';
+
+export const hasLocationConsent = (): boolean => {
+  try {
+    return localStorage.getItem(LOCATION_CONSENT_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+export const setLocationConsent = (): void => {
+  try {
+    localStorage.setItem(LOCATION_CONSENT_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+};
 
 export type RegionCoords = { latitude: number; longitude: number };
 

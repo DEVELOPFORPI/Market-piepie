@@ -14,7 +14,9 @@ import { getPostLikeCount, isPostLiked, togglePostLike, syncPostLikeFromDB } fro
 import { syncCommentsFromDB } from '@/utils/dbSync';
 import { getPostViewCount, incrementPostViewCount } from '@/utils/postViewStorage';
 import { getPostCommentCount, syncPostCommentCountFromDB } from '@/utils/postCommentCountStorage';
-import { getDisputeByOrderId, getDisputeByPostId, ensureDisputeByOrderId } from '@/utils/disputeStorage';
+import { getDisputeByOrderId, getDisputeByPostId, ensureDisputeByOrderId, fetchDisputeSummariesForOrder, type Dispute } from '@/utils/disputeStorage';
+import { api } from '@/utils/api';
+import { cacheUserProfileFromRow } from '@/utils/profileStorage';
 import { ensureOrderById, getOrderById } from '@/utils/orderStorage';
 import { getProductById } from '@/utils/productStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
@@ -192,6 +194,7 @@ export const PostDetail: React.FC = () => {
   const [commentCount, setCommentCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
+  const [publicDispute, setPublicDispute] = useState<Dispute | null>(null);
 
   const isMine = post?.author.id === getCurrentUserId();
   const currentUserId = getCurrentUserId();
@@ -204,7 +207,10 @@ export const PostDetail: React.FC = () => {
   const isDisputePost = post?.category === POST_CATEGORY_VALUE.DISPUTE;
   const isGeneralPost = !isDisputePost;
   const linkedDispute = post
-    ? getDisputeByPostId(post.id) ?? (post.orderId ? getDisputeByOrderId(post.orderId) : undefined)
+    ? getDisputeByPostId(post.id)
+      ?? (post.orderId ? getDisputeByOrderId(post.orderId) : undefined)
+      ?? publicDispute
+      ?? undefined
     : undefined;
 
   const disputeParties = useMemo(() => {
@@ -323,9 +329,25 @@ export const PostDetail: React.FC = () => {
       if (found.orderId) {
         await ensureOrderById(found.orderId);
         await ensureDisputeByOrderId(found.orderId);
-        const dispute = getDisputeByPostId(found.id) ?? getDisputeByOrderId(found.orderId);
+        let dispute = getDisputeByPostId(found.id) ?? getDisputeByOrderId(found.orderId);
+        if (!dispute) {
+          const summaries = await fetchDisputeSummariesForOrder(found.orderId);
+          dispute = summaries[0];
+          setPublicDispute(dispute ?? null);
+        } else {
+          setPublicDispute(null);
+        }
+        if (dispute?.buyerId || dispute?.sellerId) {
+          await Promise.all(
+            [dispute.buyerId, dispute.sellerId].filter(Boolean).map(async (uid) => {
+              const res = await api.get<Record<string, unknown>>(`/api/users/${uid}`);
+              if (res.ok && res.data) cacheUserProfileFromRow(uid, res.data);
+            }),
+          );
+        }
         setLinkedDisputeStatus(dispute?.status);
       } else {
+        setPublicDispute(null);
         setLinkedDisputeStatus(undefined);
       }
     } else {

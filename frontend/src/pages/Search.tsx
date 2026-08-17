@@ -5,15 +5,16 @@ import { ListingCard } from '@/components/common/ListingCard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { Product } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
-import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
+import { isFreeShareListing } from '@/locale/enUI';
+import { useLanguage } from '@/hooks/useLanguage';
+import type { HomeMessageKey } from '@/i18n/homeMessages';
 
-const FILTER_CATEGORIES: { value: string; labelKey: AppMessageKey }[] = [
-  { value: 'Electronics', labelKey: 'catElectronics' },
-  { value: 'Furniture', labelKey: 'catFurniture' },
-  { value: 'Clothes', labelKey: 'catClothes' },
-  { value: 'Hobby', labelKey: 'catHobby' },
-  { value: 'Books', labelKey: 'catBooks' },
-  { value: 'Other', labelKey: 'catOther' },
+type FilterListingType = 'all' | 'free' | 'sale';
+
+const FILTER_LISTING_TYPES: { value: FilterListingType; labelKey: HomeMessageKey }[] = [
+  { value: 'all', labelKey: 'chipAll' },
+  { value: 'free', labelKey: 'chipFree' },
+  { value: 'sale', labelKey: 'listingSale' },
 ];
 
 export const Search: React.FC = () => {
@@ -21,9 +22,9 @@ export const Search: React.FC = () => {
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilter, setShowFilter] = useState(false);
+  const [listingType, setListingType] = useState<FilterListingType>('all');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
@@ -45,12 +46,13 @@ export const Search: React.FC = () => {
         || p.region?.toLowerCase().includes(q)
         || p.seller?.nickname?.toLowerCase().includes(q);
       if (!matchText) return false;
-      if (selectedCategory && p.category !== selectedCategory) return false;
-      if (minPrice && p.price < Number(minPrice)) return false;
-      if (maxPrice && p.price > Number(maxPrice)) return false;
+      if (listingType === 'free' && !isFreeShareListing(p)) return false;
+      if (listingType === 'sale' && isFreeShareListing(p)) return false;
+      if (listingType !== 'free' && minPrice && p.price < Number(minPrice)) return false;
+      if (listingType !== 'free' && maxPrice && p.price > Number(maxPrice)) return false;
       return true;
     });
-  }, [searchQuery, products, selectedCategory, minPrice, maxPrice]);
+  }, [searchQuery, products, listingType, minPrice, maxPrice]);
 
   return (
     <div className="min-h-screen bg-white pb-20">
@@ -148,13 +150,23 @@ export const Search: React.FC = () => {
       >
         <div className="px-4 py-6 space-y-6">
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('category')}</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('listingType')}</h3>
             <div className="flex flex-wrap gap-2">
-              {FILTER_CATEGORIES.map(({ value, labelKey }) => (
+              {FILTER_LISTING_TYPES.map(({ value, labelKey }) => (
                 <button
                   key={value}
-                  onClick={() => setSelectedCategory(selectedCategory === value ? '' : value)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium ${selectedCategory === value ? 'bg-[#00A8A3] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  type="button"
+                  onClick={() => {
+                    setListingType(value);
+                    if (value === 'free') {
+                      setMinPrice('');
+                      setMaxPrice('');
+                    }
+                  }}
+                  className={`rounded-full px-4 py-2 text-sm font-medium ${
+                    listingType === value ? 'text-white' : 'bg-gray-100 text-gray-700'
+                  }`}
+                  style={listingType === value ? { backgroundColor: '#00A8A3' } : undefined}
                 >
                   {t(labelKey)}
                 </button>
@@ -162,7 +174,7 @@ export const Search: React.FC = () => {
             </div>
           </div>
 
-          <div>
+          <div className={listingType === 'free' ? 'opacity-50' : undefined}>
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('priceRange')}</h3>
             <div className="flex items-center gap-1">
               <input
@@ -170,7 +182,8 @@ export const Search: React.FC = () => {
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
+                disabled={listingType === 'free'}
+                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-gray-500 shrink-0">~</span>
               <input
@@ -178,7 +191,8 @@ export const Search: React.FC = () => {
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg"
+                disabled={listingType === 'free'}
+                className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-gray-500 shrink-0">Pi</span>
             </div>
@@ -187,9 +201,9 @@ export const Search: React.FC = () => {
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => {
+                setListingType('all');
                 setMinPrice('');
                 setMaxPrice('');
-                setSelectedCategory('');
               }}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"
             >

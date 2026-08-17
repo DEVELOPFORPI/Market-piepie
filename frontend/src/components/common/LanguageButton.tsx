@@ -67,9 +67,6 @@ export const LanguageButton: React.FC<LanguageButtonProps> = ({ className = '' }
               );
             })}
           </div>
-          <p className="pt-3 text-xs text-gray-400 text-center">
-            {t('translationComingSoon')}
-          </p>
         </div>
       </BottomSheet>
     </>

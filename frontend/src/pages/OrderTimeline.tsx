@@ -10,7 +10,8 @@ import { labelTradeMethod } from '@/locale/enUI';
 import { resolveDisplayNickname } from '@/utils/profileStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
-import { displayOrderTimelineDescription } from '@/utils/orderTimelineDisplay';
+import { displayOrderTimelineDescription, timelineWithPartyDisputes } from '@/utils/orderTimelineDisplay';
+import { fetchDisputeSummariesForOrder, getDisputesByOrderId, mergeDisputesById, type Dispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
 export const OrderTimeline: React.FC = () => {
@@ -20,6 +21,7 @@ export const OrderTimeline: React.FC = () => {
   const dateLocale = localeForAppLanguage(lang);
   const { orderId } = useParams();
   const [order, setOrder] = useState<Order | null>(null);
+  const [orderDisputes, setOrderDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Auto-redirect to review page when order becomes COMPLETE and no review yet
@@ -40,6 +42,8 @@ export const OrderTimeline: React.FC = () => {
     }
     setLoading(true);
     const found = await ensureOrderById(orderId);
+    const summaries = await fetchDisputeSummariesForOrder(orderId);
+    setOrderDisputes(mergeDisputesById(summaries, getDisputesByOrderId(orderId)));
     setOrder(found ? { ...found } : null);
     setLoading(false);
   };
@@ -48,6 +52,7 @@ export const OrderTimeline: React.FC = () => {
     const refresh = () => { void loadOrder(); };
     refresh();
     window.addEventListener('ordersChanged', refresh);
+    window.addEventListener('disputesChanged', refresh);
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'all_orders') refresh();
       if (e.key === 'all_products' && orderId) refresh();
@@ -59,6 +64,7 @@ export const OrderTimeline: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('ordersChanged', refresh);
+      window.removeEventListener('disputesChanged', refresh);
       window.removeEventListener('storage', handleStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
@@ -170,15 +176,15 @@ export const OrderTimeline: React.FC = () => {
         <div className="p-4 border border-gray-200 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-4">{t('timelineHeading')}</h3>
           <div className="space-y-4">
-            {order.timeline.map((event, idx) => (
+            {timelineWithPartyDisputes(order.timeline, orderDisputes).map((event, idx, events) => (
               <div key={event.id} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                      idx === order.timeline.length - 1 ? 'bg-[#00A8A3]' : 'bg-gray-300'
+                      idx === events.length - 1 ? 'bg-[#00A8A3]' : 'bg-gray-300'
                     }`}
                   />
-                  {idx < order.timeline.length - 1 && (
+                  {idx < events.length - 1 && (
                     <div className="w-0.5 flex-1 bg-gray-200 mt-1" style={{ minHeight: '24px' }} />
                   )}
                 </div>

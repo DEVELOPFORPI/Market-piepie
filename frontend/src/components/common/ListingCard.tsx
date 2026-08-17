@@ -1,12 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Product, ProductStatus, PRODUCT_STATUS_VALUE, ORDER_STATUS_VALUE } from '@/types';
+import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
 import { isFreeShareListing } from '@/locale/enUI';
 import { Badge } from './Badge';
 import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorage';
 import { guestGuard } from '@/utils/guestGate';
-import { getOrdersByProductId } from '@/utils/orderStorage';
 import { getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { getDisputesByOrderId, getDisputeCountByProductId } from '@/utils/disputeStorage';
+import { getDisputeCountByProductId } from '@/utils/disputeStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -82,17 +81,6 @@ function ListingCardMeta({
   );
 }
 
-/** Dispute on product: none | open | resolved */
-const getProductDisputeDisplay = (productId: string): null | 'open' | 'resolved' => {
-  const orders = getOrdersByProductId(productId);
-  const disputeOrder = orders.find((o) => o.status === ORDER_STATUS_VALUE.DISPUTE);
-  if (!disputeOrder) return null;
-  const disputes = getDisputesByOrderId(disputeOrder.id);
-  return disputes.length > 0 && disputes.every((dispute) => dispute.status === 'RESOLVED')
-    ? 'resolved'
-    : 'open';
-};
-
 export const ListingCard: React.FC<ListingCardProps> = ({
   product,
   layout = 'grid',
@@ -114,11 +102,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         : product.status === PRODUCT_STATUS_VALUE.SOLD
           ? t('sold')
           : t('forSale');
-  const disputeDisplay = getProductDisputeDisplay(product.id);
   const timeLabel = relativeTimeLocalized(product.createdAt, t);
 
   const [liked, setLiked] = useState(() => isFavorite(product.id));
   const [likeCount, setLikeCount] = useState(() => getLikeCount(product.id));
+  const [disputeRevision, setDisputeRevision] = useState(0);
 
   useEffect(() => {
     setLiked(isFavorite(product.id));
@@ -129,11 +117,16 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       setLiked(isFavorite(product.id));
       setLikeCount(getLikeCount(product.id));
     };
+    const onDisputesChanged = () => setDisputeRevision((n) => n + 1);
     window.addEventListener('favoritesChanged', refresh);
     window.addEventListener('productsChanged', refresh);
+    window.addEventListener('disputesChanged', onDisputesChanged);
+    window.addEventListener('ordersChanged', onDisputesChanged);
     return () => {
       window.removeEventListener('favoritesChanged', refresh);
       window.removeEventListener('productsChanged', refresh);
+      window.removeEventListener('disputesChanged', onDisputesChanged);
+      window.removeEventListener('ordersChanged', onDisputesChanged);
     };
   }, [product.id]);
 
@@ -148,7 +141,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   }, [product]);
 
   const chatCount = getChatRoomCountByProductId(product.id);
+  void disputeRevision;
   const productDisputeCount = getDisputeCountByProductId(product.id);
+  const showDisputeBadge = productDisputeCount > 0;
 
   const seller = product.seller;
   const sellerAvatarSrc =
@@ -195,9 +190,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </div>
           )}
           <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-            {disputeDisplay ? (
-              <Badge variant={disputeDisplay === 'resolved' ? 'default' : 'danger'} size="sm">
-                {disputeDisplay === 'resolved' ? t('sold') : t('inDispute')}
+            {showDisputeBadge ? (
+              <Badge variant="danger" size="sm">
+                {t('inDispute')}
               </Badge>
             ) : (
               <>
@@ -297,9 +292,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           </div>
         )}
         <div className="absolute top-2 right-2 flex flex-wrap gap-1 justify-end">
-          {disputeDisplay ? (
-            <Badge variant={disputeDisplay === 'resolved' ? 'default' : 'danger'} size="sm">
-              {disputeDisplay === 'resolved' ? t('sold') : t('inDispute')}
+          {showDisputeBadge ? (
+            <Badge variant="danger" size="sm">
+              {t('inDispute')}
             </Badge>
           ) : (
             <>

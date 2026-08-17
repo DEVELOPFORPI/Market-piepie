@@ -52,7 +52,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-black/50 ${
+        className={`fixed inset-0 z-[60] bg-black/50 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
         style={{ transition: `opacity ${ANIM_MS}ms cubic-bezier(0.32, 0.72, 0, 1)` }}
@@ -60,7 +60,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         aria-hidden
       />
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl will-change-transform safe-area-bottom ${
+        className={`fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-2xl shadow-2xl will-change-transform safe-area-bottom ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{

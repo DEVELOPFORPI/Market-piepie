@@ -841,6 +841,7 @@ app.get("/api/uploads/object/*", async (req, res) => {
 const DEV_USER_PRESETS = {
   user1: { nickname: "Seller Pingoo", pi_username: "local-user1" },
   user2: { nickname: "Buyer Pororo", pi_username: "local-user2" },
+  user3: { nickname: "Buyer Crong", pi_username: "local-user3" },
 };
 
 // Guest session (all environments) — guests table only, not users
@@ -1744,6 +1745,34 @@ app.get("/api/products", requireDb, async (req, res) => {
   }
 });
 
+/** Public: listing has an open buyer-filed dispute (home 분쟁중), optionally excluding one pair. */
+app.get("/api/products/:id/open-buyer-dispute", requireDb, async (req, res) => {
+  const excludeBuyer = typeof req.query.exclude_buyer_id === "string" ? req.query.exclude_buyer_id : "";
+  const excludeSeller = typeof req.query.exclude_seller_id === "string" ? req.query.exclude_seller_id : "";
+  try {
+    const params = [req.params.id];
+    let extra = "";
+    if (excludeBuyer && excludeSeller) {
+      params.push(excludeBuyer, excludeSeller);
+      extra = " AND NOT (d.buyer_id = $2 AND d.seller_id = $3)";
+    }
+    const { rows } = await pool.query(
+      `SELECT 1
+         FROM disputes d
+         JOIN orders o ON o.id = d.order_id
+        WHERE o.product_id = $1
+          AND d.status <> 'RESOLVED'
+          AND (d.opened_by_user_id IS NULL OR d.opened_by_user_id <> d.seller_id)
+          ${extra}
+        LIMIT 1`,
+      params,
+    );
+    res.json({ open: rows.length > 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/products/:id", requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -2045,6 +2074,27 @@ app.get("/api/orders/:id", requireDb, async (req, res) => {
     );
     order.timeline = timeline;
     res.json(order);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Public party summary for a dispute post (no evidence / private notes). */
+app.get("/api/orders/:orderId/dispute-summaries", requireDb, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT d.id, d.order_id, d.product_title, d.product_image, d.proposed_price, d.trade_method,
+              d.buyer_id, d.seller_id, d.opened_by_user_id, d.reason, d.status, d.created_at, d.resolved_at,
+              bu.nickname AS buyer_nickname, su.nickname AS seller_nickname
+       FROM disputes d
+       LEFT JOIN users bu ON bu.id = d.buyer_id
+       LEFT JOIN users su ON su.id = d.seller_id
+       WHERE d.order_id = $1
+       ORDER BY d.created_at DESC
+       LIMIT 10`,
+      [req.params.orderId],
+    );
+    res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

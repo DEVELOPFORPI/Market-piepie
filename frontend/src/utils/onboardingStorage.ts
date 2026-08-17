@@ -19,7 +19,7 @@ function safeRemove(key: string): void {
 
 /**
  * Production: whether signup / profile setup is done.
- * Test login mode and user1/user2 presets always count as complete.
+ * Test login mode and user1/user2/user3 presets always count as complete.
  * When logged out (no uid), returns false so welcome/login flows behave correctly.
  */
 export function isOnboardingComplete(): boolean {

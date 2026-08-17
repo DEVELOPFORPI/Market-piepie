@@ -3,12 +3,16 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Badge } from '@/components/common/Badge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
+import { ImageLightbox } from '@/components/common/ImageLightbox';
 import { ORDER_STATUS_VALUE, POST_CATEGORY_VALUE } from '@/types';
 import { ensureOrderById, getOrderById, updateOrderStatus } from '@/utils/orderStorage';
 import {
   createDispute,
-  ensureDisputeByOrderId,
-  getDisputeByOrderId,
+  ensureOpenDisputeByOrderId,
+  fetchDisputeSummariesForOrder,
+  getDisputesByOrderId,
+  hasResolvedDisputeOnOrder,
+  mergeDisputesById,
   updateDisputeStatus,
   Dispute as DisputeType,
 } from '@/utils/disputeStorage';
@@ -23,8 +27,10 @@ import { labelTradeMethod } from '@/locale/enUI';
 import { Order, User } from '@/types';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
+import { disputeOpenedTimelineText } from '@/utils/orderTimelineDisplay';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { scrollAppToTop } from '@/utils/appScroll';
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -59,6 +65,34 @@ function resolveDisputeOpenerUserId(
   return order.buyer.id === currentUserId ? order.seller.id : order.buyer.id;
 }
 
+function pickFocusedDispute(
+  disputes: DisputeType[],
+  openerId: string | undefined,
+  viewOtherParty: boolean,
+): DisputeType | undefined {
+  const forOpener = (d: DisputeType) => !openerId || d.openedByUserId === openerId;
+  const open = disputes.find((d) => d.status !== 'RESOLVED' && forOpener(d));
+  if (open) return open;
+  const resolved = disputes
+    .filter((d) => d.status === 'RESOLVED' && forOpener(d))
+    .sort((a, b) => (a.resolvedAt || a.createdAt).localeCompare(b.resolvedAt || b.createdAt));
+  if (resolved.length) return resolved[resolved.length - 1];
+  if (viewOtherParty) {
+    return [...disputes].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop();
+  }
+  return undefined;
+}
+
+function disputeFilerName(d: DisputeType, order?: Order): string {
+  if (d.openedByUserId && d.openedByUserId === d.sellerId) {
+    return d.sellerNickname || order?.seller.nickname || 'Seller';
+  }
+  if (d.openedByUserId && d.openedByUserId === d.buyerId) {
+    return d.buyerNickname || order?.buyer.nickname || 'Buyer';
+  }
+  return d.buyerNickname || order?.buyer.nickname || '';
+}
+
 export const Dispute: React.FC = () => {
   useGuestPageGuard('dispute');
   const navigate = useNavigate();
@@ -72,9 +106,30 @@ export const Dispute: React.FC = () => {
   const [description, setDescription] = useState('');
   const [evidence, setEvidence] = useState<string[]>([]);
   const [dispute, setDispute] = useState<DisputeType | null>(null);
+  const [orderDisputes, setOrderDisputes] = useState<DisputeType[]>([]);
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [order, setOrder] = useState<Order | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [viewImage, setViewImage] = useState<string | null>(null);
+
+  const applyDisputeList = (
+    foundOrder: Order | undefined,
+    list: DisputeType[],
+  ) => {
+    const uid = getCurrentUserId();
+    const openerId = uid && foundOrder
+      ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
+      : uid ?? undefined;
+    const focused = pickFocusedDispute(list, openerId, viewOtherParty);
+    setOrderDisputes(list);
+    setDispute(focused ?? null);
+    if (focused) {
+      setReason(focused.reason);
+      setAction(focused.action);
+      setDescription(focused.description);
+      setEvidence(focused.evidence || []);
+    }
+  };
 
   useEffect(() => {
     if (!orderId) {
@@ -90,18 +145,12 @@ export const Dispute: React.FC = () => {
       const openerId = uid && foundOrder
         ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
         : uid ?? undefined;
-      const existingDispute = await ensureDisputeByOrderId(orderId, openerId);
+      await ensureOpenDisputeByOrderId(orderId, openerId);
+      const summaries = await fetchDisputeSummariesForOrder(orderId);
+      const list = mergeDisputesById(summaries, getDisputesByOrderId(orderId));
       if (cancelled) return;
       setOrder(foundOrder);
-      if (existingDispute) {
-        setDispute(existingDispute);
-        setReason(existingDispute.reason);
-        setAction(existingDispute.action);
-        setDescription(existingDispute.description);
-        setEvidence(existingDispute.evidence || []);
-      } else {
-        setDispute(null);
-      }
+      applyDisputeList(foundOrder, list);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -115,11 +164,9 @@ export const Dispute: React.FC = () => {
     const readLocal = () => {
       const foundOrder = getOrderById(orderId);
       if (foundOrder) setOrder(foundOrder);
-      const uid = getCurrentUserId();
-      const openerId = uid && foundOrder
-        ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
-        : uid ?? undefined;
-      setDispute(openerId ? getDisputeByOrderId(orderId, openerId) ?? null : null);
+      void fetchDisputeSummariesForOrder(orderId).then((summaries) => {
+        applyDisputeList(foundOrder, mergeDisputesById(summaries, getDisputesByOrderId(orderId)));
+      });
     };
     const syncThenRead = () => {
       void (async () => {
@@ -143,6 +190,12 @@ export const Dispute: React.FC = () => {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [orderId, viewOtherParty]);
+
+  // Detail view replaces the form on the same route, so the container keeps the
+  // form's scroll position unless it is reset when the shown dispute changes.
+  useEffect(() => {
+    if (dispute?.id) scrollAppToTop();
+  }, [dispute?.id]);
 
   useEffect(() => {
     if (order) {
@@ -205,7 +258,11 @@ export const Dispute: React.FC = () => {
       return;
     }
 
-    await updateOrderStatus(orderId, ORDER_STATUS_VALUE.DISPUTE, `Dispute filed: ${reason}`);
+    await updateOrderStatus(
+      orderId,
+      ORDER_STATUS_VALUE.DISPUTE,
+      disputeOpenedTimelineText(isSellerOpener ? 'seller' : 'buyer'),
+    );
 
     const otherUser = order.buyer.id === currentUserId ? order.seller : order.buyer;
     const openerNickname = order.buyer.id === currentUserId ? order.buyer.nickname : order.seller.nickname;
@@ -248,7 +305,6 @@ export const Dispute: React.FC = () => {
     }
 
     setDispute(newDispute);
-    window.scrollTo(0, 0);
   };
 
   const handleResolve = async () => {
@@ -292,6 +348,16 @@ export const Dispute: React.FC = () => {
   );
   const showRequestedActionSummary = Boolean(dispute?.action?.trim());
   const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
+  const showSubmitBar = Boolean(
+    !dispute
+    && !viewOtherParty
+    && !orderDisputes.some((d) => d.status === 'RESOLVED')
+    && !hasResolvedDisputeOnOrder(orderId || ''),
+  );
+  const showResolveButton = Boolean(
+    dispute && (dispute.status === 'OPEN' || dispute.status === 'IN_REVIEW') && isDisputeOpener,
+  );
+  const showBackToOrders = Boolean((dispute || orderDisputes.length) && !showResolveButton && !showSubmitBar);
 
   if (loading) {
     return (
@@ -310,7 +376,7 @@ export const Dispute: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className={`min-h-screen bg-white ${showSubmitBar ? 'pb-24' : 'pb-8'}`}>
       <TopBar
         leftContent={
           <button onClick={() => navigate(-1)} className="p-2" aria-label={t('goBack')}>
@@ -319,32 +385,87 @@ export const Dispute: React.FC = () => {
             </svg>
           </button>
         }
-        title={dispute ? t('disputeDetailsTitle') : t('openDisputeTitle')}
+        title={dispute || orderDisputes.length ? t('disputeDetailsTitle') : t('openDisputeTitle')}
       />
 
-      <div className="px-4 py-6 pb-24 space-y-6">
+      <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
         {viewOtherParty && dispute && (
           <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
             <p className="text-sm text-gray-600">{t('viewOtherReadonly')}</p>
           </div>
         )}
 
-        {dispute && (
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{t('statusHeading')}</span>
-              <Badge variant={statusVariant[dispute.status]}>
-                {statusLabel[dispute.status]}
-              </Badge>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {t('filedAt', { when: new Date(dispute.createdAt).toLocaleString(dateLocale) })}
-            </p>
-            {dispute.resolvedAt && (
-              <p className="text-xs text-green-600 mt-1">
-                {t('resolvedAt', { when: new Date(dispute.resolvedAt).toLocaleString(dateLocale) })}
-              </p>
-            )}
+        {orderDisputes.length > 0 && (
+          <div className="space-y-3">
+            {orderDisputes.map((d) => {
+              const mine = Boolean(currentUserId && d.openedByUserId === currentUserId);
+              return (
+                <div key={d.id} className="p-4 bg-gray-50 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-600">
+                      {mine
+                        ? t('yourDispute')
+                        : t('theirDispute', { name: disputeFilerName(d, order) })}
+                    </span>
+                    <Badge variant={statusVariant[d.status]}>
+                      {statusLabel[d.status]}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {t('filedAt', { when: new Date(d.createdAt).toLocaleString(dateLocale) })}
+                  </p>
+                  {d.resolvedAt && (
+                    <p className="text-xs text-green-600">
+                      {t('resolvedAt', { when: new Date(d.resolvedAt).toLocaleString(dateLocale) })}
+                    </p>
+                  )}
+                  {(d.reason || d.action?.trim() || d.description) && (
+                    <div className="pt-3 border-t border-gray-200 space-y-2 text-sm">
+                      {d.reason && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-gray-500 shrink-0">{t('reasonLabel')}</span>
+                          <span className="text-gray-900 font-medium text-right">
+                            {labelDisputeStoredValue(lang, d.reason)}
+                          </span>
+                        </div>
+                      )}
+                      {Boolean(d.action?.trim()) && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-gray-500 shrink-0">{t('requestedAction')}</span>
+                          <span className="text-gray-900 font-medium text-right">
+                            {labelDisputeStoredValue(lang, d.action)}
+                          </span>
+                        </div>
+                      )}
+                      {d.description && (
+                        <p className="text-gray-700 leading-relaxed pt-1">{d.description}</p>
+                      )}
+                    </div>
+                  )}
+                  {d.evidence && d.evidence.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">{t('evidence')}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {d.evidence.map((img, idx) => (
+                          <button
+                            key={`${d.id}-${idx}`}
+                            type="button"
+                            onClick={() => setViewImage(getDisplayImageUrl(img))}
+                            className="aspect-square rounded-lg overflow-hidden bg-gray-200"
+                          >
+                            <img
+                              src={getDisplayImageUrl(img)}
+                              alt={t('evidenceAlt', { n: idx + 1 })}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -393,7 +514,7 @@ export const Dispute: React.FC = () => {
           </div>
         )}
 
-        {!dispute && order && !viewOtherParty && (
+        {!dispute && order && !viewOtherParty && !orderDisputes.some((d) => d.status === 'RESOLVED') && !hasResolvedDisputeOnOrder(orderId || '') && (
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -495,38 +616,46 @@ export const Dispute: React.FC = () => {
 
         {dispute && (
           <>
-            <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">{t('disputeSummary')}</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between gap-3">
-                  <span className="text-gray-500 shrink-0">{t('reasonLabel')}</span>
-                  <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.reason)}</span>
-                </div>
-                {showRequestedActionSummary && (
-                <div className="flex justify-between gap-3">
-                  <span className="text-gray-500 shrink-0">{t('requestedAction')}</span>
-                  <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.action)}</span>
-                </div>
-                )}
-              </div>
-              {dispute.description && (
-                <div className="pt-3 border-t border-gray-100">
-                  <p className="text-sm text-gray-700 leading-relaxed">{dispute.description}</p>
-                </div>
-              )}
-            </div>
-
-            {dispute.evidence && dispute.evidence.length > 0 && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">{t('evidence')}</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {dispute.evidence.map((img, idx) => (
-                    <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-gray-200">
-                      <img src={getDisplayImageUrl(img)} alt={t('evidenceAlt', { n: idx + 1 })} className="w-full h-full object-cover" />
+            {orderDisputes.length === 0 && (
+              <>
+                <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700">{t('disputeSummary')}</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 shrink-0">{t('reasonLabel')}</span>
+                      <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.reason)}</span>
                     </div>
-                  ))}
+                    {showRequestedActionSummary && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 shrink-0">{t('requestedAction')}</span>
+                      <span className="text-gray-900 font-medium text-right">{labelDisputeStoredValue(lang, dispute.action)}</span>
+                    </div>
+                    )}
+                  </div>
+                  {dispute.description && (
+                    <div className="pt-3 border-t border-gray-100">
+                      <p className="text-sm text-gray-700 leading-relaxed">{dispute.description}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
+                {dispute.evidence && dispute.evidence.length > 0 && (
+                  <div className="p-4 border border-gray-200 rounded-lg">
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">{t('evidence')}</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {dispute.evidence.map((img, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setViewImage(getDisplayImageUrl(img))}
+                          className="aspect-square rounded-lg overflow-hidden bg-gray-200"
+                        >
+                          <img src={getDisplayImageUrl(img)} alt={t('evidenceAlt', { n: idx + 1 })} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {dispute.status === 'OPEN' && (
@@ -560,29 +689,19 @@ export const Dispute: React.FC = () => {
                 </p>
               </div>
             )}
+
+            {showResolveButton && (
+              <button
+                onClick={() => void handleResolve()}
+                className="w-full px-4 py-3 text-white rounded-lg font-medium"
+                style={{ backgroundColor: '#00A8A3' }}
+              >
+                {t('markResolved')}
+              </button>
+            )}
           </>
         )}
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
-        {!dispute && order && !viewOtherParty ? (
-          <button
-            onClick={handleSubmit}
-            disabled={!reason || (!isSellerOpening && !action) || !description || uploadingEvidence}
-            className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-            style={reason && (isSellerOpening || action) && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
-          >
-            {uploadingEvidence ? t('uploading') : t('submitDispute')}
-          </button>
-        ) : dispute && (dispute.status === 'OPEN' || dispute.status === 'IN_REVIEW') && isDisputeOpener ? (
-          <button
-            onClick={() => void handleResolve()}
-            className="w-full px-4 py-3 text-white rounded-lg font-medium"
-            style={{ backgroundColor: '#00A8A3' }}
-          >
-            {t('markResolved')}
-          </button>
-        ) : dispute ? (
+        {showBackToOrders && (
           <button
             onClick={() => navigate('/my/orders')}
             className="w-full px-4 py-3 text-white rounded-lg font-medium"
@@ -590,8 +709,22 @@ export const Dispute: React.FC = () => {
           >
             {t('backToOrders')}
           </button>
-        ) : null}
+        )}
       </div>
+
+      {showSubmitBar && (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
+        <button
+          onClick={handleSubmit}
+          disabled={!reason || (!isSellerOpening && !action) || !description || uploadingEvidence}
+          className="w-full px-4 py-3 text-white rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+          style={reason && (isSellerOpening || action) && description && !uploadingEvidence ? { backgroundColor: '#EF4444' } : undefined}
+        >
+          {uploadingEvidence ? t('uploading') : t('submitDispute')}
+        </button>
+      </div>
+      )}
+      <ImageLightbox src={viewImage} onClose={() => setViewImage(null)} alt={t('evidence')} />
     </div>
   );
 };

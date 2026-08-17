@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { saveRegion } from '@/utils/regionStorage';
+import { ModalShell } from '@/components/common/ModalShell';
+import { hasLocationConsent, saveRegion, setLocationConsent } from '@/utils/regionStorage';
 import { detectLocation } from '@/utils/geoLocation';
 import { useLanguage } from '@/hooks/useLanguage';
 
@@ -12,6 +13,7 @@ export const RegionSelect: React.FC = () => {
   const [autoDetectLoading, setAutoDetectLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoDetectError, setAutoDetectError] = useState<string | null>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
 
   const handleApplyCustom = async () => {
     const value = customRegionInput.trim();
@@ -26,7 +28,7 @@ export const RegionSelect: React.FC = () => {
     setTimeout(() => navigate(-1), 100);
   };
 
-  const handleAutoDetect = async () => {
+  const runAutoDetect = async () => {
     setAutoDetectError(null);
     setAutoDetectLoading(true);
     try {
@@ -46,6 +48,22 @@ export const RegionSelect: React.FC = () => {
     } finally {
       setAutoDetectLoading(false);
     }
+  };
+
+  const handleAutoDetect = () => {
+    if (autoDetectLoading) return;
+    if (!hasLocationConsent()) {
+      setAutoDetectError(null);
+      setConsentOpen(true);
+      return;
+    }
+    void runAutoDetect();
+  };
+
+  const handleConsentAgree = () => {
+    setLocationConsent();
+    setConsentOpen(false);
+    void runAutoDetect();
   };
 
   return (
@@ -125,6 +143,52 @@ export const RegionSelect: React.FC = () => {
           </p>
         </div>
       </div>
+
+      <ModalShell
+        open={consentOpen}
+        onClose={() => setConsentOpen(false)}
+        labelledBy="location-consent-title"
+      >
+        <div className="p-4">
+          <div className="flex flex-col items-center text-center">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+              style={{ backgroundColor: 'rgba(0,168,163,0.12)' }}
+            >
+              <svg className="w-7 h-7" fill="none" stroke="#00A8A3" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h2 id="location-consent-title" className="text-lg font-bold text-gray-900 mb-1">
+              {t('locationConsentTitle')}
+            </h2>
+            <p className="text-sm text-gray-600">{t('locationConsentBody')}</p>
+          </div>
+
+          <p className="mt-3 px-2 py-2 bg-gray-50 rounded-lg text-[11px] leading-4 text-gray-500 text-center whitespace-nowrap">
+            {t('locationConsentNote')}
+          </p>
+
+          <div className="flex gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => setConsentOpen(false)}
+              className="flex-1 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              {t('locationConsentCancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleConsentAgree}
+              className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg hover:opacity-90"
+              style={{ backgroundColor: '#00A8A3' }}
+            >
+              {t('locationConsentAgree')}
+            </button>
+          </div>
+        </div>
+      </ModalShell>
     </div>
   );
 };

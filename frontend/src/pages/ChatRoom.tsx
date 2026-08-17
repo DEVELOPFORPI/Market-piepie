@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import type { ChatRoom as ChatRoomType } from '@/types';
 import {
@@ -15,7 +15,15 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
 import { getProductById } from '@/utils/productStorage';
-import { getDisputesByOrderId } from '@/utils/disputeStorage';
+import {
+  disputeMatchesChat,
+  fetchProductHasOpenBuyerDisputeOnOtherTrade,
+  getDisputes,
+  getDisputesByOrderId,
+  hasHomeVisibleDisputeOnOtherTrade,
+  hasResolvedDisputeOnOrder,
+} from '@/utils/disputeStorage';
+import { syncDisputesFromDB } from '@/utils/dbSync';
 import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
@@ -50,7 +58,7 @@ const DISPUTE_ELIGIBLE = new Set<OrderStatus>([
   ORDER_STATUS_VALUE.DISPUTE,
 ]);
 
-const NEAR_BOTTOM_PX = 80;
+const NEAR_BOTTOM_PX = 120;
 
 /** Price-offer accept/decline needs order rows in local cache (often missing until DB sync). */
 async function syncChatOfferOrders(roomId: string, extraOrderId?: string | null): Promise<void> {
@@ -71,13 +79,11 @@ function findFirstUnreadIndex(
   lastReadAt: string | undefined,
   myId: string | undefined,
 ): number {
-  if (lastReadAt) {
-    return msgs.findIndex((m) => m.timestamp > lastReadAt);
-  }
-  if (myId) {
-    return msgs.findIndex((m) => m.senderId !== myId);
-  }
-  return msgs.length > 0 ? 0 : -1;
+  return msgs.findIndex((m) => {
+    if (myId && m.senderId === myId) return false;
+    if (lastReadAt) return m.timestamp > lastReadAt;
+    return true;
+  });
 }
 
 /**
@@ -199,27 +205,40 @@ function ChatActionChipRow({ chips }: { chips: ChatChipAction[] }) {
   );
 }
 
+function hasResolvedDisputeForChat(room: ChatRoomType | null, order: Order | null): boolean {
+  if (order && hasResolvedDisputeOnOrder(order.id)) return true;
+  if (room?.order?.id && hasResolvedDisputeOnOrder(room.order.id)) return true;
+  return getDisputes().some((d) => d.status === 'RESOLVED' && disputeMatchesChat(d, room, order));
+}
+
+function openDisputesForChat(room: ChatRoomType | null, order: Order | null) {
+  return getDisputes().filter((d) => d.status !== 'RESOLVED' && disputeMatchesChat(d, room, order));
+}
+
 function buildOrderDisputeBannerRows(
-  order: Order,
+  order: Order | null,
+  room: ChatRoomType | null,
   t: (key: AppMessageKey, vars?: Record<string, string | number>) => string,
 ): { label: string; to: string }[] {
   const myId = getCurrentUserId();
   if (!myId) return [];
-  const open = getDisputesByOrderId(order.id).filter((d) => d.status !== 'RESOLVED');
+  const open = openDisputesForChat(room, order);
+  const fallbackOrderId = open[0]?.orderId || order?.id || room?.order?.id;
+  if (!fallbackOrderId) return [];
   if (open.length === 0) {
-    return [{ label: t('bannerDisputeGeneric'), to: `/dispute/${order.id}` }];
+    return [];
   }
   const myDispute = open.find((d) => d.openedByUserId === myId);
   const theirDispute = open.find((d) => d.openedByUserId && d.openedByUserId !== myId);
   const rows: { label: string; to: string }[] = [];
   if (myDispute) {
-    rows.push({ label: t('bannerYourDispute'), to: `/dispute/${order.id}` });
+    rows.push({ label: t('bannerYourDispute'), to: `/dispute/${myDispute.orderId}` });
   }
   if (theirDispute) {
-    rows.push({ label: t('bannerTheirDispute'), to: `/dispute/${order.id}?view=other` });
+    rows.push({ label: t('bannerTheirDispute'), to: `/dispute/${theirDispute.orderId}?view=other` });
   }
   if (rows.length === 0) {
-    rows.push({ label: t('bannerDisputeGeneric'), to: `/dispute/${order.id}` });
+    rows.push({ label: t('bannerDisputeGeneric'), to: `/dispute/${fallbackOrderId}` });
   }
   return rows;
 }
@@ -250,10 +269,15 @@ export const ChatRoom: React.FC = () => {
   const [showMeetupStartedPopup, setShowMeetupStartedPopup] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [ordersRevision, setOrdersRevision] = useState(0);
+  const [listingHeldByOtherDispute, setListingHeldByOtherDispute] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
   const prevMessageCountRef = useRef(0);
+  /** Force-stick after I send, even if I had scrolled up */
+  const pinToBottomRef = useRef(false);
+  /** True while the viewport is already at/near the latest message */
+  const stickToBottomRef = useRef(true);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   /** Message ids for which we already showed the "meetup started" popup */
@@ -279,12 +303,16 @@ export const ChatRoom: React.FC = () => {
   useEffect(() => {
     initialScrollDoneRef.current = false;
     prevMessageCountRef.current = 0;
+    pinToBottomRef.current = false;
+    stickToBottomRef.current = true;
     setNewMessageCount(0);
     setRoom(roomId ? getChatRoom(roomId) : null);
     deletedProductPopupShownRef.current = false;
     shownMeetupPopupIdsRef.current = new Set();
     knownMessageIdsRef.current = new Set();
     initialMessageSeedDoneRef.current = false;
+    const uid = getCurrentUserId();
+    if (uid) void syncDisputesFromDB(uid);
   }, [roomId]);
 
   // WebSocket: connect, join room, listen for messages + read receipts
@@ -557,20 +585,22 @@ export const ChatRoom: React.FC = () => {
     }
     if (room?.order?.id) {
       const o = getOrderById(room.order.id);
-      if (o) return o;
+      if (o && getDisputesByOrderId(o.id).some((d) => d.status !== 'RESOLVED')) return o;
     }
-    if (room?.order) return room.order;
     if (!room?.product?.id) return null;
     const myOrders = getOrders().filter((o) => o.product.id === room.product!.id);
     const isActiveOrder = (o: import('@/types').Order) =>
       o.status !== ORDER_STATUS_VALUE.COMPLETE &&
-      o.status !== ORDER_STATUS_VALUE.DISPUTE &&
       !(o.buyerCompleted && o.sellerCompleted);
 
     if (room.buyerId && room.sellerId) {
       const forPair = myOrders.filter(
         (o) => o.buyer.id === room.buyerId && o.seller.id === room.sellerId
       );
+      const disputed = forPair.find((o) =>
+        getDisputesByOrderId(o.id).some((d) => d.status !== 'RESOLVED'),
+      );
+      if (disputed) return disputed;
       const activeForPair = forPair.filter(isActiveOrder);
       if (activeForPair.length > 0) {
         const withMeetup = activeForPair.find(
@@ -658,6 +688,20 @@ export const ChatRoom: React.FC = () => {
     return DISPUTE_ELIGIBLE.has(order.status);
   };
   const disputeEnabled = canOpenDispute(currentOrder);
+  const openDisputesForOrder = openDisputesForChat(room, currentOrder);
+  const myOpenDispute = openDisputesForOrder.find((d) => d.openedByUserId === userId);
+  const hasOpenDisputeOnOrder = openDisputesForOrder.length > 0;
+  /** Resolved once = closed for good; only viewing an already open dispute stays available. */
+  const disputeSettled = !hasOpenDisputeOnOrder && hasResolvedDisputeForChat(room, currentOrder);
+  // Chip is only my dispute. The header banner already links to the other party's case.
+  const disputeChipLabel = myOpenDispute ? t('viewDispute') : t('openDispute');
+  const disputeChipTo = myOpenDispute
+    ? `/dispute/${myOpenDispute.orderId}`
+    : currentOrder
+      ? `/dispute/${currentOrder.id}`
+      : openDisputesForOrder[0]
+        ? `/dispute/${openDisputesForOrder[0].orderId}`
+        : '';
   const scheduleMeetupEnabled = (() => {
     if (currentOrder?.status === ORDER_STATUS_VALUE.COMPLETE) return false;
     if (currentOrder?.buyerCompleted && currentOrder?.sellerCompleted) return false;
@@ -673,6 +717,7 @@ export const ChatRoom: React.FC = () => {
   const canOfferPrice = !!(
     !isSoldToOtherParty
     && !isTradeCompleteForThisChat
+    && !hasOpenDisputeOnOrder
     && productForOffer
     && productForOffer.allowOffer !== false
     && !productForOffer.isFreeShare
@@ -684,6 +729,9 @@ export const ChatRoom: React.FC = () => {
     (currentOrder && (currentOrder.proposedPrice === 0 || currentOrder?.product?.isFreeShare || currentOrder?.product?.price === 0)) ||
     (room?.product && (room.product.isFreeShare || room.product.price === 0))
   );
+  // Fresh chat / pending offer: nothing to dispute yet. Show only when a trade
+  // has started (or I already have a case to view).
+  const showDisputeChip = !isShareOrder && !disputeSettled && (!!myOpenDispute || disputeEnabled);
 
   const handleSellerStartMeetup = () => {
     if (!room?.product) {
@@ -723,27 +771,44 @@ export const ChatRoom: React.FC = () => {
   const buyerChips: ChatChipAction[] = (() => {
     if (!isBuyer || !room?.product || isProductDeleted || roomEnded) return [];
     if (isSoldToOtherParty) return [];
+    if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
       return completedTradeReviewChips(currentOrder.id);
     }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
-      return canOfferPrice
-        ? [{ key: 'offer', label: t('sendOffer'), onClick: () => navigate(`/offer/${room.product!.id}`), primary: true }]
-        : [];
+      const chips: ChatChipAction[] = [];
+      if (canOfferPrice) {
+        chips.push({
+          key: 'offer',
+          label: t('sendOffer'),
+          onClick: () => navigate(`/offer/${room.product!.id}`),
+          primary: true,
+        });
+      }
+      if (showDisputeChip && currentOrder) {
+        chips.push({
+          key: 'dispute',
+          label: disputeChipLabel,
+          onClick: () => navigate(disputeChipTo),
+          disabled: !disputeEnabled,
+        });
+      }
+      return chips;
     }
-    const chips: ChatChipAction[] = [
-      {
+    const chips: ChatChipAction[] = [];
+    if (!hasOpenDisputeOnOrder) {
+      chips.push({
         key: 'receive',
         label: t('confirmReceipt'),
         onClick: () => navigate(`/receive/${currentOrder.id}`),
         disabled: !receiveEnabled,
-      },
-    ];
-    if (!isShareOrder) {
+      });
+    }
+    if (showDisputeChip) {
       chips.push({
         key: 'dispute',
-        label: t('openDispute'),
-        onClick: () => navigate(`/dispute/${currentOrder.id}`),
+        label: disputeChipLabel,
+        onClick: () => navigate(disputeChipTo),
         disabled: !disputeEnabled,
       });
     }
@@ -753,54 +818,97 @@ export const ChatRoom: React.FC = () => {
   const sellerChips: ChatChipAction[] = (() => {
     if (!isSeller || !room?.product || isProductDeleted || roomEnded) return [];
     if (isSoldToOtherParty) return [];
+    if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
       return completedTradeReviewChips(currentOrder.id);
     }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
-      return [{
-        key: 'meetup',
-        label: t('scheduleMeetup'),
-        onClick: handleSellerStartMeetup,
-        disabled: !scheduleMeetupEnabled,
-      }];
+      const chips: ChatChipAction[] = [];
+      if (!hasOpenDisputeOnOrder) {
+        chips.push({
+          key: 'meetup',
+          label: t('scheduleMeetup'),
+          onClick: handleSellerStartMeetup,
+          disabled: !scheduleMeetupEnabled,
+        });
+      }
+      if (showDisputeChip && currentOrder) {
+        chips.push({
+          key: 'dispute',
+          label: disputeChipLabel,
+          onClick: () => navigate(disputeChipTo),
+          disabled: !disputeEnabled,
+        });
+      }
+      return chips;
     }
     const chips: ChatChipAction[] = [];
-    if (currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted) {
-      chips.push({
-        key: 'complete',
-        label: t('confirmComplete'),
-        primary: true,
-        onClick: () => {
-          void (async () => {
-            if (!confirm(t('confirmTradeCompletion'))) return;
-            const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
-            if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
-              void addTradeCompletedToChat(updated);
-              navigate(`/review/${currentOrder.id}`);
-            }
-            if (roomId) setRoom(getChatRoom(roomId));
-            setOrdersRevision((n) => n + 1);
-          })();
-        },
-      });
-    } else {
-      chips.push({
-        key: 'meetup',
-        label: t('scheduleMeetup'),
-        onClick: handleSellerStartMeetup,
-        disabled: !scheduleMeetupEnabled,
-      });
+    if (!hasOpenDisputeOnOrder) {
+      if (currentOrder.status === ORDER_STATUS_VALUE.RECEIVED && !currentOrder.sellerCompleted) {
+        chips.push({
+          key: 'complete',
+          label: t('confirmComplete'),
+          primary: true,
+          onClick: () => {
+            void (async () => {
+              if (!confirm(t('confirmTradeCompletion'))) return;
+              const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
+              if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
+                void addTradeCompletedToChat(updated);
+                navigate(`/review/${currentOrder.id}`);
+              }
+              if (roomId) setRoom(getChatRoom(roomId));
+              setOrdersRevision((n) => n + 1);
+            })();
+          },
+        });
+      } else {
+        chips.push({
+          key: 'meetup',
+          label: t('scheduleMeetup'),
+          onClick: handleSellerStartMeetup,
+          disabled: !scheduleMeetupEnabled,
+        });
+      }
     }
-    if (!isShareOrder) {
+    if (showDisputeChip) {
       chips.push({
         key: 'dispute',
-        label: t('openDispute'),
-        onClick: () => navigate(`/dispute/${currentOrder.id}`),
+        label: disputeChipLabel,
+        onClick: () => navigate(disputeChipTo),
         disabled: !disputeEnabled,
       });
     }
     return chips;
   })();
+
+  useEffect(() => {
+    const productId = room?.product?.id;
+    if (!productId) {
+      setListingHeldByOtherDispute(false);
+      return;
+    }
+    const opts = {
+      excludeOrderId: currentOrder?.id,
+      excludeBuyerId: room.buyerId,
+      excludeSellerId: room.sellerId,
+    };
+    const readLocal = () => {
+      setListingHeldByOtherDispute(hasHomeVisibleDisputeOnOtherTrade(productId, opts));
+    };
+    readLocal();
+    let cancelled = false;
+    void fetchProductHasOpenBuyerDisputeOnOtherTrade(productId, opts).then((open) => {
+      if (cancelled) return;
+      if (open) setListingHeldByOtherDispute(true);
+      else readLocal();
+    });
+    window.addEventListener('disputesChanged', readLocal);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('disputesChanged', readLocal);
+    };
+  }, [room?.product?.id, room?.buyerId, room?.sellerId, currentOrder?.id, ordersRevision]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -857,9 +965,9 @@ export const ChatRoom: React.FC = () => {
   };
 
   const handleMessagesScroll = () => {
-    if (isNearBottom()) {
-      setNewMessageCount(0);
-    }
+    const near = isNearBottom();
+    stickToBottomRef.current = near;
+    if (near) setNewMessageCount(0);
     markReadFromViewport();
   };
 
@@ -887,7 +995,7 @@ export const ChatRoom: React.FC = () => {
     });
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!roomId) return;
 
     const count = messages.length;
@@ -895,8 +1003,15 @@ export const ChatRoom: React.FC = () => {
 
     if (!initialScrollDoneRef.current && count > 0) {
       scrollToInitialPosition(messages);
-    } else if (count > prev && initialScrollDoneRef.current) {
-      if (isNearBottom()) {
+      prevMessageCountRef.current = count;
+      return;
+    }
+
+    if (count > prev && initialScrollDoneRef.current) {
+      if (pinToBottomRef.current || stickToBottomRef.current) {
+        scrollToBottomInstant();
+        pinToBottomRef.current = false;
+        stickToBottomRef.current = true;
         setNewMessageCount(0);
         markAsRead(roomId);
         emitReadReceipt(roomId);
@@ -955,9 +1070,13 @@ export const ChatRoom: React.FC = () => {
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
 
+    pinToBottomRef.current = true;
+    stickToBottomRef.current = true;
+
     const scrollAfterSend = () => {
       requestAnimationFrame(() => {
         scrollToBottomInstant();
+        requestAnimationFrame(scrollToBottomInstant);
         markAsRead(roomId);
         emitReadReceipt(roomId);
         setRoom(getChatRoom(roomId));
@@ -1005,9 +1124,9 @@ export const ChatRoom: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col h-screen bg-white">
-      {/* Sticky header + dispute banner */}
-      <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shrink-0">
+    <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden bg-white">
+      {/* Header + dispute banner */}
+      <div className="shrink-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between px-4 py-3 h-14">
           {/* Back Button */}
           <button onClick={() => navigate(-1)} className="p-2 -ml-2">
@@ -1082,11 +1201,14 @@ export const ChatRoom: React.FC = () => {
           </div>
         </div>
 
-        {currentOrder && currentOrder.status === ORDER_STATUS_VALUE.DISPUTE && (() => {
-          const disputes = getDisputesByOrderId(currentOrder.id);
-          const isResolved =
-            disputes.length > 0 && disputes.every((dispute) => dispute.status === 'RESOLVED');
-          if (isResolved) {
+        {(() => {
+          const bannerRows = buildOrderDisputeBannerRows(currentOrder, room, t);
+          const hasOpen = bannerRows.length > 0;
+          const resolvedOnOrder = !!currentOrder
+            && !hasOpen
+            && hasResolvedDisputeOnOrder(currentOrder.id);
+          if (!hasOpen && !resolvedOnOrder) return null;
+          if (resolvedOnOrder) {
             return (
               <div className="bg-green-50 border-t border-green-200 px-4 py-2.5">
                 <div className="flex items-center gap-2">
@@ -1104,7 +1226,7 @@ export const ChatRoom: React.FC = () => {
               </div>
             );
           }
-          return buildOrderDisputeBannerRows(currentOrder, t).map((row) => (
+          return bannerRows.map((row) => (
             <div key={row.to} className="bg-red-50 border-t border-red-200 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <svg
@@ -1131,6 +1253,27 @@ export const ChatRoom: React.FC = () => {
             </div>
           ));
         })()}
+
+        {listingHeldByOtherDispute && !isTradeCompleteForThisChat && (
+          <div className="bg-red-50 border-t border-red-200 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <svg
+                className="w-4 h-4 text-red-600 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <p className="text-sm font-medium text-red-800 flex-1">{t('bannerListingOtherDispute')}</p>
+            </div>
+          </div>
+        )}
 
         {isTradeCompleteForThisChat && (
           <div className="bg-green-50 border-t border-green-200 px-4 py-2.5">
@@ -1249,10 +1392,12 @@ export const ChatRoom: React.FC = () => {
                   </p>
                 </div>
               </button>
+              {(isBuyer ? buyerChips : sellerChips).length > 0 && (
               <div className="border-t border-gray-200 pt-2">
                 {isBuyer && <ChatActionChipRow chips={buyerChips} />}
                 {isSeller && <ChatActionChipRow chips={sellerChips} />}
               </div>
+              )}
             </>
           )}
         </div>
@@ -1423,6 +1568,7 @@ export const ChatRoom: React.FC = () => {
               && offerOrder.status === ORDER_STATUS_VALUE.PENDING_OFFER
               && msg.id === actionablePriceOfferMessageId
               && !meetupBannerInfo
+              && !listingHeldByOtherDispute
               && !(
                 currentOrder
                 && currentOrder.status !== ORDER_STATUS_VALUE.PENDING_OFFER

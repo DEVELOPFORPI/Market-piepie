@@ -5,6 +5,7 @@ import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
 import { createOrder } from '@/utils/orderStorage';
+import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 
@@ -25,6 +26,12 @@ export const Offer: React.FC = () => {
         navigate(-1);
         return;
       }
+      void isListingHeldByOtherBuyerDispute(found.id).then((held) => {
+        if (held) {
+          alert(t('bannerListingOtherDispute'));
+          navigate(-1);
+        }
+      });
       setProduct(found);
       setPrice(String(found.price));
     }

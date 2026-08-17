@@ -6,6 +6,7 @@ import { addReceiptConfirmedToChat, addTradeCompletedToChat } from '@/utils/chat
 import { getCurrentUserId } from '@/utils/authStorage';
 import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/types';
 import { useLanguage } from '@/hooks/useLanguage';
+import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 
 export const ReceiveConfirm: React.FC = () => {
   const navigate = useNavigate();
@@ -41,6 +42,16 @@ export const ReceiveConfirm: React.FC = () => {
       if (o.status === ORDER_STATUS_VALUE.DISPUTE) {
         alert(t('cannotConfirmDuringDispute'));
         navigate(`/dispute/${orderId}`, { replace: true });
+        return;
+      }
+      const held = await isListingHeldByOtherBuyerDispute(o.product.id, {
+        excludeOrderId: o.id,
+        excludeBuyerId: o.buyer.id,
+        excludeSellerId: o.seller.id,
+      });
+      if (held) {
+        alert(t('bannerListingOtherDispute'));
+        navigate(-1);
         return;
       }
       const userId = getCurrentUserId();

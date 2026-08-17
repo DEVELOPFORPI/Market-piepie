@@ -854,7 +854,10 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
     messages: messages || [],
     readStatus,
     lastReadAt,
-    leftUserIds: dbRoom.leftUserIds?.length ? dbRoom.leftUserIds : local.leftUserIds,
+    leftUserIds: Array.from(new Set([
+      ...(dbRoom.leftUserIds || []),
+      ...(local.leftUserIds || []),
+    ])),
     order: dbRoom.order ?? local.order,
     otherUser: freshOther?.nickname
       ? applyProfileCacheToUser(freshOther)
@@ -1378,7 +1381,19 @@ export async function syncDisputesFromDB(userId: string): Promise<void> {
       ...(buyerRes.ok && Array.isArray(buyerRes.data) ? buyerRes.data : []),
       ...(sellerRes.ok && Array.isArray(sellerRes.data) ? sellerRes.data : []),
     ] as Record<string, unknown>[];
+    if (!buyerRes.ok && !sellerRes.ok) return;
     const byId = new Map<string, ReturnType<typeof mapDisputeFromDB>>();
+    try {
+      const localRaw = getItem('myDisputes');
+      const local = localRaw ? JSON.parse(localRaw) : [];
+      if (Array.isArray(local)) {
+        for (const d of local) {
+          if (d?.id) byId.set(String(d.id), d);
+        }
+      }
+    } catch {
+      /* keep going with DB rows */
+    }
     rows.forEach((row) => {
       const d = mapDisputeFromDB(row);
       byId.set(d.id, d);

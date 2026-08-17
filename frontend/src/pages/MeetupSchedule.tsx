@@ -7,6 +7,7 @@ import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { NOTIFY_MEETUP_CANCELED, NOTIFY_MEETUP_CONFIRMED, NOTIFY_MEETUP_UPDATED } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
+import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** 24h H:MM or HH:MM (built from English AM/PM selects) */
@@ -78,6 +79,18 @@ export const MeetupSchedule: React.FC = () => {
       setLoading(true);
       const order = await ensureOrderById(orderId);
       if (cancelled || !order) {
+        setLoading(false);
+        return;
+      }
+      const held = await isListingHeldByOtherBuyerDispute(order.product.id, {
+        excludeOrderId: order.id,
+        excludeBuyerId: order.buyer.id,
+        excludeSellerId: order.seller.id,
+      });
+      if (cancelled) return;
+      if (held) {
+        alert(t('bannerListingOtherDispute'));
+        navigate(-1);
         setLoading(false);
         return;
       }
@@ -249,7 +262,6 @@ export const MeetupSchedule: React.FC = () => {
                 className="absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0"
               />
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">{t('dateCalendarHint')}</p>
           </div>
           <div>
             <span className="block text-sm font-medium text-gray-700 mb-2" id="meetup-time-label">
@@ -297,9 +309,6 @@ export const MeetupSchedule: React.FC = () => {
                 <option value="PM">PM</option>
               </select>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
-              {time ? t('storedAs24h', { time }) : t('chooseTimeHint')}
-            </p>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { Product, PRODUCT_STATUS_VALUE, type TradeMethod } from '@/types';
 import { labelTradeMethod } from '@/locale/enUI';
 import { getMyUser } from '@/utils/profileStorage';
 import { useLanguage } from '@/hooks/useLanguage';
+import { scrollAppToTop } from '@/utils/appScroll';
 
 export const RegisterComplete: React.FC = () => {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export const RegisterComplete: React.FC = () => {
   const productId = location.state?.productId || 'new-product-123'; // Real flow: ID from API after publish
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    scrollAppToTop();
   }, []);
 
   const mockProduct: Product = {

@@ -10,7 +10,8 @@ import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { resolveDisplayNickname, resolveProfileAvatarUrl } from '@/utils/profileStorage';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
-import { syncChatRoomsFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
+import { syncChatRoomsFromDB, syncDisputesFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
+import { chatRoomHasOpenDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 
@@ -39,6 +40,7 @@ export const ChatList: React.FC = () => {
 
     window.addEventListener('chatRoomsChanged', loadRooms);
     window.addEventListener('userProfilesChanged', loadRooms);
+    window.addEventListener('disputesChanged', loadRooms);
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'all_chatrooms' || e.key === 'all_products' || e.key?.startsWith('user_profile_')) loadRooms();
     };
@@ -61,7 +63,7 @@ export const ChatList: React.FC = () => {
     let intervalId: number | undefined;
     const pullChatsFromServer = () => {
       if (!uid) return Promise.resolve();
-      return syncChatRoomsFromDB(uid).then(() => loadRooms());
+      return Promise.all([syncChatRoomsFromDB(uid), syncDisputesFromDB(uid)]).then(() => loadRooms());
     };
     if (uid) {
       syncNotificationsFromDB(uid);
@@ -77,6 +79,7 @@ export const ChatList: React.FC = () => {
     return () => {
       window.removeEventListener('chatRoomsChanged', loadRooms);
       window.removeEventListener('userProfilesChanged', loadRooms);
+      window.removeEventListener('disputesChanged', loadRooms);
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', onVisibility);
       if (intervalId != null) window.clearInterval(intervalId);
@@ -119,10 +122,11 @@ export const ChatList: React.FC = () => {
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
     if (!confirm(t('leaveNChatsConfirm', { n: selectedIds.size }))) return;
-    selectedIds.forEach((id) => { leaveChatRoom(id); });
-    loadRooms();
+    const ids = Array.from(selectedIds);
+    setRooms((prev) => prev.filter((r) => !ids.includes(r.id)));
     setSelectedIds(new Set());
     setDeleteMode(false);
+    void Promise.all(ids.map((id) => leaveChatRoom(id))).then(() => loadRooms());
   };
 
   const handleTouchStart = useCallback((roomId: string, e: React.TouchEvent) => {
@@ -162,6 +166,7 @@ export const ChatList: React.FC = () => {
   const handleLeaveRoom = (roomId: string) => {
     setContextMenu(null);
     if (confirm(t('leaveChatConfirm'))) {
+      setRooms((prev) => prev.filter((r) => r.id !== roomId));
       void leaveChatRoom(roomId).then(() => loadRooms());
     }
   };
@@ -220,6 +225,7 @@ export const ChatList: React.FC = () => {
           const isRead = room.readStatus ? room.readStatus[userId || ''] !== false : (room.isRead ?? true);
           const productDeleted = room.product?.id ? !getProductById(room.product.id) : false;
           const roomEnded = isChatRoomEnded(room);
+          const inDispute = !roomEnded && chatRoomHasOpenDispute(room);
           const muted = productDeleted || roomEnded;
           const selected = selectedIds.has(room.id);
 
@@ -309,22 +315,28 @@ export const ChatList: React.FC = () => {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`text-sm font-bold truncate ${muted ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <span className={`text-sm font-bold truncate min-w-0 ${muted ? 'text-gray-400' : 'text-gray-900'}`}>
                       {resolveDisplayNickname(other.id, other.nickname)}
                     </span>
-                    <span className="text-xs text-gray-400 flex-shrink-0">
-                      {room.product?.region ? (
-                        <>
-                          <LocalizedRegionText region={room.product.region} />
-                          {' · '}
-                        </>
-                      ) : null}
+                    {inDispute && (
+                      <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">
+                        {t('inDispute')}
+                      </span>
+                    )}
+                    {room.product?.region ? (
+                      <span className="ml-auto max-w-[42%] text-xs text-gray-400 truncate shrink-0">
+                        <LocalizedRegionText region={room.product.region} />
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className={`text-sm truncate min-w-0 flex-1 ${muted ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {room.lastMessage ? displayChatMessageContent(room.lastMessage) : t('sayHello')}
+                    </p>
+                    <span className="text-xs text-gray-400 shrink-0">
                       {relativeTimeShort(room.lastMessageTime)}
                     </span>
                   </div>
-                  <p className={`text-sm truncate ${muted ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {room.lastMessage ? displayChatMessageContent(room.lastMessage) : t('sayHello')}
-                  </p>
                 </div>
 
                 {!deleteMode && !isRead && !roomEnded && (

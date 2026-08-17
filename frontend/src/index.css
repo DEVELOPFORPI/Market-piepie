@@ -71,6 +71,32 @@ body {
   }
 }
 
+/* Chat (and other fill pages): occupy the leftover column under in-flow banners.
+   Must beat `.pt-stage { min-height: 100vh }` or the room is taller than the
+   remaining viewport — header sits under the banners and a gap appears below the input. */
+.pt-stage.pt-stage--fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  height: 100%;
+  min-height: 0;
+}
+
+.pt-stage--fill .pt-layer {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+  height: auto;
+}
+
+.pt-stage--fill .pt-layer > * {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
 .pt-stage.pt-rtl {
   --pt-in-x: -22%;
   --pt-back-x: 10%;

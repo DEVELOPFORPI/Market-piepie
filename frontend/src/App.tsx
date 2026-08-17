@@ -75,6 +75,7 @@ import { syncActivityBadgesFromStats, syncPurchasedBadgesFromDB } from './utils/
 import { syncAppPricesFromDB } from './utils/appPrices';
 import { pruneInvalidDisplayActivityBadge } from './utils/profileStorage';
 import { isAdminVerified } from './utils/adminAccessStorage';
+import { APP_SCROLL_ID, scrollAppToTop } from './utils/appScroll';
 
 const HIDE_NAV_PATHS = [
   '/register',
@@ -145,7 +146,7 @@ function ScrollToTop() {
   useEffect(() => {
     // Chat room manages its own scroll (latest messages at bottom).
     if (/^\/chat\/[^/]+$/.test(location.pathname)) return;
-    window.scrollTo(0, 0);
+    scrollAppToTop();
   }, [location.pathname, location.search]);
 
   return null;
@@ -354,20 +355,25 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
   const uid = getCurrentUserId();
   const showUserBar =
     isTestLoginEnabled() && loggedIn && isTestPresetUser(uid) && !isPostDetailPage;
-  const disputeBannerTop = showUserBar ? 28 : 0;
-  const hasDisputeBanner = loggedIn && myOpenDisputes.some((d) => !dismissedDisputeOrderIds.has(d.orderId));
-  const mainPaddingTop = hasDisputeBanner ? disputeBannerTop + 28 : showUserBar ? 28 : 0;
+  const isChatRoomPage = /^\/chat\/[^/]+$/.test(location.pathname);
 
   return (
-    <div className="App">
+    <div className="App flex flex-col h-dvh overflow-hidden">
       <ScrollToTop />
       {/* Test preset user bar (hidden on post detail) */}
       {showUserBar && (
         <div
-          className="fixed top-0 left-0 right-0 z-[9999] text-center text-xs py-1 text-white font-medium"
-          style={{ backgroundColor: uid === 'user1' ? '#00A8A3' : '#f59e0b' }}
+          className="shrink-0 text-center text-xs py-1 text-white font-medium"
+          style={{
+            backgroundColor:
+              uid === 'user1' ? '#00A8A3' : uid === 'user2' ? '#f59e0b' : '#6366f1',
+          }}
         >
-          {uid === 'user1' ? 'Seller Pingoo (user1)' : 'Buyer Pororo (user2)'}
+          {uid === 'user1'
+            ? 'Seller Pingoo (user1)'
+            : uid === 'user2'
+              ? 'Buyer Pororo (user2)'
+              : 'Buyer Crong (user3)'}
           <button
             onClick={() => {
               sessionStorage.clear();
@@ -385,9 +391,8 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
         if (!loggedIn || !firstUndismissed) return null;
         return (
           <div
-            className="fixed left-0 right-0 z-[9998] flex items-center justify-center gap-2 py-2 px-3 text-white text-xs font-medium shadow-md"
+            className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-white text-xs font-medium shadow-md"
             style={{
-              top: disputeBannerTop,
               backgroundColor: '#dc2626',
             }}
           >
@@ -412,8 +417,11 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           </div>
         );
       })()}
-      <div style={{ paddingTop: mainPaddingTop }}>
-        <PageTransition>
+      <div
+        id={APP_SCROLL_ID}
+        className={`flex-1 min-h-0 flex flex-col ${isChatRoomPage ? 'overflow-hidden' : 'overflow-y-auto'}`}
+      >
+        <PageTransition fill={isChatRoomPage}>
         <Routes>
           <Route
             path="/login"

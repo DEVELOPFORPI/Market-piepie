@@ -30,7 +30,8 @@ export type ChatMessageKey =
   | 'msgAcceptOffer'
   | 'msgRejectOffer'
   | 'msgSentPhoto'
-  | 'msgUserLeft';
+  | 'msgUserLeft'
+  | 'inDispute';
 
 const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
   en: {
@@ -63,6 +64,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'The offer of {amount} Pi was declined.',
     msgSentPhoto: 'Sent a photo',
     msgUserLeft: '{name} left the chat.',
+    inDispute: 'In dispute',
   },
   ko: {
     chatsTitle: '채팅',
@@ -94,6 +96,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi 제안을 거절했습니다.',
     msgSentPhoto: '사진을 보냈습니다',
     msgUserLeft: '{name} 님이 채팅방을 나갔습니다.',
+    inDispute: '분쟁중',
   },
   zh: {
     chatsTitle: '聊天',
@@ -125,6 +128,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '已拒绝 {amount} Pi 的报价。',
     msgSentPhoto: '发送了照片',
     msgUserLeft: '{name} 已离开聊天。',
+    inDispute: '争议中',
   },
   ja: {
     chatsTitle: 'チャット',
@@ -156,6 +160,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi のオファーを拒否しました。',
     msgSentPhoto: '写真を送りました',
     msgUserLeft: '{name} がチャットを退出しました。',
+    inDispute: '紛争中',
   },
   es: {
     chatsTitle: 'Chats',
@@ -187,6 +192,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Se rechazó la oferta de {amount} Pi.',
     msgSentPhoto: 'Envió una foto',
     msgUserLeft: '{name} salió del chat.',
+    inDispute: 'En disputa',
   },
   pt: {
     chatsTitle: 'Chats',
@@ -218,6 +224,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'A oferta de {amount} Pi foi recusada.',
     msgSentPhoto: 'Enviou uma foto',
     msgUserLeft: '{name} saiu do chat.',
+    inDispute: 'Em disputa',
   },
   fr: {
     chatsTitle: 'Chats',
@@ -249,6 +256,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'L’offre de {amount} Pi a été refusée.',
     msgSentPhoto: 'A envoyé une photo',
     msgUserLeft: '{name} a quitté le chat.',
+    inDispute: 'En litige',
   },
   de: {
     chatsTitle: 'Chats',
@@ -280,6 +288,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Das Angebot über {amount} Pi wurde abgelehnt.',
     msgSentPhoto: 'Foto gesendet',
     msgUserLeft: '{name} hat den Chat verlassen.',
+    inDispute: 'Im Streit',
   },
   id: {
     chatsTitle: 'Chat',
@@ -311,6 +320,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Penawaran {amount} Pi ditolak.',
     msgSentPhoto: 'Mengirim foto',
     msgUserLeft: '{name} meninggalkan chat.',
+    inDispute: 'Sengketa',
   },
   vi: {
     chatsTitle: 'Chat',
@@ -342,6 +352,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Đã từ chối ưu đãi {amount} Pi.',
     msgSentPhoto: 'Đã gửi ảnh',
     msgUserLeft: '{name} đã rời chat.',
+    inDispute: 'Tranh chấp',
   },
   th: {
     chatsTitle: 'แชท',
@@ -373,6 +384,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'ปฏิเสธข้อเสนอ {amount} Pi แล้ว',
     msgSentPhoto: 'ส่งรูปแล้ว',
     msgUserLeft: '{name} ออกจากแชทแล้ว',
+    inDispute: 'ข้อพิพาท',
   },
   hi: {
     chatsTitle: 'चैट',
@@ -404,6 +416,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi का ऑफ़र अस्वीकार हुआ।',
     msgSentPhoto: 'फ़ोटो भेजी',
     msgUserLeft: '{name} ने चैट छोड़ी।',
+    inDispute: 'विवाद में',
   },
   ar: {
     chatsTitle: 'الدردشات',
@@ -435,6 +448,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'رُفض عرض {amount} Pi.',
     msgSentPhoto: 'أرسل صورة',
     msgUserLeft: 'غادر {name} الدردشة.',
+    inDispute: 'قيد النزاع',
   },
   ru: {
     chatsTitle: 'Чаты',
@@ -466,6 +480,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Предложение {amount} Pi отклонено.',
     msgSentPhoto: 'Отправлено фото',
     msgUserLeft: '{name} покинул(а) чат.',
+    inDispute: 'Спор',
   },
   tr: {
     chatsTitle: 'Sohbetler',
@@ -497,6 +512,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi teklifi reddedildi.',
     msgSentPhoto: 'Fotoğraf gönderdi',
     msgUserLeft: '{name} sohbetten ayrıldı.',
+    inDispute: 'Anlaşmazlıkta',
   },
   it: {
     chatsTitle: 'Chat',
@@ -528,6 +544,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'L’offerta di {amount} Pi è stata rifiutata.',
     msgSentPhoto: 'Ha inviato una foto',
     msgUserLeft: '{name} ha lasciato la chat.',
+    inDispute: 'In controversia',
   },
   pl: {
     chatsTitle: 'Czaty',
@@ -559,6 +576,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Oferta {amount} Pi odrzucona.',
     msgSentPhoto: 'Wysłano zdjęcie',
     msgUserLeft: '{name} opuścił(a) czat.',
+    inDispute: 'W sporze',
   },
   nl: {
     chatsTitle: 'Chats',
@@ -590,6 +608,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Het bod van {amount} Pi is geweigerd.',
     msgSentPhoto: 'Foto gestuurd',
     msgUserLeft: '{name} heeft de chat verlaten.',
+    inDispute: 'In geschil',
   },
   fil: {
     chatsTitle: 'Mga chat',
@@ -621,6 +640,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Tinanggihan ang {amount} Pi na offer.',
     msgSentPhoto: 'Nagpadala ng larawan',
     msgUserLeft: 'Umalis si {name} sa chat.',
+    inDispute: 'May dispute',
   },
   uk: {
     chatsTitle: 'Чати',
@@ -652,6 +672,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Пропозицію {amount} Pi відхилено.',
     msgSentPhoto: 'Надіслано фото',
     msgUserLeft: '{name} покинув(ла) чат.',
+    inDispute: 'У спорі',
   },
   bn: {
     chatsTitle: 'চ্যাট',
@@ -683,6 +704,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi অফার প্রত্যাখ্যাত।',
     msgSentPhoto: 'ছবি পাঠানো হয়েছে',
     msgUserLeft: '{name} চ্যাট ছেড়েছেন।',
+    inDispute: 'বিবাদে',
   },
   ms: {
     chatsTitle: 'Sembang',
@@ -714,6 +736,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Tawaran {amount} Pi ditolak.',
     msgSentPhoto: 'Menghantar foto',
     msgUserLeft: '{name} meninggalkan sembang.',
+    inDispute: 'Dalam pertikaian',
   },
   sw: {
     chatsTitle: 'Gumzo',
@@ -745,6 +768,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'Ofa ya {amount} Pi imekataliwa.',
     msgSentPhoto: 'Imetuma picha',
     msgUserLeft: '{name} ametoka gumzoni.',
+    inDispute: 'Katika mzozo',
   },
   fa: {
     chatsTitle: 'گفتگوها',
@@ -776,6 +800,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: 'پیشنهاد {amount} Pi رد شد.',
     msgSentPhoto: 'عکس فرستاد',
     msgUserLeft: '{name} گفتگو را ترک کرد.',
+    inDispute: 'در اختلاف',
   },
   ur: {
     chatsTitle: 'چیٹس',
@@ -807,6 +832,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgRejectOffer: '{amount} Pi کی پیشکش مسترد ہوئی۔',
     msgSentPhoto: 'تصویر بھیجی',
     msgUserLeft: '{name} نے چیٹ چھوڑ دی۔',
+    inDispute: 'تنازعے میں',
   },
 };
 

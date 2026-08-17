@@ -60,6 +60,11 @@ const REGION_KEYS = new Set<string>([
   'regionHint',
   'saveRegionFailed',
   'detectLocationFailed',
+  'locationConsentTitle',
+  'locationConsentBody',
+  'locationConsentNote',
+  'locationConsentAgree',
+  'locationConsentCancel',
 ]);
 
 const COMMON_KEYS = new Set<string>([
@@ -183,6 +188,7 @@ const CHAT_KEYS = new Set<string>([
   'noChatsYet',
   'listingUnavailable',
   'ended',
+  'inDispute',
   'leaveChat',
   'leaveChatConfirm',
   'leaveNChats',
@@ -210,6 +216,7 @@ const CHAT_ROOM_KEYS = new Set<string>([
   'sendOffer',
   'confirmReceipt',
   'openDispute',
+  'viewDispute',
   'scheduleMeetup',
   'confirmComplete',
   'confirmTradeCompletion',
@@ -245,6 +252,7 @@ const CHAT_ROOM_KEYS = new Set<string>([
   'unreadFromHere',
   'bannerTradeComplete',
   'bannerListingSold',
+  'bannerListingOtherDispute',
   'bannerYourDispute',
   'bannerTheirDispute',
   'bannerDisputeGeneric',
@@ -581,6 +589,7 @@ const ORDER_DETAIL_KEYS = new Set<string>([
   'tlFreeShareRequest',
   'tlPurchaseOffer',
   'tlInPersonFreeShare',
+  'tlChatStarted',
   'tlInPersonTradeAt',
   'tlMeetupConfirmed',
   'tlBuyerAcceptedMeetup',
@@ -597,6 +606,11 @@ const ORDER_DETAIL_KEYS = new Set<string>([
   'tlMarkedShipped',
   'tlMarkedDelivered',
   'tlDisputeOpened',
+  'tlDisputeResolved',
+  'tlBuyerDisputeOpened',
+  'tlSellerDisputeOpened',
+  'tlBuyerDisputeResolved',
+  'tlSellerDisputeResolved',
 ]);
 
 const DISPUTE_PAGE_KEYS = new Set<string>([
@@ -605,6 +619,8 @@ const DISPUTE_PAGE_KEYS = new Set<string>([
   'viewOtherReadonly',
   'otherParty',
   'statusHeading',
+  'yourDispute',
+  'theirDispute',
   'filedAt',
   'resolvedAt',
   'orderSection',

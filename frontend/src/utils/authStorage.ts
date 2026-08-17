@@ -177,9 +177,9 @@ export const clearPersistedPiUser = (): void => {
   }
 };
 
-/** Test bar: user1 / user2 presets only */
+/** Test bar: user1 / user2 / user3 presets only */
 export const isTestPresetUser = (userId: string | null): boolean => {
-  return userId === 'user1' || userId === 'user2';
+  return userId === 'user1' || userId === 'user2' || userId === 'user3';
 };
 
 /** 현재 유저가 guest인지 (Pi 인증 안 한 유저) */
@@ -212,6 +212,12 @@ export const USER_PRESETS: Record<string, {
     nickname: 'Buyer Pororo',
     profileImage: '/default-avatar.jpg',
     bio: 'Looking for great listings!',
+    activityRegion: '',
+  },
+  user3: {
+    nickname: 'Buyer Crong',
+    profileImage: '/default-avatar.jpg',
+    bio: 'Checking listings nearby.',
     activityRegion: '',
   },
 };

@@ -265,6 +265,28 @@ export const clearAllOrders = (): void => {
 
 export type ReceiptCondition = 'good' | 'normal' | 'bad';
 
+/** Append a timeline row without changing order status. */
+export const appendOrderTimeline = async (
+  orderId: string,
+  description: string,
+  type?: string,
+): Promise<boolean> => {
+  const orders = getAllOrders();
+  const order = orders.find((o) => o.id === orderId);
+  if (!order) return false;
+  const timelineEvent = {
+    id: nextTimelineId(),
+    type: type || order.status,
+    timestamp: new Date().toISOString(),
+    description,
+  };
+  await syncOrderStatusToDB(orderId, order.status, timelineEvent);
+  order.timeline.push(timelineEvent);
+  setOrdersWithQuotaRetry(orders, orderId);
+  window.dispatchEvent(new Event('ordersChanged'));
+  return true;
+};
+
 export const updateOrderStatus = async (
   orderId: string,
   status: OrderStatus,
@@ -506,7 +528,9 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
     timestamp: new Date().toISOString(),
     description: 'Meetup canceled',
   };
-  const ok = await syncOrderStatusToDB(orderId, ORDER_STATUS_VALUE.ACCEPTED, timelineEvent, {
+  const keepDispute = order.status === ORDER_STATUS_VALUE.DISPUTE;
+  const nextStatus = keepDispute ? ORDER_STATUS_VALUE.DISPUTE : ORDER_STATUS_VALUE.ACCEPTED;
+  const ok = await syncOrderStatusToDB(orderId, nextStatus, timelineEvent, {
     meetup_location: '',
     meetup_date: '',
     meetup_time: '',
@@ -518,7 +542,7 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
   order.meetupDate = undefined;
   order.meetupTime = undefined;
   order.meetupAccepted = false;
-  order.status = ORDER_STATUS_VALUE.ACCEPTED;
+  order.status = nextStatus;
   order.timeline.push(timelineEvent);
   const product = getProductById(order.product.id);
   if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
@@ -542,13 +566,61 @@ interface CreateOrderParams {
 const isShareOrder = (price: number, product?: Product) =>
   price === 0 || product?.isFreeShare || product?.price === 0;
 
+const CHAT_STARTED_TIMELINE = 'Chat started';
+
+/** Same listing + same pair, not finished — reuse instead of opening a second order. */
+function findOpenOrderForTrade(productId: string, buyerId: string, sellerId: string): Order | undefined {
+  return getAllOrders()
+    .filter(
+      (o) =>
+        o.product?.id === productId &&
+        o.buyer?.id === buyerId &&
+        o.seller?.id === sellerId &&
+        o.status !== ORDER_STATUS_VALUE.COMPLETE &&
+        !(o.buyerCompleted && o.sellerCompleted),
+    )
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+}
+
 export const createOrder = async (params: CreateOrderParams): Promise<Order | null> => {
   const myUser = getMyUser();
   const now = new Date().toISOString();
   const isShare = isShareOrder(params.proposedPrice, params.product);
-  const timelineDesc = isShare
+  const offerDesc = isShare
     ? 'Free share request'
     : `${params.proposedPrice.toLocaleString()} Pi purchase offer`;
+
+  const existing = findOpenOrderForTrade(params.product.id, myUser.id, params.product.seller.id);
+  if (existing) {
+    existing.proposedPrice = params.proposedPrice;
+    existing.tradeMethod = params.tradeMethod;
+    if (params.meetupPlace) existing.meetupPlace = params.meetupPlace;
+    if (params.meetupDate) existing.meetupDate = params.meetupDate;
+    if (params.meetupTime) existing.meetupTime = params.meetupTime;
+    if (params.memo) existing.memo = params.memo;
+    existing.timeline = [
+      ...(existing.timeline || []),
+      {
+        id: nextTimelineId(),
+        type: ORDER_STATUS_VALUE.PENDING_OFFER,
+        timestamp: now,
+        description: offerDesc,
+      },
+    ];
+    const saved = await saveOrder(existing);
+    if (!saved) return null;
+    if (!isShare) {
+      void addNotification({
+        targetUserId: existing.seller.id,
+        type: 'order',
+        title: NOTIFY_PURCHASE_OFFER_ARRIVED,
+        content: `${existing.buyer.nickname} sent a ${existing.proposedPrice.toLocaleString()} Pi offer for "${existing.product.title}".`,
+        link: `/order/${existing.id}`,
+      });
+    }
+    void addPriceOfferToChat(existing);
+    return existing;
+  }
 
   const order: Order = {
     id: `order_${Date.now()}`,
@@ -570,7 +642,13 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
         id: nextTimelineId(),
         type: ORDER_STATUS_VALUE.PENDING_OFFER,
         timestamp: now,
-        description: timelineDesc,
+        description: CHAT_STARTED_TIMELINE,
+      },
+      {
+        id: nextTimelineId(),
+        type: ORDER_STATUS_VALUE.PENDING_OFFER,
+        timestamp: now,
+        description: offerDesc,
       },
     ],
   };
@@ -598,10 +676,8 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
   const now = new Date().toISOString();
   const { product, buyer } = params;
   const proposedPrice = product.price ?? 0;
-  const isShare = isShareOrder(proposedPrice, product);
-  const timelineDesc = isShare
-    ? 'In-person free share'
-    : `In-person trade at ${proposedPrice.toLocaleString()} Pi`;
+  const existing = findOpenOrderForTrade(product.id, buyer.id, seller.id);
+  if (existing) return existing;
 
   const order: Order = {
     id: `order_${Date.now()}`,
@@ -619,7 +695,7 @@ export const createOrderBySeller = async (params: { product: Product; buyer: Use
         id: nextTimelineId(),
         type: ORDER_STATUS_VALUE.ACCEPTED,
         timestamp: now,
-        description: timelineDesc,
+        description: CHAT_STARTED_TIMELINE,
       },
     ],
   };

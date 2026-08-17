@@ -2,13 +2,17 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, type Location } from 'react-router-dom';
 import { getAppLanguage } from '@/utils/languageStorage';
 import { resolveTransition, transitionMs, type TransitionKind } from '@/utils/pageTransition';
+import { getAppScrollTop, scrollAppToTop } from '@/utils/appScroll';
 
 type LeaveState = {
   location: Location;
   scroll: number;
 };
 
-export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+export const PageTransition: React.FC<{ children: React.ReactElement; fill?: boolean }> = ({
+  children,
+  fill = false,
+}) => {
   const location = useLocation();
   const liveRef = useRef(location);
   const [live, setLive] = useState(location);
@@ -31,12 +35,12 @@ export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ chi
       return;
     }
 
-    const scroll = window.scrollY;
+    const scroll = getAppScrollTop();
     setLeave({ location: prev, scroll });
     liveRef.current = location;
     setLive(location);
     setKind(nextKind);
-    window.scrollTo(0, 0);
+    scrollAppToTop();
 
     const timer = window.setTimeout(() => {
       setLeave(null);
@@ -50,7 +54,7 @@ export const PageTransition: React.FC<{ children: React.ReactElement }> = ({ chi
 
   return (
     <div
-      className={`pt-stage${rtl ? ' pt-rtl' : ''}${animating ? ' pt-stage--busy' : ''}`}
+      className={`pt-stage${fill ? ' pt-stage--fill' : ''}${rtl ? ' pt-rtl' : ''}${animating ? ' pt-stage--busy' : ''}`}
       data-pt={kind}
     >
       {leave ? (
