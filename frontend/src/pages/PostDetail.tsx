@@ -409,7 +409,7 @@ export const PostDetail: React.FC = () => {
     return () => window.removeEventListener('postCommentCountsChanged', onCommentCountsChanged);
   }, [id]);
 
-  const handleSubmitComment = () => {
+  const handleSubmitComment = async () => {
     if (guestGuard('comment')) return;
     if (!commentText.trim() || !id) return;
 
@@ -421,7 +421,11 @@ export const PostDetail: React.FC = () => {
       ...(replyingToId && { parentId: replyingToId }),
     };
 
-    addComment(id, newComment);
+    const saved = await addComment(id, newComment);
+    if (!saved) {
+      showToast(t('couldNotSave'));
+      return;
+    }
     setCommentText('');
     setReplyingToId(null);
     setReplyingToNickname(null);

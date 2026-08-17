@@ -1,11 +1,11 @@
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
-import { syncNotificationToDB, syncNotificationReadToDB } from '@/utils/dbSync';
+import { syncNotificationToDB, syncNotificationReadToDB, syncNotificationsDeleteToDB } from '@/utils/dbSync';
 import { broadcastNotification } from '@/utils/chatSocket';
 
 const KEY = 'all_notifications';
 
-export type NotificationType = 'comment' | 'reply' | 'popular' | 'related' | 'chat' | 'order' | 'badge';
+export type NotificationType = 'comment' | 'reply' | 'popular' | 'related' | 'chat' | 'order' | 'badge' | 'inquiry';
 
 export interface StoredNotification {
   id: string;
@@ -99,10 +99,12 @@ export const markAllAsRead = async (): Promise<boolean> => {
   return true;
 };
 
-/** Delete notifications by id */
-export const removeNotifications = (ids: string[]) => {
-  if (ids.length === 0) return;
+/** Delete notifications by id — DB 삭제 성공 후에만 로컬에서 제거 */
+export const removeNotifications = async (ids: string[]): Promise<boolean> => {
+  if (ids.length === 0) return true;
+  const ok = await syncNotificationsDeleteToDB(ids);
+  if (!ok) return false;
   const set = new Set(ids);
-  const list = getAll().filter((n) => !set.has(n.id));
-  saveAll(list);
+  saveAll(getAll().filter((n) => !set.has(n.id)));
+  return true;
 };

@@ -45,15 +45,79 @@ const roomChannels = new Map<string, RealtimeChannel>();
 let currentUserId: string | null = null;
 
 // ─── Helpers ────────────────────────────────────────────────
+/**
+ * 상대방에게 보낼 채널을 재사용한다.
+ * 이벤트마다 채널을 새로 열고 닫으면 사용자가 늘어날 때 Realtime 접속 제한에 먼저 걸린다.
+ */
+type OutboundMessage = { event: string; payload: Record<string, unknown> };
+type OutboundChannel = {
+  channel: RealtimeChannel;
+  subscribed: boolean;
+  pending: OutboundMessage[];
+  lastUsedAt: number;
+};
+
+const outboundChannels = new Map<string, OutboundChannel>();
+const OUTBOUND_IDLE_MS = 60000;
+let outboundSweepTimer: ReturnType<typeof setInterval> | null = null;
+
+function closeOutboundChannel(targetUserId: string): void {
+  const entry = outboundChannels.get(targetUserId);
+  if (!entry) return;
+  supabase.removeChannel(entry.channel);
+  outboundChannels.delete(targetUserId);
+  if (outboundChannels.size === 0 && outboundSweepTimer) {
+    clearInterval(outboundSweepTimer);
+    outboundSweepTimer = null;
+  }
+}
+
+function startOutboundSweep(): void {
+  if (outboundSweepTimer) return;
+  outboundSweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [userId, entry] of outboundChannels) {
+      if (now - entry.lastUsedAt > OUTBOUND_IDLE_MS) closeOutboundChannel(userId);
+    }
+  }, OUTBOUND_IDLE_MS);
+}
+
 function broadcastToUser(targetUserId: string, event: string, payload: Record<string, unknown>): void {
-  const ch = supabase.channel(`user:${targetUserId}`, {
+  const existing = outboundChannels.get(targetUserId);
+  if (existing) {
+    existing.lastUsedAt = Date.now();
+    if (existing.subscribed) {
+      void existing.channel.send({ type: 'broadcast', event, payload });
+    } else {
+      existing.pending.push({ event, payload });
+    }
+    return;
+  }
+
+  const channel = supabase.channel(`user:${targetUserId}`, {
     config: { broadcast: { self: false } },
   });
-  ch.subscribe((status) => {
+  const entry: OutboundChannel = {
+    channel,
+    subscribed: false,
+    pending: [{ event, payload }],
+    lastUsedAt: Date.now(),
+  };
+  outboundChannels.set(targetUserId, entry);
+  startOutboundSweep();
+
+  channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
-      ch.send({ type: 'broadcast', event, payload }).finally(() => {
-        setTimeout(() => supabase.removeChannel(ch), 500);
-      });
+      entry.subscribed = true;
+      const queued = entry.pending.splice(0);
+      for (const msg of queued) {
+        void channel.send({ type: 'broadcast', event: msg.event, payload: msg.payload });
+      }
+      return;
+    }
+    if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      // 다음 전송에서 새 채널로 다시 시도한다.
+      closeOutboundChannel(targetUserId);
     }
   });
 }
@@ -84,6 +148,7 @@ export function connectChatSocket(): void {
 export function disconnectChatSocket(): void {
   roomChannels.forEach((ch) => supabase.removeChannel(ch));
   roomChannels.clear();
+  for (const userId of [...outboundChannels.keys()]) closeOutboundChannel(userId);
   if (userChannel) {
     supabase.removeChannel(userChannel);
     userChannel = null;

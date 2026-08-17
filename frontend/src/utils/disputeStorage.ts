@@ -5,6 +5,8 @@ import { getItem, setItem } from '@/utils/heavyStorage';
 import { syncDisputeToDB, syncDisputeStatusToDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { api } from '@/utils/api';
+import { addNotification } from '@/utils/notificationStorage';
+import { NOTIFY_DISPUTE_RESOLVED } from '@/locale/enUI';
 
 const DISPUTES_KEY = 'myDisputes';
 
@@ -43,6 +45,27 @@ export const getDisputesByOrderId = (orderId: string): Dispute[] => {
   return getDisputes().filter((d) => d.orderId === orderId);
 };
 
+function preferText(next?: string, prev?: string): string {
+  const n = (next || '').trim();
+  if (n) return next as string;
+  return prev || '';
+}
+
+function parseEvidence(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function mergeDisputesById(...lists: Dispute[][]): Dispute[] {
   const byId = new Map<string, Dispute>();
   for (const list of lists) {
@@ -52,7 +75,14 @@ export function mergeDisputesById(...lists: Dispute[][]): Dispute[] {
       byId.set(
         d.id,
         prev
-          ? { ...prev, ...d, evidence: d.evidence?.length ? d.evidence : prev.evidence }
+          ? {
+              ...prev,
+              ...d,
+              reason: preferText(d.reason, prev.reason),
+              action: preferText(d.action, prev.action),
+              description: preferText(d.description, prev.description),
+              evidence: d.evidence?.length ? d.evidence : prev.evidence || [],
+            }
           : d,
       );
     }
@@ -110,35 +140,54 @@ export const getResolvedDisputeByOrderId = (
     .pop();
 };
 
+function mapDisputeRow(row: Record<string, unknown>, orderId?: string): Dispute {
+  return {
+    id: String(row.id),
+    orderId: String(row.order_id || orderId || ''),
+    productTitle: String(row.product_title || ''),
+    productImage: String(row.product_image || ''),
+    proposedPrice: Number(row.proposed_price || 0),
+    tradeMethod: String(row.trade_method || ''),
+    buyerId: String(row.buyer_id || ''),
+    buyerNickname: String(row.buyer_nickname || ''),
+    sellerId: String(row.seller_id || ''),
+    sellerNickname: String(row.seller_nickname || ''),
+    openedByUserId: row.opened_by_user_id ? String(row.opened_by_user_id) : undefined,
+    reason: String(row.reason || ''),
+    action: String(row.action || ''),
+    description: String(row.description || ''),
+    evidence: parseEvidence(row.evidence),
+    status: String(row.status || 'OPEN') as Dispute['status'],
+    createdAt: String(row.created_at || new Date().toISOString()),
+    resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
+    adminResponse: row.admin_response ? String(row.admin_response) : undefined,
+  };
+}
+
 /** Public party fields for a dispute post — does not write into myDisputes. */
 export async function fetchDisputeSummariesForOrder(orderId: string): Promise<Dispute[]> {
   if (!orderId) return [];
   try {
     const res = await api.get<Record<string, unknown>[]>(`/api/orders/${orderId}/dispute-summaries`);
     if (!res.ok || !Array.isArray(res.data)) return [];
-    return res.data.map((row) => ({
-      id: String(row.id),
-      orderId: String(row.order_id || orderId),
-      productTitle: String(row.product_title || ''),
-      productImage: String(row.product_image || ''),
-      proposedPrice: Number(row.proposed_price || 0),
-      tradeMethod: String(row.trade_method || ''),
-      buyerId: String(row.buyer_id || ''),
-      buyerNickname: String(row.buyer_nickname || ''),
-      sellerId: String(row.seller_id || ''),
-      sellerNickname: String(row.seller_nickname || ''),
-      openedByUserId: row.opened_by_user_id ? String(row.opened_by_user_id) : undefined,
-      reason: String(row.reason || ''),
-      action: '',
-      description: '',
-      evidence: [],
-      status: String(row.status || 'OPEN') as Dispute['status'],
-      createdAt: String(row.created_at || new Date().toISOString()),
-      resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
-    }));
+    return res.data.map((row) => mapDisputeRow(row, orderId));
   } catch {
     return [];
   }
+}
+
+/** Buyer/seller: both parties' full disputes (reason, details, evidence). */
+export async function fetchOrderDisputes(orderId: string): Promise<Dispute[]> {
+  if (!orderId) return [];
+  try {
+    const res = await api.get<Record<string, unknown>[]>(`/api/orders/${orderId}/disputes`);
+    if (res.ok && Array.isArray(res.data)) {
+      return res.data.map((row) => mapDisputeRow(row, orderId));
+    }
+  } catch {
+    /* fall through to public summaries */
+  }
+  return fetchDisputeSummariesForOrder(orderId);
 }
 
 export const ensureDisputeByOrderId = async (
@@ -320,6 +369,17 @@ export const updateDisputeStatus = async (
     dispute.status = status;
     if (status === 'RESOLVED') {
       dispute.resolvedAt = new Date().toISOString();
+      const resolverId = getCurrentUserId();
+      const otherId = resolverId === dispute.buyerId ? dispute.sellerId : dispute.buyerId;
+      if (otherId && otherId !== resolverId) {
+        void addNotification({
+          targetUserId: otherId,
+          type: 'order',
+          title: NOTIFY_DISPUTE_RESOLVED,
+          content: `The dispute for "${dispute.productTitle}" has been resolved.`,
+          link: `/dispute/${dispute.orderId}`,
+        });
+      }
       const order = getOrderById(dispute.orderId);
       const otherStillOpen = getDisputes().some(
         (d) =>

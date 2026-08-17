@@ -1,22 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { getAllProducts } from '@/utils/productStorage';
-import { createOrder } from '@/utils/orderStorage';
+import { createOrder, getMyPendingOfferOrder } from '@/utils/orderStorage';
+import { getCurrentUserId } from '@/utils/authStorage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { showToast } from '@/utils/toast';
 
+/** 방금 보낸 제안을 전환 애니메이션이 다시 마운트하며 '이미 대기 중'으로 착각하지 않게 한다 */
+const justSentOfferIds = new Set<string>();
+
+function markOfferJustSent(productId: string) {
+  justSentOfferIds.add(productId);
+  window.setTimeout(() => justSentOfferIds.delete(productId), 10_000);
+}
+
 export const Offer: React.FC = () => {
   useGuestPageGuard('offer');
   const navigate = useNavigate();
   const { productId } = useParams();
+  const [searchParams] = useSearchParams();
   const { t } = useLanguage();
+  const returnRoomId = searchParams.get('from') === 'chat' ? searchParams.get('room') : null;
   const [product, setProduct] = useState<Product | null>(null);
   const [price, setPrice] = useState('');
+
+  const leaveOffer = (orderId?: string) => {
+    if (returnRoomId) {
+      navigate(`/chat/${returnRoomId}`, { replace: true });
+      return;
+    }
+    if (orderId) {
+      navigate(`/order/${orderId}`, { replace: true });
+      return;
+    }
+    navigate(-1);
+  };
 
   useEffect(() => {
     const allProducts = getAllProducts();
@@ -24,22 +47,38 @@ export const Offer: React.FC = () => {
     if (found) {
       if (found.status === PRODUCT_STATUS_VALUE.SOLD) {
         showToast(t('cannotOfferSold'));
-        navigate(-1);
+        leaveOffer();
+        return;
+      }
+      // 방금 보낸 직후엔 대기 중 주문이 생기는 게 정상이다. 중복 토스트·뒤로가기를 하지 않는다.
+      if (justSentOfferIds.has(found.id)) {
+        setProduct(found);
+        setPrice(String(found.price));
+        return;
+      }
+      if (getMyPendingOfferOrder(found.id, getCurrentUserId())) {
+        showToast(t('offerAlreadyPending'));
+        leaveOffer();
         return;
       }
       void isListingHeldByOtherBuyerDispute(found.id).then((held) => {
-        if (held) {
+        if (held && !justSentOfferIds.has(found.id)) {
           showToast(t('bannerListingOtherDispute'));
-          navigate(-1);
+          leaveOffer();
         }
       });
       setProduct(found);
       setPrice(String(found.price));
     }
-  }, [productId, navigate, t]);
+  }, [productId, returnRoomId, navigate, t]);
 
   const handleSubmit = async () => {
     if (!product || !price) return;
+    if (justSentOfferIds.has(product.id)) return;
+    if (getMyPendingOfferOrder(product.id, getCurrentUserId())) {
+      showToast(t('offerAlreadyPending'));
+      return;
+    }
 
     const order = await createOrder({
       product,
@@ -51,8 +90,9 @@ export const Offer: React.FC = () => {
       return;
     }
 
+    markOfferJustSent(product.id);
     showToast(t('offerSent'));
-    navigate(`/order/${order.id}`, { replace: true });
+    leaveOffer(order.id);
   };
 
   const canSubmit = price && Number(price) > 0;

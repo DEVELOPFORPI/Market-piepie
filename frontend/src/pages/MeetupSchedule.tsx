@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { getOrderById, ensureOrderById, updateOrderMeetup, cancelOrderMeetup } from '@/utils/orderStorage';
-import { addMeetupConfirmedToChat, addMeetupUpdatedToChat, addMeetupCancelledToChat } from '@/utils/chatStorage';
+import { addMeetupConfirmedToChat, addMeetupUpdatedToChat, addMeetupCancelledToChat, getChatRoomByOrder } from '@/utils/chatStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { NOTIFY_MEETUP_CANCELED, NOTIFY_MEETUP_CONFIRMED, NOTIFY_MEETUP_UPDATED } from '@/locale/enUI';
@@ -164,6 +164,7 @@ export const MeetupSchedule: React.FC = () => {
       const currentUserId = getCurrentUserId();
       const isSeller = currentUserId === updatedOrder.seller.id;
       const otherUser = isSeller ? updatedOrder.buyer : updatedOrder.seller;
+      const meetupRoom = getChatRoomByOrder(updatedOrder);
       void addNotification({
         targetUserId: otherUser.id,
         type: 'order',
@@ -171,7 +172,7 @@ export const MeetupSchedule: React.FC = () => {
         content: wasEdit
           ? `Meetup for "${updatedOrder.product.title}" was updated: ${place}, ${date.trim()} ${normalizedTime}`
           : `Meetup for "${updatedOrder.product.title}" is set: ${place}, ${date.trim()} ${normalizedTime}`,
-        link: `/order/${orderId}`,
+        link: meetupRoom?.id ? `/chat/${meetupRoom.id}` : `/order/${orderId}`,
       });
       showToast(wasEdit ? t('meetupUpdatedAlert') : t('meetupConfirmedAlert'));
     }
@@ -188,12 +189,13 @@ export const MeetupSchedule: React.FC = () => {
       await addMeetupCancelledToChat(cancelled);
       const currentUserId = getCurrentUserId();
       const otherUser = currentUserId === orderBefore.seller.id ? orderBefore.buyer : orderBefore.seller;
+      const cancelRoom = getChatRoomByOrder(cancelled);
       void addNotification({
         targetUserId: otherUser.id,
         type: 'order',
         title: NOTIFY_MEETUP_CANCELED,
         content: `The meetup for "${orderBefore.product.title}" was canceled.`,
-        link: `/chat`,
+        link: cancelRoom?.id ? `/chat/${cancelRoom.id}` : `/order/${orderId}`,
       });
       showToast(t('meetupCanceledAlert'));
       navigate(-1);

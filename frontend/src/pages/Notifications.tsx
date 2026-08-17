@@ -9,11 +9,11 @@ import {
   NotificationType,
 } from '@/utils/notificationStorage';
 import { ORDER_STATUS_VALUE } from '@/types';
-import { ensureOrderById } from '@/utils/orderStorage';
+import { ensureOrderById, getOrders } from '@/utils/orderStorage';
 import { getReviewByOrderId } from '@/utils/reviewStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { showToast } from '@/utils/toast';
-import { getChatRoomByOrder } from '@/utils/chatStorage';
+import { getChatRoomByOrder, getChatRoomByProduct, getChatRooms } from '@/utils/chatStorage';
 import { syncNotificationsFromDB, syncChatRoomsFromDB } from '@/utils/dbSync';
 import {
   COMPLETION_TITLE_SET,
@@ -21,12 +21,15 @@ import {
   normalizeNotificationTitle,
   NOTIFY_MEETUP_CONFIRMED,
   NOTIFY_MEETUP_UPDATED,
+  NOTIFY_MEETUP_CANCELED,
   NOTIFY_OFFER_ACCEPTED,
+  NOTIFY_OFFER_DECLINED,
   NOTIFY_PURCHASE_OFFER_ARRIVED,
   NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
+  NOTIFY_TRADE_COMPLETED,
 } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { notifyT } from '@/i18n/notifyMessages';
@@ -38,6 +41,72 @@ const COMPLETION_TITLES = COMPLETION_TITLE_SET;
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
 const REVIEW_TITLES = new Set([NOTIFY_REVIEW_WRITTEN]);
 const ACCEPT_TITLES = new Set([NOTIFY_OFFER_ACCEPTED]);
+
+const CHAT_DEST_TITLES = new Set([
+  NOTIFY_PURCHASE_OFFER_ARRIVED,
+  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
+  NOTIFY_OFFER_ACCEPTED,
+  NOTIFY_OFFER_DECLINED,
+  NOTIFY_RECEIVE_CONFIRM,
+  NOTIFY_TRADE_COMPLETE_CHECK,
+  NOTIFY_TRADE_COMPLETED,
+  NOTIFY_MEETUP_CONFIRMED,
+  NOTIFY_MEETUP_UPDATED,
+  NOTIFY_MEETUP_CANCELED,
+]);
+
+function orderIdFromLink(link: string): string | null {
+  const orderMatch = link.match(/^\/order\/([^/?#]+)/);
+  if (orderMatch) return orderMatch[1];
+  const reviewMatch = link.match(/^\/review\/([^/?#]+)/);
+  if (reviewMatch) return reviewMatch[1];
+  try {
+    const q = link.includes('?') ? new URLSearchParams(link.slice(link.indexOf('?') + 1)) : null;
+    return q?.get('order') || null;
+  } catch {
+    return null;
+  }
+}
+
+function productIdFromLink(link: string): string | null {
+  const m = link.match(/^\/product\/([^/?#]+)/);
+  return m?.[1] || null;
+}
+
+async function resolveChatRoomLink(link: string, content: string): Promise<string | null> {
+  const uid = getCurrentUserId();
+  if (uid) await syncChatRoomsFromDB(uid);
+
+  const orderId = orderIdFromLink(link);
+  if (orderId) {
+    const order = await ensureOrderById(orderId);
+    const room = order ? getChatRoomByOrder(order) : null;
+    if (room?.id) return `/chat/${room.id}`;
+  }
+
+  const productId = productIdFromLink(link);
+  if (productId) {
+    const byProduct = getChatRoomByProduct(productId);
+    if (byProduct?.id) return `/chat/${byProduct.id}`;
+    const mine = getOrders().find(
+      (o) => o.product?.id === productId && (o.buyer?.id === uid || o.seller?.id === uid),
+    );
+    const room = mine ? getChatRoomByOrder(mine) : null;
+    if (room?.id) return `/chat/${room.id}`;
+  }
+
+  if (link === '/chat' || link === '/chat/') {
+    const titleMatch = content.match(/"(.+?)"/);
+    const productTitle = titleMatch?.[1];
+    if (productTitle) {
+      const room = getChatRooms().find((r) => r.product?.title === productTitle);
+      if (room?.id) return `/chat/${room.id}`;
+    }
+  }
+
+  if (link.startsWith('/chat/') && link !== '/chat/') return link;
+  return null;
+}
 
 function relativeTimeLabel(
   isoDate: string,
@@ -75,13 +144,14 @@ export const Notifications: React.FC = () => {
     });
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
-    const count = selectedIds.size;
-    removeNotifications(Array.from(selectedIds));
+    const ids = Array.from(selectedIds);
+    const ok = await removeNotifications(ids);
+    if (!ok) return;
     setSelectedIds(new Set());
     load();
-    if (notifications.length === count) setDeleteMode(false);
+    if (notifications.length === ids.length) setDeleteMode(false);
   };
 
   useEffect(() => {
@@ -122,30 +192,30 @@ export const Notifications: React.FC = () => {
     if (!notification.link) return;
 
     const title = normalizeNotificationTitle(notification.title);
+    const link = notification.link;
+    let destinationLink = link;
 
-    const orderIdMatch = notification.link.match(/^\/order\/(.+)$/);
-    const orderId = orderIdMatch?.[1];
-    const order = orderId ? await ensureOrderById(orderId) : null;
-    let destinationLink = notification.link;
+    if (title === NOTIFY_REVIEW_WRITTEN) {
+      const reviewOrderId = orderIdFromLink(link);
+      destinationLink = reviewOrderId
+        ? `/my/reviews?order=${encodeURIComponent(reviewOrderId)}`
+        : '/my/reviews';
+      navigate(destinationLink);
+      return;
+    }
 
+    // 나눔 완료 후 후기 작성 안내는 후기 작성 화면을 유지한다.
+    const keepReviewWrite = title === NOTIFY_TRADE_COMPLETED && link.startsWith('/review/');
     if (
-      order &&
-      (title === NOTIFY_PURCHASE_OFFER_ARRIVED || title === NOTIFY_FREE_SHARE_REQUEST_ARRIVED)
+      !keepReviewWrite
+      && (CHAT_DEST_TITLES.has(title) || isMeetupNotificationTitle(title))
     ) {
-      const uid = getCurrentUserId();
-      if (uid) await syncChatRoomsFromDB(uid);
-      const room = getChatRoomByOrder(order);
-      if (room?.id) {
-        destinationLink = `/chat/${room.id}`;
-      }
+      const chatLink = await resolveChatRoomLink(link, notification.content || '');
+      if (chatLink) destinationLink = chatLink;
     }
 
-    if (order && isMeetupNotificationTitle(title)) {
-      const room = getChatRoomByOrder(order);
-      if (room?.id) {
-        destinationLink = `/chat/${room.id}`;
-      }
-    }
+    const orderId = orderIdFromLink(link);
+    const order = orderId ? await ensureOrderById(orderId) : null;
 
     if (title === NOTIFY_TRADE_COMPLETE_CHECK && order?.status === ORDER_STATUS_VALUE.COMPLETE) {
       const existingReview = orderId ? getReviewByOrderId(orderId) : undefined;
@@ -167,12 +237,6 @@ export const Notifications: React.FC = () => {
       }
       navigate(destinationLink);
       return;
-    }
-    if (
-      (title === NOTIFY_MEETUP_CONFIRMED || title === NOTIFY_MEETUP_UPDATED) &&
-      order?.meetupPlace
-    ) {
-      // Meetup confirmed/updated: keep default link to order detail
     }
 
     navigate(destinationLink);

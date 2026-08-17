@@ -9,7 +9,7 @@ import { ensureOrderById, getOrderById, updateOrderStatus } from '@/utils/orderS
 import {
   createDispute,
   ensureOpenDisputeByOrderId,
-  fetchDisputeSummariesForOrder,
+  fetchOrderDisputes,
   getDisputesByOrderId,
   hasResolvedDisputeOnOrder,
   mergeDisputesById,
@@ -147,8 +147,8 @@ export const Dispute: React.FC = () => {
         ? resolveDisputeOpenerUserId(foundOrder, uid, viewOtherParty)
         : uid ?? undefined;
       await ensureOpenDisputeByOrderId(orderId, openerId);
-      const summaries = await fetchDisputeSummariesForOrder(orderId);
-      const list = mergeDisputesById(summaries, getDisputesByOrderId(orderId));
+      const remote = await fetchOrderDisputes(orderId);
+      const list = mergeDisputesById(remote, getDisputesByOrderId(orderId));
       if (cancelled) return;
       setOrder(foundOrder);
       applyDisputeList(foundOrder, list);
@@ -165,8 +165,8 @@ export const Dispute: React.FC = () => {
     const readLocal = () => {
       const foundOrder = getOrderById(orderId);
       if (foundOrder) setOrder(foundOrder);
-      void fetchDisputeSummariesForOrder(orderId).then((summaries) => {
-        applyDisputeList(foundOrder, mergeDisputesById(summaries, getDisputesByOrderId(orderId)));
+      void fetchOrderDisputes(orderId).then((remote) => {
+        applyDisputeList(foundOrder, mergeDisputesById(remote, getDisputesByOrderId(orderId)));
       });
     };
     const syncThenRead = () => {
@@ -398,7 +398,14 @@ export const Dispute: React.FC = () => {
 
         {orderDisputes.length > 0 && (
           <div className="space-y-3">
-            {orderDisputes.map((d) => {
+            {[...orderDisputes]
+              .sort((a, b) => {
+                const aMine = Boolean(currentUserId && a.openedByUserId === currentUserId);
+                const bMine = Boolean(currentUserId && b.openedByUserId === currentUserId);
+                if (aMine !== bMine) return viewOtherParty ? (aMine ? 1 : -1) : (aMine ? -1 : 1);
+                return a.createdAt.localeCompare(b.createdAt);
+              })
+              .map((d) => {
               const mine = Boolean(currentUserId && d.openedByUserId === currentUserId);
               return (
                 <div key={d.id} className="p-4 bg-gray-50 rounded-lg space-y-3">

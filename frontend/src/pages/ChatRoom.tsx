@@ -10,7 +10,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
-import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, deleteOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, getMyPendingOfferOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -33,7 +33,7 @@ import { ModalShell } from '@/components/common/ModalShell';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { api } from '@/utils/api';
-import { syncRoomMessagesFromDB } from '@/utils/dbSync';
+import { syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
 import {
   displayChatMessageContent,
   isMeetupCanceledMessage,
@@ -79,9 +79,12 @@ function findFirstUnreadIndex(
   msgs: ChatMessage[],
   lastReadAt: string | undefined,
   myId: string | undefined,
+  /** Ignore messages newer than this (arrived while the room was open) */
+  untilTimestamp?: string,
 ): number {
   return msgs.findIndex((m) => {
     if (myId && m.senderId === myId) return false;
+    if (untilTimestamp && m.timestamp > untilTimestamp) return false;
     if (lastReadAt) return m.timestamp > lastReadAt;
     return true;
   });
@@ -287,6 +290,12 @@ export const ChatRoom: React.FC = () => {
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   /** First bulk message sync for this room visit — old meetups must not popup */
   const initialMessageSeedDoneRef = useRef(false);
+  /** Unread-divider anchor captured on entry (read state changes right after) */
+  const dividerAnchorRef = useRef<{ roomId: string | null; lastReadAt: string; enteredAt: string }>({
+    roomId: null,
+    lastReadAt: '',
+    enteredAt: '',
+  });
   /** Show deleted-listing alert once, then leave */
   const deletedProductPopupShownRef = useRef(false);
 
@@ -327,7 +336,7 @@ export const ChatRoom: React.FC = () => {
         addRemoteMessage(roomId, data.message);
         setMessages(getMessages(roomId));
         knownMessageIdsRef.current.add(data.message.id);
-        checkNewMeetupFromOther([data.message], 'websocket');
+        checkNewMeetupFromOther([data.message]);
       }
     });
 
@@ -399,14 +408,11 @@ export const ChatRoom: React.FC = () => {
   }, [location.pathname, roomId]);
 
   // Realtime: partner sent meetup card -> popup for buyer
-  const checkNewMeetupFromOther = (updatedMessages: ChatMessage[], source = 'unknown') => {
+  const checkNewMeetupFromOther = (updatedMessages: ChatMessage[]) => {
     const myId = getCurrentUserId();
     if (!myId) return;
     for (const msg of updatedMessages) {
       if (msg.type === 'meetup_confirmed' && msg.senderId !== myId && !shownMeetupPopupIdsRef.current.has(msg.id)) {
-        // #region agent log
-        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:checkNewMeetupFromOther',message:'meetup popup triggered',data:{source,msgId:msg.id,wasKnown:knownMessageIdsRef.current.has(msg.id),shownCount:shownMeetupPopupIdsRef.current.size,knownCount:knownMessageIdsRef.current.size,batchSize:updatedMessages.length},timestamp:Date.now(),hypothesisId:'A-C'})}).catch(()=>{});
-        // #endregion
         shownMeetupPopupIdsRef.current.add(msg.id);
         setShowMeetupStartedPopup(true);
         break;
@@ -414,29 +420,23 @@ export const ChatRoom: React.FC = () => {
     }
   };
 
-  const seedKnownMeetupMessages = (messages: ChatMessage[], source: string) => {
+  const seedKnownMeetupMessages = (messages: ChatMessage[]) => {
     const myId = getCurrentUserId();
-    let meetupMarked = 0;
     for (const msg of messages) {
       knownMessageIdsRef.current.add(msg.id);
       if (myId && msg.type === 'meetup_confirmed' && msg.senderId !== myId) {
         shownMeetupPopupIdsRef.current.add(msg.id);
-        meetupMarked += 1;
       }
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:seedKnownMeetupMessages',message:'seed meetup messages',data:{source,total:messages.length,meetupMarked,knownCount:knownMessageIdsRef.current.size},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
-    // #endregion
   };
 
   useEffect(() => {
     if (!roomId) return;
-    console.log('[ChatRoom] listeners registered', roomId);
 
     // Existing meetup messages on load: no popup
     const initial = getMessages(roomId);
     if (initial.length > 0) {
-      seedKnownMeetupMessages(initial, 'initial-load');
+      seedKnownMeetupMessages(initial);
       initialMessageSeedDoneRef.current = true;
     }
 
@@ -453,21 +453,15 @@ export const ChatRoom: React.FC = () => {
       setMessages(updated);
 
       if (!initialMessageSeedDoneRef.current) {
-        seedKnownMeetupMessages(updated, 'first-bulk-sync');
+        seedKnownMeetupMessages(updated);
         for (const m of updated) knownMessageIdsRef.current.add(m.id);
         initialMessageSeedDoneRef.current = true;
-        // #region agent log
-        fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:handleSameTab',message:'first bulk sync seeded',data:{total:updated.length},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         return;
       }
 
       const newOnly = updated.filter((m) => !knownMessageIdsRef.current.has(m.id));
-      // #region agent log
-      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'ChatRoom.tsx:handleSameTab',message:'chatRoomsChanged',data:{total:updated.length,newOnly:newOnly.length,knownBefore:knownMessageIdsRef.current.size},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       for (const m of newOnly) knownMessageIdsRef.current.add(m.id);
-      if (newOnly.length > 0) checkNewMeetupFromOther(newOnly, 'chatRoomsChanged');
+      if (newOnly.length > 0) checkNewMeetupFromOther(newOnly);
     };
 
     const handleProductChange = () => {
@@ -490,7 +484,7 @@ export const ChatRoom: React.FC = () => {
 
 
     // DB 폴링: 5초마다 새 메시지 + 주문 상태 확인
-    const pollInterval = setInterval(async () => {
+    const pollRoomFromServer = async () => {
       if (!roomId) return;
       try {
         const before = getMessages(roomId).length;
@@ -504,12 +498,15 @@ export const ChatRoom: React.FC = () => {
           });
         }
       } catch { /* polling error ignored */ }
+      // 상대방 읽음 상태 반영 (Realtime 수신 실패 대비)
+      try {
+        if (await syncRoomReadStateFromDB(roomId)) setRoom(getChatRoom(roomId));
+      } catch { /* read state polling error ignored */ }
       // 주문 상태 DB 폴링
       try {
         const uid = getCurrentUserId();
         if (uid) {
           const orderRes = await api.get<Record<string, unknown>[]>(`/api/orders?user_id=${uid}`);
-          console.log('[ORDERSYNC] poll response', { ok: orderRes.ok, status: orderRes.status, uid });
           if (orderRes.ok) {
             const rows = orderRes.data;
             if (Array.isArray(rows)) {
@@ -534,7 +531,6 @@ export const ChatRoom: React.FC = () => {
                   || dbMeetupPlace !== (local.meetupPlace || '')
                   || dbMeetupDate !== (local.meetupDate || '')
                   || dbMeetupTime !== (local.meetupTime || '');
-                console.log('[ORDERSYNC] compare', { orderId: row.id, dbStatus, localStatus: local.status, dbMeetupPlace, localMeetupPlace: local.meetupPlace, dbBuyerCompleted: row.buyer_completed, dbSellerCompleted: row.seller_completed, changed });
                 if (changed) {
                   const updated = { ...local };
                   const dbOrderStatus = dbStatus as OrderStatus;
@@ -553,7 +549,6 @@ export const ChatRoom: React.FC = () => {
                   } else if (dbStatus !== local.status) {
                     updated.status = dbOrderStatus;
                   }
-                  console.log('[ORDERSYNC] merging', { orderId: row.id, newStatus: updated.status, meetupPlace: updated.meetupPlace });
                   mergeRemoteOrder(updated);
                   ordersUpdated = true;
                 }
@@ -562,13 +557,23 @@ export const ChatRoom: React.FC = () => {
             }
           }
         }
-      } catch (e) { console.log('[ORDERSYNC] poll error', e); }
+      } catch { /* order polling error ignored */ }
+    };
+
+    // 백그라운드 탭에서는 서버를 부르지 않고, 화면으로 돌아올 때 즉시 한 번 맞춘다.
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void pollRoomFromServer();
     }, 5000);
 
-
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void pollRoomFromServer();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('chatRoomsChanged', handleSameTab);
       window.removeEventListener('ordersChanged', handleOrdersChanged);
@@ -782,7 +787,14 @@ export const ChatRoom: React.FC = () => {
         chips.push({
           key: 'offer',
           label: t('sendOffer'),
-          onClick: () => navigate(`/offer/${room.product!.id}`),
+          onClick: () => {
+            if (getMyPendingOfferOrder(room.product!.id, getCurrentUserId())) {
+              showToast(t('offerAlreadyPending'));
+              return;
+            }
+            if (!roomId) return;
+            navigate(`/offer/${room.product!.id}?from=chat&room=${encodeURIComponent(roomId)}`);
+          },
           primary: true,
         });
       }
@@ -915,11 +927,24 @@ export const ChatRoom: React.FC = () => {
     if (!roomId) return;
   }, [roomId, userId, isBuyer, isSeller, currentOrder, isShareOrder, receiveEnabled, disputeEnabled]);
 
-  const firstUnreadIndex = findFirstUnreadIndex(
-    displayMessages,
-    userId ? room?.lastReadAt?.[userId] : undefined,
-    userId || undefined,
-  );
+  // 입장 시점의 읽음 위치를 고정한다. 읽음 처리 직후 구분선이 사라지지 않도록.
+  // 입장 후 도착한 메시지는 바로 읽은 것이므로 구분선 대상에서 제외한다.
+  if (roomId && messages.length > 0 && dividerAnchorRef.current.roomId !== roomId) {
+    dividerAnchorRef.current = {
+      roomId,
+      lastReadAt: (userId ? room?.lastReadAt?.[userId] : '') || '',
+      enteredAt: new Date().toISOString(),
+    };
+  }
+  const dividerAnchored = dividerAnchorRef.current.roomId === roomId;
+  const firstUnreadIndex = dividerAnchored
+    ? findFirstUnreadIndex(
+        displayMessages,
+        dividerAnchorRef.current.lastReadAt,
+        userId || undefined,
+        dividerAnchorRef.current.enteredAt,
+      )
+    : -1;
 
   const isNearBottom = () => {
     const el = messagesContainerRef.current;
@@ -987,9 +1012,11 @@ export const ChatRoom: React.FC = () => {
     initialScrollDoneRef.current = true;
     prevMessageCountRef.current = msgs.length;
     requestAnimationFrame(() => {
-      const r = roomId ? getChatRoom(roomId) : null;
       const uid = getCurrentUserId();
-      const lastRead = uid ? r?.lastReadAt?.[uid] : undefined;
+      const anchor = dividerAnchorRef.current;
+      const lastRead = anchor.roomId === roomId
+        ? anchor.lastReadAt
+        : (uid && roomId ? getChatRoom(roomId)?.lastReadAt?.[uid] : undefined);
       const idx = findFirstUnreadIndex(msgs, lastRead, uid || undefined);
       if (idx >= 0) scrollToMessageIndex(idx);
       else scrollToBottomInstant();
@@ -1023,6 +1050,24 @@ export const ChatRoom: React.FC = () => {
     }
 
     prevMessageCountRef.current = count;
+  }, [messages, roomId]);
+
+  // 방을 보고 있으면 스크롤하지 않아도 읽음으로 처리한다.
+  // (대화가 한 화면에 다 들어오면 scroll 이벤트가 없어 읽음 표시가 그대로 남았다)
+  useEffect(() => {
+    if (!roomId || messages.length === 0) return;
+    const markIfVisible = () => {
+      if (document.visibilityState === 'hidden') return;
+      markReadFromViewport();
+    };
+    const frame = requestAnimationFrame(markIfVisible);
+    window.addEventListener('focus', markIfVisible);
+    document.addEventListener('visibilitychange', markIfVisible);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('focus', markIfVisible);
+      document.removeEventListener('visibilitychange', markIfVisible);
+    };
   }, [messages, roomId]);
 
   // DB가 원본: 진입 시 방+메시지를 서버에서 받아 로컬에 병합
@@ -1640,10 +1685,15 @@ export const ChatRoom: React.FC = () => {
                             type: 'chat',
                             title: NOTIFY_OFFER_DECLINED,
                             content: `${order.seller.nickname} declined your offer for "${order.product.title}".`,
-                            link: `/product/${order.product.id}`,
+                            link: roomId ? `/chat/${roomId}` : `/product/${order.product.id}`,
                           });
                           void addPriceOfferResultToChat(order, 'rejected').then(async () => {
-                            const ok = await deleteOrder(order.id);
+                            // Keep the order so the offer/decline history stays on the timeline.
+                            const ok = await updateOrderStatus(
+                              order.id,
+                              ORDER_STATUS_VALUE.OFFER_DECLINED,
+                              'Offer declined',
+                            );
                             if (!ok) {
                               showToast(t('couldNotDeclineOffer'));
                               return;

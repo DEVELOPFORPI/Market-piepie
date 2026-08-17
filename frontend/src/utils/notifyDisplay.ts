@@ -17,6 +17,9 @@ import {
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
   NOTIFY_TRADE_COMPLETED,
+  NOTIFY_POST_COMMENT,
+  NOTIFY_INQUIRY_REPLY,
+  NOTIFY_DISPUTE_RESOLVED,
   normalizeNotificationTitle,
 } from '@/locale/enUI';
 
@@ -38,6 +41,9 @@ const TITLE_KEY: Record<string, NotifyMessageKey> = {
   [NOTIFY_REVIEW_WRITTEN]: 'titleReview',
   'Dispute filed': 'titleDisputeFiled',
   'Dispute post published': 'titleDisputePost',
+  [NOTIFY_POST_COMMENT]: 'titlePostComment',
+  [NOTIFY_INQUIRY_REPLY]: 'titleInquiryReply',
+  [NOTIFY_DISPUTE_RESOLVED]: 'titleDisputeResolved',
 };
 
 const BADGE_KEY: Record<string, NotifyMessageKey> = {
@@ -173,6 +179,21 @@ const BODY_RULES: BodyRule[] = [
   {
     re: /^A community post was created for the dispute on "(.+?)"\. You can leave comments there\.$/,
     key: 'bodyDisputePost',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^(.+?) commented on "(.+?)"\.$/,
+    key: 'bodyPostComment',
+    map: (m) => ({ name: m[1], title: m[2] }),
+  },
+  {
+    re: /^We replied to your inquiry "(.+?)"\.$/,
+    key: 'bodyInquiryReply',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^The dispute for "(.+?)" has been resolved\.$/,
+    key: 'bodyDisputeResolved',
     map: (m) => ({ title: m[1] }),
   },
 ];

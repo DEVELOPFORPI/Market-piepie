@@ -116,7 +116,7 @@ export const ReviewWrite: React.FC = () => {
           type: 'order',
           title: NOTIFY_REVIEW_WRITTEN,
           content: `${review.reviewer.nickname} left a ${rating}-star review for "${order.product.title}".`,
-          link: '/my/reviews',
+          link: `/my/reviews?order=${encodeURIComponent(order.id)}`,
         });
         void addReviewToChat(order, review.reviewer.nickname);
       } catch (e) {

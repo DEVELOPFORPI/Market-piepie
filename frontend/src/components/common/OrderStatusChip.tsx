@@ -10,6 +10,7 @@ interface OrderStatusChipProps {
 export const OrderStatusChip: React.FC<OrderStatusChipProps> = ({ status }) => {
   const variantMap: Record<OrderStatus, 'default' | 'info' | 'warning' | 'success' | 'danger'> = {
     [ORDER_STATUS_VALUE.PENDING_OFFER]: 'info',
+    [ORDER_STATUS_VALUE.OFFER_DECLINED]: 'default',
     [ORDER_STATUS_VALUE.ACCEPTED]: 'info',
     [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: 'warning',
     [ORDER_STATUS_VALUE.MEETUP_SET]: 'info',

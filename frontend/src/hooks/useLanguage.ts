@@ -603,6 +603,8 @@ const ORDER_DETAIL_KEYS = new Set<string>([
   'tlShippedVia',
   'tlPurchaseOfferCreated',
   'tlOfferAccepted',
+  'tlOfferDeclined',
+  'offerAlreadyPending',
   'tlAwaitingShipping',
   'tlMarkedShipped',
   'tlMarkedDelivered',

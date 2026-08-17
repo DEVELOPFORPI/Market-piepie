@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ModalShell } from '@/components/common/ModalShell';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { api } from '@/utils/api';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -55,6 +55,8 @@ const STATUS_COLOR: Record<string, string> = {
 export const MyInquiries: React.FC = () => {
   useGuestPageGuard('inquiry');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const focusInquiryId = searchParams.get('id');
   const { lang, t } = useLanguage();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +113,12 @@ export const MyInquiries: React.FC = () => {
       setSelected(fresh);
     }
   }, [inquiries, selected]);
+
+  useEffect(() => {
+    if (!focusInquiryId || inquiries.length === 0) return;
+    const found = inquiries.find((i) => i.id === focusInquiryId);
+    if (found) setSelected(found);
+  }, [focusInquiryId, inquiries]);
 
   const filteredInquiries = useMemo(() => {
     if (filterCategory === 'all') return inquiries;

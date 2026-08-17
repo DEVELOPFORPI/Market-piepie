@@ -16,6 +16,7 @@ export type ProductStatus = (typeof PRODUCT_STATUS_VALUE)[keyof typeof PRODUCT_S
 /** Persisted order status strings */
 export const ORDER_STATUS_VALUE = {
   PENDING_OFFER: '제안중',
+  OFFER_DECLINED: '제안거절',
   ACCEPTED: '수락됨',
   AWAITING_SHIPPING_INFO: '배송정보대기',
   MEETUP_SET: '약속확정',

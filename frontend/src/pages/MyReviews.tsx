@@ -1,7 +1,7 @@
 import { api } from '@/utils/api';
 import { getMyUser } from '@/utils/profileStorage';
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { Review } from '@/types';
 import { getMyWrittenReviews, getReceivedReviews } from '@/utils/reviewStorage';
@@ -16,6 +16,8 @@ export const MyReviews: React.FC = () => {
   useGuestPageGuard('review');
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const focusOrderId = searchParams.get('order');
   const { lang, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('received');
   const [writtenReviews, setWrittenReviews] = useState<Review[]>([]);
@@ -64,6 +66,16 @@ export const MyReviews: React.FC = () => {
     }
   }, [location.state]);
 
+  useEffect(() => {
+    if (!focusOrderId) return;
+    setActiveTab('received');
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-review-order="${CSS.escape(focusOrderId)}"]`);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusOrderId, receivedReviews.length]);
+
   const renderStars = (rating: number) => (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
@@ -82,7 +94,15 @@ export const MyReviews: React.FC = () => {
   );
 
   const renderReviewCard = (review: Review) => (
-    <div key={review.id} className="p-4 border border-gray-200 rounded-lg">
+    <div
+      key={review.id}
+      data-review-order={review.orderId || ''}
+      className={`p-4 border rounded-lg ${
+        focusOrderId && review.orderId === focusOrderId
+          ? 'border-[#00A8A3] bg-teal-50/40'
+          : 'border-gray-200'
+      }`}
+    >
       {review.productTitle && (
         <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100">
           {review.productImage && (

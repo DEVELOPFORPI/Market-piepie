@@ -404,6 +404,13 @@ export const markAsRead = (roomId: string) => {
   if (!room.lastReadAt) room.lastReadAt = {};
   const messages = room.messages || [];
   const lastTs = messages.length ? messages[messages.length - 1].timestamp : new Date().toISOString();
+  // 이미 끝까지 읽은 상태면 저장·서버 전송을 반복하지 않는다 (저장 이벤트로 인한 재호출 루프 방지)
+  const alreadyRead = !!userId
+    && room.readStatus[userId] === true
+    && room.lastReadAt[userId] === lastTs
+    && room.isRead === true
+    && (room.unreadCount || 0) === 0;
+  if (alreadyRead) return;
   if (userId) {
     room.readStatus[userId] = true;
     room.lastReadAt[userId] = lastTs;

@@ -181,7 +181,10 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
   useEffect(() => {
     if (!heavyReady) return;
 
+    const isBackgrounded = () => document.visibilityState === 'hidden';
+
     const productPollInterval = setInterval(() => {
+      if (isBackgrounded()) return;
       if (!isApiRateLimited()) syncProductsFromDB();
     }, 60000);
 
@@ -226,12 +229,14 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
 
     // Fallback 알림 폴링 (10초마다) - Supabase Realtime이 실패해도 알림 받을 수 있게
     const notifPollInterval = setInterval(() => {
+      if (isBackgrounded()) return;
       const uid = getCurrentUserId();
       if (!uid || isApiRateLimited()) return;
       void syncNotificationsFromDB(uid);
     }, 30000);
 
     const chatPollInterval = setInterval(() => {
+      if (isBackgrounded()) return;
       const uid = getCurrentUserId();
       if (!uid || isApiRateLimited()) return;
       connectChatSocket();
@@ -241,7 +246,11 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
       const uid = getCurrentUserId();
-      if (uid) void syncChatRoomsFromDB(uid);
+      if (!uid) return;
+      // 백그라운드 동안 건너뛴 폴링을 화면 복귀 시 한 번에 만회한다.
+      connectChatSocket();
+      void syncChatRoomsFromDB(uid);
+      void syncNotificationsFromDB(uid);
     };
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -531,21 +540,12 @@ function App() {
     if (seq !== healthCheckSeq.current) return;
 
     if (online) {
-      // #region agent log — 직전에 실패가 있었다면 복구 사실도 서버 로그로 보고 (session 0a2150)
-      if (healthFailStreak.current > 0) {
-        fetch(`/api/health?clientrecovered=${healthFailStreak.current}`, { cache: 'no-store' }).catch(() => {});
-      }
-      // #endregion
       healthFailStreak.current = 0;
     } else {
       healthFailStreak.current += 1;
       console.warn(
         `[health] check failed (streak=${healthFailStreak.current}, appStatus=${backendStatusRef.current}, httpStatus=${lastStatus}, error=${lastError ?? '-'})`,
       );
-      // #region agent log — Pi Browser에는 콘솔이 없어 서버 로그로 실패를 보고한다.
-      // 429 원인 검증 완료 후 제거 예정 (session 0a2150)
-      fetch(`/api/health?clientfail=${lastStatus}&streak=${healthFailStreak.current}`, { cache: 'no-store' }).catch(() => {});
-      // #endregion
       // 모바일 와이파이는 단발성 요청 실패가 흔하다. 이미 정상 사용 중이면
       // 2회 연속 실패가 확인될 때까지 앱을 차단하지 않는다.
       if (backendStatusRef.current === 'online' && healthFailStreak.current < 2) return;

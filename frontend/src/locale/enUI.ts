@@ -20,6 +20,7 @@ import {
 import { accountT } from '@/i18n/accountMessages';
 import { communityT } from '@/i18n/communityMessages';
 import { homeT } from '@/i18n/homeMessages';
+import { orderDetailT } from '@/i18n/orderDetailMessages';
 import { productT } from '@/i18n/productMessages';
 import { getAppLanguage } from '@/utils/languageStorage';
 
@@ -91,6 +92,7 @@ export function labelOrderStatus(s: OrderStatus): string {
   const lang = getAppLanguage();
   const map: Record<OrderStatus, string> = {
     [ORDER_STATUS_VALUE.PENDING_OFFER]: accountT(lang, 'orderStatusPendingOffer'),
+    [ORDER_STATUS_VALUE.OFFER_DECLINED]: orderDetailT(lang, 'tlOfferDeclined'),
     [ORDER_STATUS_VALUE.ACCEPTED]: accountT(lang, 'orderStatusAccepted'),
     [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: accountT(lang, 'orderStatusAwaitingShipping'),
     [ORDER_STATUS_VALUE.MEETUP_SET]: accountT(lang, 'orderStatusMeetupSet'),
@@ -174,6 +176,7 @@ export function relativeTimeShort(isoDate: string): string {
 export function descriptionForOrderStatusForTimeline(s: OrderStatus): string {
   const map: Record<OrderStatus, string> = {
     [ORDER_STATUS_VALUE.PENDING_OFFER]: 'Purchase offer created',
+    [ORDER_STATUS_VALUE.OFFER_DECLINED]: 'Offer declined',
     [ORDER_STATUS_VALUE.ACCEPTED]: 'Offer accepted',
     [ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO]: 'Awaiting shipping details',
     [ORDER_STATUS_VALUE.MEETUP_SET]: 'Meetup confirmed',
@@ -261,6 +264,9 @@ export const NOTIFY_MEETUP_CANCELED = pick('Meetup canceled', '약속이 취소�
 export const NOTIFY_PURCHASE_OFFER_ARRIVED = pick('New purchase offer', '새 구매 제안이 도착했습니다');
 export const NOTIFY_FREE_SHARE_REQUEST_ARRIVED = pick('New free share request', '새 나눔 요청이 도착했습니다');
 export const NOTIFY_BADGE_UNLOCKED = pick('New activity badge unlocked!', '새로운 활동 배지가 획득되었습니다!');
+export const NOTIFY_POST_COMMENT = pick('New comment', '새 댓글이 달렸습니다');
+export const NOTIFY_INQUIRY_REPLY = pick('Inquiry reply', '문의 답변이 도착했습니다');
+export const NOTIFY_DISPUTE_RESOLVED = pick('Dispute resolved', '분쟁이 해결되었습니다');
 export const MEETUP_STARTED_SNIPPET = pick('started scheduling a meetup', '약속 잡기를 시작');
 
 export const MEETUP_TITLE_SET = new Set<string>([
@@ -299,6 +305,9 @@ const LEGACY_NOTIFY_TITLE_TO_EN: Record<string, string> = {
   '약속이 취소되었습니다': NOTIFY_MEETUP_CANCELED,
   '새 구매 제안이 도착했습니다': NOTIFY_PURCHASE_OFFER_ARRIVED,
   '새 나눔 요청이 도착했습니다': NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
+  '새 댓글이 달렸습니다': NOTIFY_POST_COMMENT,
+  '문의 답변이 도착했습니다': NOTIFY_INQUIRY_REPLY,
+  '분쟁이 해결되었습니다': NOTIFY_DISPUTE_RESOLVED,
 };
 
 export function normalizeNotificationTitle(title: string): string {

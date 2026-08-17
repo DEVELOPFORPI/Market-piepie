@@ -3,6 +3,8 @@ import { tryFreeSpaceForSave } from '@/utils/storageClear';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentDeleteToDB, syncPostFromDB } from '@/utils/dbSync';
 import { applyPostCommentCount } from '@/utils/postCommentCountStorage';
+import { addNotification } from '@/utils/notificationStorage';
+import { NOTIFY_POST_COMMENT } from '@/locale/enUI';
 
 const DISPUTE_STORAGE_KEY = 'community_dispute_posts';
 const USER_POSTS_STORAGE_KEY = 'community_user_posts';
@@ -266,6 +268,19 @@ export const addComment = async (postId: string, comment: Comment): Promise<bool
 
   if (result.count != null) {
     patchLocalPostCommentCount(postId, result.count);
+  }
+
+  const post = getPostById(postId) || await ensurePostById(postId);
+  const authorId = post?.author?.id;
+  const commenterId = comment.author?.id;
+  if (authorId && commenterId && authorId !== commenterId) {
+    void addNotification({
+      targetUserId: authorId,
+      type: 'comment',
+      title: NOTIFY_POST_COMMENT,
+      content: `${comment.author.nickname || 'Someone'} commented on "${post.title}".`,
+      link: `/community/post/${postId}`,
+    });
   }
 
   window.dispatchEvent(new Event('commentsChanged'));

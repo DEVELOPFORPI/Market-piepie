@@ -262,9 +262,6 @@ export async function syncMyPostsFromDB(userId: string): Promise<void> {
       mapPostFromDB(row, favoriteIds),
     );
     setItem('community_user_posts', JSON.stringify(myPosts));
-    // #region agent log
-    fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'dbSync.ts:syncMyPostsFromDB',message:'my posts synced',data:{userId,count:myPosts.length,ids:myPosts.slice(0,5).map(p=>p.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     window.dispatchEvent(new Event('postsChanged'));
   } catch {
     // ignore
@@ -288,9 +285,6 @@ export async function syncPostsFromDB(): Promise<void> {
         dbPosts.map((p) => ({ postId: p.id, count: p.commentCount ?? 0 })),
       );
       setItem('community_feed_posts', JSON.stringify(dbPosts));
-      // #region agent log
-      fetch('http://127.0.0.1:7863/ingest/715ac1de-3796-4756-9d9b-57f74ad3b63b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2150'},body:JSON.stringify({sessionId:'0a2150',location:'dbSync.ts:syncPostsFromDB',message:'feed posts synced',data:{count:dbPosts.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       cleanupLocalPostLeftovers(dbPosts);
       window.dispatchEvent(new Event('postsChanged'));
     }
@@ -478,6 +472,7 @@ export async function syncOrderToDB(order: Order): Promise<boolean> {
       shipping_proof_images: order.shippingProofImages || [],
     });
     if (!res.ok) return false;
+    missingOrderIds.delete(order.id);
     if (order.timeline?.length) {
       const last = order.timeline[order.timeline.length - 1];
       await api.post(`/api/orders/${order.id}/timeline`, {
@@ -541,11 +536,28 @@ function mergeOrderDbPreferred(dbOrder: Order, local?: Order): Order {
   };
 }
 
+/**
+ * 서버에 없는 주문(404) 재조회 억제.
+ * 오래된 채팅 메시지가 삭제된 주문을 가리키면 화면 진입마다 404가 반복되므로,
+ * 일정 시간 동안은 다시 묻지 않는다.
+ */
+const missingOrderIds = new Map<string, number>();
+const MISSING_ORDER_TTL_MS = 5 * 60 * 1000;
+
 /** 단일 주문을 DB에서 로드해 로컬 캐시에 병합 */
 export async function syncOrderFromDB(orderId: string): Promise<Order | undefined> {
   if (!orderId) return undefined;
+  const missingAt = missingOrderIds.get(orderId);
+  if (missingAt !== undefined) {
+    if (Date.now() - missingAt < MISSING_ORDER_TTL_MS) return undefined;
+    missingOrderIds.delete(orderId);
+  }
   try {
     const res = await api.get<Record<string, unknown>>(`/api/orders/${orderId}`);
+    if (res.status === 404) {
+      missingOrderIds.set(orderId, Date.now());
+      return undefined;
+    }
     if (!res.ok || !res.data) return undefined;
     const row = res.data as Record<string, unknown>;
     const existing = lookupOrderById(orderId);
@@ -787,6 +799,49 @@ function parseReadStateFromDB(raw: unknown): { readStatus: Record<string, boolea
     if (v.lastReadAt) lastReadAt[userId] = String(v.lastReadAt);
   }
   return { readStatus, lastReadAt };
+}
+
+/**
+ * 방 하나의 읽음 상태만 DB에서 받아 로컬에 반영.
+ * Realtime 읽음 수신이 실패해도 "1" 표시가 사라지도록 채팅방에서 주기적으로 호출한다.
+ * 각 사용자의 lastReadAt은 더 최신 값만 반영해 내 로컬 상태를 되돌리지 않는다.
+ */
+export async function syncRoomReadStateFromDB(roomId: string): Promise<boolean> {
+  if (!roomId) return false;
+  try {
+    const res = await api.get<{ read_state?: unknown }>(`/api/chat-rooms/${roomId}/read-state`);
+    if (!res.ok || !res.data) return false;
+    const { readStatus, lastReadAt } = parseReadStateFromDB(res.data.read_state);
+
+    const rooms: ChatRoom[] = (() => {
+      try { return JSON.parse(getItem('all_chatrooms') || '[]'); } catch { return []; }
+    })();
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return false;
+
+    if (!room.readStatus) room.readStatus = {};
+    if (!room.lastReadAt) room.lastReadAt = {};
+    let changed = false;
+    for (const [uid, ts] of Object.entries(lastReadAt)) {
+      if ((room.lastReadAt[uid] || '') < ts) {
+        room.lastReadAt[uid] = ts;
+        changed = true;
+      }
+    }
+    for (const [uid, read] of Object.entries(readStatus)) {
+      if (read && room.readStatus[uid] !== true) {
+        room.readStatus[uid] = true;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+
+    setItem('all_chatrooms', JSON.stringify(rooms));
+    window.dispatchEvent(new Event('chatRoomsChanged'));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 메시지를 DB에 저장 — 성공 여부 반환 (DB-first) */
@@ -1361,7 +1416,18 @@ function mapDisputeFromDB(row: Record<string, unknown>) {
     reason: String(row.reason || ''),
     action: String(row.action || ''),
     description: String(row.description || ''),
-    evidence: Array.isArray(row.evidence) ? (row.evidence as string[]) : [],
+    evidence: Array.isArray(row.evidence)
+      ? (row.evidence as string[])
+      : typeof row.evidence === 'string' && row.evidence.trim()
+        ? (() => {
+            try {
+              const parsed = JSON.parse(row.evidence);
+              return Array.isArray(parsed) ? parsed.map(String) : [];
+            } catch {
+              return [];
+            }
+          })()
+        : [],
     status: String(row.status || 'OPEN') as 'OPEN' | 'IN_REVIEW' | 'RESOLVED',
     createdAt: String(row.created_at || new Date().toISOString()),
     resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
@@ -1472,6 +1538,17 @@ export async function syncNotificationToDB(notification: {
       content: notification.content,
       link: notification.link,
     });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 알림 삭제 DB 반영 */
+export async function syncNotificationsDeleteToDB(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true;
+  try {
+    const res = await api.post('/api/notifications/bulk-delete', { ids });
     return res.ok;
   } catch {
     return false;

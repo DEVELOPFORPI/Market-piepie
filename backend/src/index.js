@@ -734,14 +734,6 @@ async function queryReturning(
 
 // ????????? ???????? ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 app.get("/api/health", async (req, res) => {
-  // #region agent log — 프론트가 health 실패/복구를 쿼리로 보고하면 도커 로그에 남긴다.
-  // 429/차단 원인 검증 후 제거 예정 (session 0a2150)
-  if (req.query.clientfail !== undefined || req.query.clientrecovered !== undefined) {
-    console.log(
-      `[client-health] ip=${req.ip} fail=${req.query.clientfail ?? "-"} recovered=${req.query.clientrecovered ?? "-"} streak=${req.query.streak ?? "-"} ua=${(req.headers["user-agent"] || "").slice(0, 60)}`,
-    );
-  }
-  // #endregion
   const out = { ok: true, service: "marketpiepie-backend v1", db: "skipped" };
   if (!pool) return res.json(out);
   try {
@@ -2100,6 +2092,36 @@ app.get("/api/orders/:orderId/dispute-summaries", requireDb, async (req, res) =>
   }
 });
 
+/** Buyer/seller: full disputes on this order, including the other party's reason and evidence. */
+app.get("/api/orders/:orderId/disputes", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
+  try {
+    const { rows: orderRows } = await pool.query(
+      "SELECT buyer_id, seller_id FROM orders WHERE id=$1",
+      [req.params.orderId],
+    );
+    if (!orderRows.length) return res.status(404).json({ error: "Order not found" });
+    if (
+      orderRows[0].buyer_id !== req.authUserId &&
+      orderRows[0].seller_id !== req.authUserId
+    ) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { rows } = await pool.query(
+      `SELECT d.*, bu.nickname AS buyer_nickname, su.nickname AS seller_nickname
+       FROM disputes d
+       LEFT JOIN users bu ON bu.id = d.buyer_id
+       LEFT JOIN users su ON su.id = d.seller_id
+       WHERE d.order_id = $1
+       ORDER BY d.created_at ASC`,
+      [req.params.orderId],
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
   const {
     id,
@@ -2413,6 +2435,31 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
       [req.params.id],
     );
     res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 읽음 상태만 가볍게 조회 — Realtime 수신이 실패해도 읽음 표시가 갱신되도록
+app.get("/api/chat-rooms/:id/read-state", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
+  try {
+    const { rows } = await pool.query(
+      "SELECT buyer_id, seller_id, read_state FROM chat_rooms WHERE id=$1",
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Room not found" });
+    if (
+      req.authUserId !== rows[0].buyer_id &&
+      req.authUserId !== rows[0].seller_id
+    ) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const readState =
+      rows[0].read_state && typeof rows[0].read_state === "object"
+        ? rows[0].read_state
+        : {};
+    res.json({ read_state: readState });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3178,7 +3225,7 @@ app.get("/api/notifications", requireDb, async (req, res) => {
   }
 });
 
-/** 알림은 본인 또는 실제 거래(채팅방·주문) 상대에게만 보낼 수 있다. */
+/** 알림은 본인, 거래 상대, 또는 내 글에 댓글 단 사람에게만 보낼 수 있다. */
 async function hasTradeRelationship(actorId, targetId) {
   if (!actorId || !targetId) return false;
   if (actorId === targetId) return true;
@@ -3204,12 +3251,31 @@ async function hasTradeRelationship(actorId, targetId) {
   }
 }
 
+async function canNotifyPostAuthor(actorId, targetId, type, link) {
+  if (type !== "comment" || typeof link !== "string") return false;
+  const m = link.match(/^\/community\/post\/([^/?#]+)/);
+  if (!m) return false;
+  try {
+    const { rows } = await pool.query(
+      "SELECT author_id FROM community_posts WHERE id=$1 LIMIT 1",
+      [m[1]],
+    );
+    return Boolean(rows[0] && rows[0].author_id === targetId && actorId !== targetId);
+  } catch (e) {
+    console.warn("[notifications] post-author check failed:", e.message);
+    return false;
+  }
+}
+
 app.post("/api/notifications", requireDb, async (req, res) => {
   const { id, target_user_id, type, link } = req.body;
   if (!requireSession(req, res)) return;
   if (!target_user_id)
     return res.status(400).json({ error: "target_user_id required" });
-  if (!(await hasTradeRelationship(req.authUserId, target_user_id)))
+  if (
+    !(await hasTradeRelationship(req.authUserId, target_user_id)) &&
+    !(await canNotifyPostAuthor(req.authUserId, target_user_id, type, link))
+  )
     return res.status(403).json({ error: "Forbidden" });
   const clamp = (v, max) =>
     typeof v === "string" ? v.slice(0, max) : v == null ? null : String(v).slice(0, max);
@@ -3255,6 +3321,40 @@ app.put("/api/notifications/:id/read", requireDb, async (req, res) => {
     await pool.query("UPDATE notifications SET `read`=true WHERE id=$1", [
       req.params.id,
     ]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/notifications/:id", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
+  try {
+    const { rows: nCheck } = await pool.query(
+      "SELECT target_user_id FROM notifications WHERE id=$1",
+      [req.params.id],
+    );
+    if (!nCheck.length) return res.json({ ok: true });
+    if (nCheck[0].target_user_id !== req.authUserId)
+      return res.status(403).json({ error: "Forbidden" });
+    await pool.query("DELETE FROM notifications WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/notifications/bulk-delete", requireDb, async (req, res) => {
+  if (!requireSession(req, res)) return;
+  const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = [...new Set(rawIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (ids.length === 0) return res.status(400).json({ error: "ids required" });
+  try {
+    const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
+    await pool.query(
+      `DELETE FROM notifications WHERE target_user_id=$1 AND id IN (${placeholders})`,
+      [req.authUserId, ...ids],
+    );
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3565,7 +3665,7 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
         .catch(zero),
       pool
         .query(
-          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','분쟁','dispute')",
+          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute')",
         )
         .catch(zero),
       pool
@@ -3959,7 +4059,31 @@ app.put(
         [req.params.id],
       );
       if (!rows.length) return res.status(404).json({ error: "Not found" });
-      res.json(rows[0]);
+      const dispute = rows[0];
+      if (status === "RESOLVED") {
+        const title = String(dispute.product_title || "Listing");
+        const targets = [dispute.buyer_id, dispute.seller_id].filter(Boolean);
+        for (const targetId of targets) {
+          try {
+            await pool.query(
+              `INSERT INTO notifications (id, target_user_id, type, title, content, link)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON DUPLICATE KEY UPDATE id=id`,
+              [
+                `notif_disp_${dispute.id}_${targetId}_${Date.now()}`,
+                targetId,
+                "order",
+                "Dispute resolved",
+                `The dispute for "${title}" has been resolved.`,
+                `/dispute/${dispute.order_id}`,
+              ],
+            );
+          } catch (notifyErr) {
+            console.warn("[disputes] resolve notification failed:", notifyErr.message);
+          }
+        }
+      }
+      res.json(dispute);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -4235,7 +4359,29 @@ app.put(
         [req.params.id],
       );
       if (!rows.length) return res.status(404).json({ error: "Not found" });
-      res.json(rows[0]);
+      const inquiry = rows[0];
+      if (inquiry.user_id && admin_reply && String(admin_reply).trim()) {
+        const title = String(inquiry.title || "Inquiry");
+        const notifId = `notif_inq_${inquiry.id}_${Date.now()}`;
+        try {
+          await pool.query(
+            `INSERT INTO notifications (id, target_user_id, type, title, content, link)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON DUPLICATE KEY UPDATE id=id`,
+            [
+              notifId,
+              inquiry.user_id,
+              "inquiry",
+              "Inquiry reply",
+              `We replied to your inquiry "${title}".`,
+              `/my/inquiries?id=${encodeURIComponent(inquiry.id)}`,
+            ],
+          );
+        } catch (notifyErr) {
+          console.warn("[inquiries] reply notification failed:", notifyErr.message);
+        }
+      }
+      res.json(inquiry);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

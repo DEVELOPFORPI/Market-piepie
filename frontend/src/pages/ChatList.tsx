@@ -69,7 +69,10 @@ export const ChatList: React.FC = () => {
       syncNotificationsFromDB(uid);
       void pullChatsFromServer();
       // Realtime can miss rooms; polling keeps seller (and buyer) lists aligned with DB
-      intervalId = window.setInterval(() => void pullChatsFromServer(), 25000);
+      intervalId = window.setInterval(() => {
+        if (document.visibilityState === 'hidden') return;
+        void pullChatsFromServer();
+      }, 25000);
     }
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void pullChatsFromServer();

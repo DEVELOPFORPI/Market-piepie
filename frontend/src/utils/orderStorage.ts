@@ -143,6 +143,17 @@ export const getOrderById = (orderId: string): Order | undefined => {
   return getAllOrders().find((o) => o.id === orderId);
 };
 
+/** My offer on this listing that the seller has not answered yet (one offer at a time). */
+export const getMyPendingOfferOrder = (productId: string, buyerId?: string | null): Order | undefined => {
+  if (!productId || !buyerId) return undefined;
+  return getAllOrders().find(
+    (o) =>
+      o.product?.id === productId
+      && o.buyer?.id === buyerId
+      && o.status === ORDER_STATUS_VALUE.PENDING_OFFER,
+  );
+};
+
 const ORDER_STATUS_SET = new Set<string>(Object.values(ORDER_STATUS_VALUE));
 
 /** Order statuses where the listing should show as trading (reserved), not for sale. */
@@ -594,6 +605,9 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
   if (existing) {
     existing.proposedPrice = params.proposedPrice;
     existing.tradeMethod = params.tradeMethod;
+    if (existing.status === ORDER_STATUS_VALUE.OFFER_DECLINED) {
+      existing.status = ORDER_STATUS_VALUE.PENDING_OFFER;
+    }
     if (params.meetupPlace) existing.meetupPlace = params.meetupPlace;
     if (params.meetupDate) existing.meetupDate = params.meetupDate;
     if (params.meetupTime) existing.meetupTime = params.meetupTime;
