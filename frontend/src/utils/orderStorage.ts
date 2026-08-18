@@ -22,9 +22,7 @@ import {
   MSG_ORDER_QUOTA_EXCEEDED,
   NOTIFY_OFFER_ACCEPTED,
   NOTIFY_PURCHASE_OFFER_ARRIVED,
-  NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_TRADE_COMPLETED,
-  NOTIFY_TRADE_COMPLETE_CHECK,
 } from '@/locale/enUI';
 
 /** Shared storage key: all orders */
@@ -351,18 +349,6 @@ export const updateOrderStatus = async (
     });
     void addPriceOfferResultToChat(order, 'accepted');
   }
-  if (status === ORDER_STATUS_VALUE.RECEIVED) {
-    const isShare = isShareOrder(order.proposedPrice ?? 0, order.product);
-    void addNotification({
-      targetUserId: order.seller.id,
-      type: 'order',
-      title: NOTIFY_RECEIVE_CONFIRM,
-      content: isShare
-        ? `${order.buyer.nickname} confirmed receipt for "${order.product.title}". The trade is complete.`
-        : `${order.buyer.nickname} confirmed receipt for "${order.product.title}". Please complete your side of the trade check.`,
-      link: `/order/${order.id}`,
-    });
-  }
   syncProductStatusFromOrder(order);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
@@ -389,16 +375,6 @@ export const confirmOrderCompletion = async (
   };
   order.timeline.push(timelineEvent);
 
-  const otherUser = role === 'buyer' ? order.seller : order.buyer;
-  const whoConfirmed = role === 'buyer' ? order.buyer : order.seller;
-  addNotification({
-    targetUserId: otherUser.id,
-    type: 'order',
-    title: NOTIFY_TRADE_COMPLETE_CHECK,
-    content: `${whoConfirmed.nickname} confirmed trade completion for "${order.product.title}".${order.buyerCompleted && order.sellerCompleted ? ' Both sides confirmed; the trade is complete.' : ''}`,
-    link: `/order/${order.id}`,
-  });
-
   if (order.buyerCompleted && order.sellerCompleted) {
     order.status = ORDER_STATUS_VALUE.COMPLETE;
     order.timeline.push({
@@ -414,8 +390,8 @@ export const confirmOrderCompletion = async (
       targetUserId: other.id,
       type: 'order',
       title: NOTIFY_TRADE_COMPLETED,
-      content: `The trade for "${order.product.title}" is complete after both sides confirmed.`,
-      link: `/order/${order.id}`,
+      content: `The trade for "${order.product.title}" is complete. You can leave a review!`,
+      link: `/review/${order.id}`,
     });
   }
 
@@ -431,11 +407,14 @@ export const confirmOrderCompletion = async (
   return order;
 };
 
-/** Free share: on receive confirm, complete immediately (no dual completion check) */
-export const completeShareOrderOnReceive = async (orderId: string): Promise<Order | undefined> => {
+/** Buyer receipt ends the trade (paid and free share). Only the other party is notified. */
+export const completeOrderOnReceive = async (orderId: string): Promise<Order | undefined> => {
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
-  if (!order || !isShareOrder(order.proposedPrice ?? 0, order.product)) return undefined;
+  if (!order) return undefined;
+  if (order.status === ORDER_STATUS_VALUE.COMPLETE && order.buyerCompleted && order.sellerCompleted) {
+    return order;
+  }
 
   order.buyerCompleted = true;
   order.sellerCompleted = true;
@@ -455,11 +434,13 @@ export const completeShareOrderOnReceive = async (orderId: string): Promise<Orde
   if (!ok) return undefined;
 
   void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+  const actorId = getCurrentUserId();
+  const notifyTarget = actorId === order.seller.id ? order.buyer : order.seller;
   addNotification({
-    targetUserId: order.seller.id,
+    targetUserId: notifyTarget.id,
     type: 'order',
     title: NOTIFY_TRADE_COMPLETED,
-    content: `The free share for "${order.product.title}" is complete. You can leave a review!`,
+    content: `The trade for "${order.product.title}" is complete. You can leave a review!`,
     link: `/review/${order.id}`,
   });
   setOrdersWithQuotaRetry(orders, orderId);
@@ -467,6 +448,8 @@ export const completeShareOrderOnReceive = async (orderId: string): Promise<Orde
   notifyOrderCounterpart(order);
   return order;
 };
+
+export const completeShareOrderOnReceive = completeOrderOnReceive;
 
 /** Save meetup; set status to meetup set */
 export const updateOrderMeetup = async (
@@ -597,9 +580,8 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
   const myUser = getMyUser();
   const now = new Date().toISOString();
   const isShare = isShareOrder(params.proposedPrice, params.product);
-  const offerDesc = isShare
-    ? 'Free share request'
-    : `${params.proposedPrice.toLocaleString()} Pi purchase offer`;
+  if (isShare) return null;
+  const offerDesc = `${params.proposedPrice.toLocaleString()} Pi purchase offer`;
 
   const existing = findOpenOrderForTrade(params.product.id, myUser.id, params.product.seller.id);
   if (existing) {
@@ -623,15 +605,13 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
     ];
     const saved = await saveOrder(existing);
     if (!saved) return null;
-    if (!isShare) {
-      void addNotification({
-        targetUserId: existing.seller.id,
-        type: 'order',
-        title: NOTIFY_PURCHASE_OFFER_ARRIVED,
-        content: `${existing.buyer.nickname} sent a ${existing.proposedPrice.toLocaleString()} Pi offer for "${existing.product.title}".`,
-        link: `/order/${existing.id}`,
-      });
-    }
+    void addNotification({
+      targetUserId: existing.seller.id,
+      type: 'order',
+      title: NOTIFY_PURCHASE_OFFER_ARRIVED,
+      content: `${existing.buyer.nickname} sent a ${existing.proposedPrice.toLocaleString()} Pi offer for "${existing.product.title}".`,
+      link: `/order/${existing.id}`,
+    });
     void addPriceOfferToChat(existing);
     return existing;
   }
@@ -670,15 +650,13 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
   const saved = await saveOrder(order);
   if (!saved) return null;
 
-  if (!isShare) {
-    void addNotification({
-      targetUserId: order.seller.id,
-      type: 'order',
-      title: NOTIFY_PURCHASE_OFFER_ARRIVED,
-      content: `${order.buyer.nickname} sent a ${order.proposedPrice.toLocaleString()} Pi offer for "${order.product.title}".`,
-      link: `/order/${order.id}`,
-    });
-  }
+  void addNotification({
+    targetUserId: order.seller.id,
+    type: 'order',
+    title: NOTIFY_PURCHASE_OFFER_ARRIVED,
+    content: `${order.buyer.nickname} sent a ${order.proposedPrice.toLocaleString()} Pi offer for "${order.product.title}".`,
+    link: `/order/${order.id}`,
+  });
 
   void addPriceOfferToChat(order);
   return order;

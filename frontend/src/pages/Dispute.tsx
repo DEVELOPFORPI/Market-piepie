@@ -23,7 +23,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
-import { labelTradeMethod } from '@/locale/enUI';
+import { labelTradeMethod, NOTIFY_DISPUTE_FILED } from '@/locale/enUI';
 import { Order, User } from '@/types';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
@@ -78,7 +78,11 @@ function pickFocusedDispute(
     .filter((d) => d.status === 'RESOLVED' && forOpener(d))
     .sort((a, b) => (a.resolvedAt || a.createdAt).localeCompare(b.resolvedAt || b.createdAt));
   if (resolved.length) return resolved[resolved.length - 1];
-  if (viewOtherParty) {
+  const otherOpen = disputes.find(
+    (d) => d.status !== 'RESOLVED' && (!openerId || d.openedByUserId !== openerId),
+  );
+  if (otherOpen) return otherOpen;
+  if (viewOtherParty || disputes.length) {
     return [...disputes].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop();
   }
   return undefined;
@@ -270,9 +274,9 @@ export const Dispute: React.FC = () => {
     addNotification({
       targetUserId: otherUser.id,
       type: 'order',
-      title: 'Dispute filed',
+      title: NOTIFY_DISPUTE_FILED,
       content: `${openerNickname} filed a dispute for "${order.product.title}". (Reason: ${reason})`,
-      link: `/dispute/${orderId}`,
+      link: `/dispute/${orderId}?view=other`,
     });
 
     const author = getMyUser();
@@ -295,14 +299,6 @@ export const Dispute: React.FC = () => {
     });
     if (!postSaved) {
       showToast(t('disputeFiledButPostFailed'));
-    } else {
-      addNotification({
-        targetUserId: otherUser.id,
-        type: 'order',
-        title: 'Dispute post published',
-        content: `A community post was created for the dispute on "${order.product.title}". You can leave comments there.`,
-        link: `/community/post/${disputePostId}`,
-      });
     }
 
     setDispute(newDispute);
@@ -347,11 +343,15 @@ export const Dispute: React.FC = () => {
   const isDisputeOpener = Boolean(
     dispute && currentUserId && dispute.openedByUserId === currentUserId,
   );
+  const viewingOtherDispute = Boolean(
+    viewOtherParty
+    || (dispute && currentUserId && dispute.openedByUserId !== currentUserId),
+  );
   const showRequestedActionSummary = Boolean(dispute?.action?.trim());
   const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
   const showSubmitBar = Boolean(
     !dispute
-    && !viewOtherParty
+    && !viewingOtherDispute
     && !orderDisputes.some((d) => d.status === 'RESOLVED')
     && !hasResolvedDisputeOnOrder(orderId || ''),
   );
@@ -390,7 +390,7 @@ export const Dispute: React.FC = () => {
       />
 
       <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
-        {viewOtherParty && dispute && (
+        {viewingOtherDispute && dispute && (
           <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
             <p className="text-sm text-gray-600">{t('viewOtherReadonly')}</p>
           </div>
@@ -402,7 +402,7 @@ export const Dispute: React.FC = () => {
               .sort((a, b) => {
                 const aMine = Boolean(currentUserId && a.openedByUserId === currentUserId);
                 const bMine = Boolean(currentUserId && b.openedByUserId === currentUserId);
-                if (aMine !== bMine) return viewOtherParty ? (aMine ? 1 : -1) : (aMine ? -1 : 1);
+                if (aMine !== bMine) return viewingOtherDispute ? (aMine ? 1 : -1) : (aMine ? -1 : 1);
                 return a.createdAt.localeCompare(b.createdAt);
               })
               .map((d) => {
@@ -516,13 +516,13 @@ export const Dispute: React.FC = () => {
           </div>
         )}
 
-        {!dispute && order && viewOtherParty && (
+        {!dispute && order && viewingOtherDispute && (
           <div className="text-center py-8 text-gray-500">
             <p>{t('noDisputeFromOther')}</p>
           </div>
         )}
 
-        {!dispute && order && !viewOtherParty && !orderDisputes.some((d) => d.status === 'RESOLVED') && !hasResolvedDisputeOnOrder(orderId || '') && (
+        {!dispute && order && !viewingOtherDispute && !orderDisputes.some((d) => d.status === 'RESOLVED') && !hasResolvedDisputeOnOrder(orderId || '') && (
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

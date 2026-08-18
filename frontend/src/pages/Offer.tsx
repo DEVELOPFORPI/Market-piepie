@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
+import { isFreeShareListing } from '@/locale/enUI';
 import { getAllProducts } from '@/utils/productStorage';
 import { createOrder, getMyPendingOfferOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -50,6 +51,11 @@ export const Offer: React.FC = () => {
         leaveOffer();
         return;
       }
+      if (isFreeShareListing(found)) {
+        showToast(t('freeShareNoOffers'));
+        leaveOffer();
+        return;
+      }
       // 방금 보낸 직후엔 대기 중 주문이 생기는 게 정상이다. 중복 토스트·뒤로가기를 하지 않는다.
       if (justSentOfferIds.has(found.id)) {
         setProduct(found);
@@ -74,6 +80,10 @@ export const Offer: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!product || !price) return;
+    if (isFreeShareListing(product)) {
+      showToast(t('freeShareNoOffers'));
+      return;
+    }
     if (justSentOfferIds.has(product.id)) return;
     if (getMyPendingOfferOrder(product.id, getCurrentUserId())) {
       showToast(t('offerAlreadyPending'));

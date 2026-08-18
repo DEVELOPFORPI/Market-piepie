@@ -10,7 +10,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
-import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, getMyPendingOfferOrder, createOrderBySeller, confirmOrderCompletion, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, getMyPendingOfferOrder, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -865,7 +865,7 @@ export const ChatRoom: React.FC = () => {
           onClick: () => {
             void (async () => {
               if (!confirm(t('confirmTradeCompletion'))) return;
-              const updated = await confirmOrderCompletion(currentOrder.id, 'seller');
+              const updated = await completeOrderOnReceive(currentOrder.id);
               if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
                 void addTradeCompletedToChat(updated);
                 navigate(`/review/${currentOrder.id}`);

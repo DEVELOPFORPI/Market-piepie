@@ -13,7 +13,6 @@ import {
   CHAT_MSG_RECEIPT_CONFIRMED,
   CHAT_MSG_REJECT_SHARE,
   CHAT_MSG_SELLER_MEETUP_STARTED,
-  NOTIFY_CHAT_ROOM_CREATED,
   NOTIFY_NEW_CHAT,
   chatMsgAcceptOffer,
   chatMsgRejectOffer,
@@ -479,7 +478,7 @@ export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
   return samePair.find((r) => !isCompletedChatRoom(r)) || null;
 };
 
-/** Ensure room for order; create if missing. Optional creator marks other party unread + notification */
+/** Ensure room for order; create if missing. Optional creator marks other party unread. */
 export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: string): Promise<ChatRoom> => {
   const existing = getChatRoomByOrder(order);
   if (existing) {
@@ -525,16 +524,6 @@ export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: str
   saveAllChatRooms(rooms, room.id);
   await trackRoomSync(room);
   notifyNewRoom(room);
-
-  if (otherUserId) {
-    void addNotification({
-      targetUserId: otherUserId,
-      type: 'chat',
-      title: NOTIFY_CHAT_ROOM_CREATED,
-      content: `A chat was opened for "${order.product.title}".`,
-      link: `/chat/${room.id}`,
-    });
-  }
   return room;
 };
 

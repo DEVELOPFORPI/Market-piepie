@@ -271,6 +271,7 @@ export const NOTIFY_FREE_SHARE_REQUEST_ARRIVED = pick('New free share request', 
 export const NOTIFY_BADGE_UNLOCKED = pick('New activity badge unlocked!', '새로운 활동 배지가 획득되었습니다!');
 export const NOTIFY_POST_COMMENT = pick('New comment', '새 댓글이 달렸습니다');
 export const NOTIFY_INQUIRY_REPLY = pick('Inquiry reply', '문의 답변이 도착했습니다');
+export const NOTIFY_DISPUTE_FILED = pick('Dispute filed', '분쟁이 제기되었습니다');
 export const NOTIFY_DISPUTE_RESOLVED = pick('Dispute resolved', '분쟁이 해결되었습니다');
 export const MEETUP_STARTED_SNIPPET = pick('started scheduling a meetup', '약속 잡기를 시작');
 
@@ -312,6 +313,7 @@ const LEGACY_NOTIFY_TITLE_TO_EN: Record<string, string> = {
   '새 나눔 요청이 도착했습니다': NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   '새 댓글이 달렸습니다': NOTIFY_POST_COMMENT,
   '문의 답변이 도착했습니다': NOTIFY_INQUIRY_REPLY,
+  '분쟁이 제기되었습니다': NOTIFY_DISPUTE_FILED,
   '분쟁이 해결되었습니다': NOTIFY_DISPUTE_RESOLVED,
 };
 

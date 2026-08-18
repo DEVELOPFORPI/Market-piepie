@@ -25,11 +25,11 @@ import {
   NOTIFY_OFFER_ACCEPTED,
   NOTIFY_OFFER_DECLINED,
   NOTIFY_PURCHASE_OFFER_ARRIVED,
-  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
   NOTIFY_TRADE_COMPLETED,
+  NOTIFY_DISPUTE_FILED,
 } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { notifyT } from '@/i18n/notifyMessages';
@@ -44,7 +44,6 @@ const ACCEPT_TITLES = new Set([NOTIFY_OFFER_ACCEPTED]);
 
 const CHAT_DEST_TITLES = new Set([
   NOTIFY_PURCHASE_OFFER_ARRIVED,
-  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_OFFER_ACCEPTED,
   NOTIFY_OFFER_DECLINED,
   NOTIFY_RECEIVE_CONFIRM,
@@ -60,6 +59,8 @@ function orderIdFromLink(link: string): string | null {
   if (orderMatch) return orderMatch[1];
   const reviewMatch = link.match(/^\/review\/([^/?#]+)/);
   if (reviewMatch) return reviewMatch[1];
+  const disputeMatch = link.match(/^\/dispute\/([^/?#]+)/);
+  if (disputeMatch) return disputeMatch[1];
   try {
     const q = link.includes('?') ? new URLSearchParams(link.slice(link.indexOf('?') + 1)) : null;
     return q?.get('order') || null;
@@ -200,6 +201,15 @@ export const Notifications: React.FC = () => {
       destinationLink = reviewOrderId
         ? `/my/reviews?order=${encodeURIComponent(reviewOrderId)}`
         : '/my/reviews';
+      navigate(destinationLink);
+      return;
+    }
+
+    if (title === NOTIFY_DISPUTE_FILED) {
+      const disputeOrderId = orderIdFromLink(link);
+      if (disputeOrderId) {
+        destinationLink = `/dispute/${disputeOrderId}?view=other`;
+      }
       navigate(destinationLink);
       return;
     }

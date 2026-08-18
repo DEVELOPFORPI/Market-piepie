@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
-import { getOrderById, ensureOrderById, updateOrderStatus, completeShareOrderOnReceive, confirmOrderCompletion } from '@/utils/orderStorage';
+import { getOrderById, ensureOrderById, updateOrderStatus, completeOrderOnReceive } from '@/utils/orderStorage';
 import { addReceiptConfirmedToChat, addTradeCompletedToChat } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/types';
@@ -102,23 +102,10 @@ export const ReceiveConfirm: React.FC = () => {
     );
     const updated = getOrderById(orderId) || o;
     if (updated) void addReceiptConfirmedToChat(updated, receipt);
-    const completedOrder = await confirmOrderCompletion(orderId, 'buyer');
-    const isShare = o && (o.proposedPrice === 0 || o.product?.isFreeShare || o.product?.price === 0);
-    if (isShare) {
-      const completed = await completeShareOrderOnReceive(orderId);
-      if (completed) void addTradeCompletedToChat(completed);
-      showToast(t('receiptConfirmedLeaveReview'));
-      navigate(`/review/${orderId}`, { replace: true });
-    } else {
-      if (completedOrder?.status === ORDER_STATUS_VALUE.COMPLETE) {
-        void addTradeCompletedToChat(completedOrder);
-        showToast(t('receiptConfirmedLeaveReview'));
-        navigate(`/review/${orderId}`, { replace: true });
-      } else {
-        showToast(t('receiptConfirmedWaitSeller'));
-        navigate(`/order/${orderId}`, { replace: true });
-      }
-    }
+    const completed = await completeOrderOnReceive(orderId);
+    if (completed) void addTradeCompletedToChat(completed);
+    showToast(t('receiptConfirmedLeaveReview'));
+    navigate(`/review/${orderId}`, { replace: true });
   };
 
   if (loading) {

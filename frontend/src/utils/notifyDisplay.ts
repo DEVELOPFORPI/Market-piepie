@@ -5,7 +5,6 @@ import type { StoredNotification } from '@/utils/notificationStorage';
 import {
   NOTIFY_BADGE_UNLOCKED,
   NOTIFY_CHAT_ROOM_CREATED,
-  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_MEETUP_CANCELED,
   NOTIFY_MEETUP_CONFIRMED,
   NOTIFY_MEETUP_UPDATED,
@@ -19,6 +18,7 @@ import {
   NOTIFY_TRADE_COMPLETED,
   NOTIFY_POST_COMMENT,
   NOTIFY_INQUIRY_REPLY,
+  NOTIFY_DISPUTE_FILED,
   NOTIFY_DISPUTE_RESOLVED,
   normalizeNotificationTitle,
 } from '@/locale/enUI';
@@ -28,18 +28,16 @@ const TITLE_KEY: Record<string, NotifyMessageKey> = {
   [NOTIFY_NEW_CHAT]: 'titleNewChat',
   [NOTIFY_CHAT_ROOM_CREATED]: 'titleChatOpened',
   [NOTIFY_PURCHASE_OFFER_ARRIVED]: 'titlePurchaseOffer',
-  [NOTIFY_FREE_SHARE_REQUEST_ARRIVED]: 'titleFreeShare',
   [NOTIFY_OFFER_ACCEPTED]: 'titleOfferAccepted',
   [NOTIFY_OFFER_DECLINED]: 'titleOfferDeclined',
   [NOTIFY_MEETUP_CONFIRMED]: 'titleMeetupConfirmed',
   [NOTIFY_MEETUP_UPDATED]: 'titleMeetupUpdated',
   [NOTIFY_MEETUP_CANCELED]: 'titleMeetupCanceled',
-  'Shipping details needed': 'titleShipping',
   [NOTIFY_RECEIVE_CONFIRM]: 'titleReceipt',
   [NOTIFY_TRADE_COMPLETE_CHECK]: 'titleTradeCheck',
   [NOTIFY_TRADE_COMPLETED]: 'titleTradeCompleted',
   [NOTIFY_REVIEW_WRITTEN]: 'titleReview',
-  'Dispute filed': 'titleDisputeFiled',
+  [NOTIFY_DISPUTE_FILED]: 'titleDisputeFiled',
   'Dispute post published': 'titleDisputePost',
   [NOTIFY_POST_COMMENT]: 'titlePostComment',
   [NOTIFY_INQUIRY_REPLY]: 'titleInquiryReply',
@@ -160,11 +158,6 @@ const BODY_RULES: BodyRule[] = [
   {
     re: /^The meetup for "(.+?)" was canceled\.$/,
     key: 'bodyMeetupCanceled',
-    map: (m) => ({ title: m[1] }),
-  },
-  {
-    re: /^Please enter shipping details for "(.+?)"\.$/,
-    key: 'bodyShipping',
     map: (m) => ({ title: m[1] }),
   },
   {
