@@ -30,6 +30,7 @@ import {
   NOTIFY_TRADE_COMPLETE_CHECK,
   NOTIFY_TRADE_COMPLETED,
   NOTIFY_DISPUTE_FILED,
+  NOTIFY_DISPUTE_RESOLVED,
 } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { notifyT } from '@/i18n/notifyMessages';
@@ -83,6 +84,10 @@ async function resolveChatRoomLink(link: string, content: string): Promise<strin
     const order = await ensureOrderById(orderId);
     const room = order ? getChatRoomByOrder(order) : null;
     if (room?.id) return `/chat/${room.id}`;
+    if (order?.product?.id) {
+      const byProduct = getChatRoomByProduct(order.product.id);
+      if (byProduct?.id) return `/chat/${byProduct.id}`;
+    }
   }
 
   const productId = productIdFromLink(link);
@@ -205,7 +210,7 @@ export const Notifications: React.FC = () => {
       return;
     }
 
-    if (title === NOTIFY_DISPUTE_FILED) {
+    if (title === NOTIFY_DISPUTE_FILED || title === NOTIFY_DISPUTE_RESOLVED) {
       const disputeOrderId = orderIdFromLink(link);
       if (disputeOrderId) {
         destinationLink = `/dispute/${disputeOrderId}?view=other`;

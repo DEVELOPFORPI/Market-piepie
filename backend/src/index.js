@@ -4075,7 +4075,7 @@ app.put(
                 "order",
                 "Dispute resolved",
                 `The dispute for "${title}" has been resolved.`,
-                `/dispute/${dispute.order_id}`,
+                `/dispute/${dispute.order_id}?view=other`,
               ],
             );
           } catch (notifyErr) {

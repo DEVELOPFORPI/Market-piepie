@@ -377,7 +377,7 @@ export const updateDisputeStatus = async (
           type: 'order',
           title: NOTIFY_DISPUTE_RESOLVED,
           content: `The dispute for "${dispute.productTitle}" has been resolved.`,
-          link: `/dispute/${dispute.orderId}`,
+          link: `/dispute/${dispute.orderId}?view=other`,
         });
       }
       const order = getOrderById(dispute.orderId);
