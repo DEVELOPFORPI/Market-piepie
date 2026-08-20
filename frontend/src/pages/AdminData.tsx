@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
@@ -59,12 +59,17 @@ function orderStatusLabel(status: string): string {
     '완료': '완료',
     pending_offer: '제안중',
     '제안중': '제안중',
+    offer_declined: '제안거절',
+    '제안거절': '제안거절',
     accepted: '수락됨',
     '수락됨': '수락됨',
+    meetup_set: '약속확정',
+    '약속확정': '약속확정',
     received: '수령완료',
     '수령완료': '수령완료',
     dispute: '분쟁',
     '분쟁': '분쟁',
+    '관리자해결': '관리자 해결',
   };
   return map[status] || status;
 }
@@ -123,28 +128,34 @@ export const AdminData: React.FC = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await api.get<Stats>('/api/admin/stats', { headers: adminPasswordHeaders() });
+      if (!res.ok || !res.data) {
+        setLoadError(res.error || '통계를 불러오지 못했습니다. API 서버 또는 관리자 비밀번호를 확인하세요.');
+        if (!isRefresh) setStats(null);
+      } else {
+        setStats(res.data);
+        setRefreshedAt(new Date());
+      }
+    } catch (e) {
+      console.error('Stats load error:', e);
+      setLoadError('통계를 불러오지 못했습니다.');
+      if (!isRefresh) setStats(null);
+    }
+    setRefreshing(false);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const res = await api.get<Stats>('/api/admin/stats', { headers: adminPasswordHeaders() });
-        if (!res.ok || !res.data) {
-          setLoadError(res.error || '통계를 불러오지 못했습니다. API 서버 또는 관리자 비밀번호를 확인하세요.');
-          setStats(null);
-        } else {
-          setStats(res.data);
-        }
-      } catch (e) {
-        console.error('Stats load error:', e);
-        setLoadError('통계를 불러오지 못했습니다.');
-        setStats(null);
-      }
-      setLoading(false);
-    };
     load();
-  }, []);
+  }, [load]);
 
   if (loading) {
     return (
@@ -179,7 +190,29 @@ export const AdminData: React.FC = () => {
 
   return (
     <div className="p-6 lg:p-10">
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">대시보드</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
+        <div className="flex items-center gap-3">
+          {refreshedAt && (
+            <span className="text-xs text-gray-400">
+              {refreshedAt.toLocaleTimeString()} 기준
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {refreshing ? '새로고침 중…' : '새로고침'}
+          </button>
+        </div>
+      </div>
+      {loadError && stats && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          {loadError}
+        </div>
+      )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
         <StatCard
