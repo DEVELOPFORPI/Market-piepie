@@ -11,7 +11,6 @@ import {
   ensureOpenDisputeByOrderId,
   fetchOrderDisputes,
   getDisputesByOrderId,
-  hasResolvedDisputeOnOrder,
   mergeDisputesById,
   updateDisputeStatus,
   Dispute as DisputeType,
@@ -78,11 +77,12 @@ function pickFocusedDispute(
     .filter((d) => d.status === 'RESOLVED' && forOpener(d))
     .sort((a, b) => (a.resolvedAt || a.createdAt).localeCompare(b.resolvedAt || b.createdAt));
   if (resolved.length) return resolved[resolved.length - 1];
+  if (!viewOtherParty) return undefined;
   const otherOpen = disputes.find(
     (d) => d.status !== 'RESOLVED' && (!openerId || d.openedByUserId !== openerId),
   );
   if (otherOpen) return otherOpen;
-  if (viewOtherParty || disputes.length) {
+  if (disputes.length) {
     return [...disputes].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop();
   }
   return undefined;
@@ -159,6 +159,16 @@ export const Dispute: React.FC = () => {
       setLoading(false);
     })();
     return () => { cancelled = true; };
+  }, [orderId, viewOtherParty]);
+
+  useEffect(() => {
+    if (viewOtherParty) return;
+    const uid = getCurrentUserId();
+    if (!orderId || (uid && getDisputesByOrderId(orderId).some((d) => d.openedByUserId === uid))) return;
+    setReason('');
+    setAction('');
+    setDescription('');
+    setEvidence([]);
   }, [orderId, viewOtherParty]);
 
   useEffect(() => {
@@ -347,14 +357,12 @@ export const Dispute: React.FC = () => {
     viewOtherParty
     || (dispute && currentUserId && dispute.openedByUserId !== currentUserId),
   );
+  const iHaveFiled = Boolean(
+    currentUserId && orderDisputes.some((d) => d.openedByUserId === currentUserId),
+  );
   const showRequestedActionSummary = Boolean(dispute?.action?.trim());
   const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
-  const showSubmitBar = Boolean(
-    !dispute
-    && !viewingOtherDispute
-    && !orderDisputes.some((d) => d.status === 'RESOLVED')
-    && !hasResolvedDisputeOnOrder(orderId || ''),
-  );
+  const showSubmitBar = Boolean(order && !viewOtherParty && !iHaveFiled);
   const showResolveButton = Boolean(
     dispute && (dispute.status === 'OPEN' || dispute.status === 'IN_REVIEW') && isDisputeOpener,
   );
@@ -386,7 +394,7 @@ export const Dispute: React.FC = () => {
             </svg>
           </button>
         }
-        title={dispute || orderDisputes.length ? t('disputeDetailsTitle') : t('openDisputeTitle')}
+        title={showSubmitBar ? t('openDisputeTitle') : t('disputeDetailsTitle')}
       />
 
       <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
@@ -516,7 +524,7 @@ export const Dispute: React.FC = () => {
           </div>
         )}
 
-        {!dispute && order && !viewingOtherDispute && !orderDisputes.some((d) => d.status === 'RESOLVED') && !hasResolvedDisputeOnOrder(orderId || '') && (
+        {showSubmitBar && (
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -702,6 +710,15 @@ export const Dispute: React.FC = () => {
               </button>
             )}
           </>
+        )}
+        {viewOtherParty && !iHaveFiled && order && (
+          <button
+            onClick={() => navigate(`/dispute/${orderId}`, { replace: true })}
+            className="w-full px-4 py-3 text-white rounded-lg font-medium"
+            style={{ backgroundColor: '#EF4444' }}
+          >
+            {t('openDispute')}
+          </button>
         )}
         {showBackToOrders && (
           <button

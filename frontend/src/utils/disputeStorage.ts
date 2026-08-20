@@ -116,11 +116,15 @@ export const getOpenDisputeByOrderId = (
   );
 };
 
-/** DB와 동기화한 뒤 주문·작성자에 연결된 분쟁 반환 */
-/**
- * A resolved dispute closes the case for good: reopening on the same order is a
- * known abuse path, so callers hide the "open dispute" entry once this is true.
- */
+/** Whether this user already filed a dispute on the order (open or resolved). */
+export const userHasDisputeOnOrder = (
+  orderId: string,
+  userId?: string | null,
+): boolean => {
+  return Boolean(userId && getDisputeByOrderId(orderId, userId));
+};
+
+/** Any resolved dispute on this order (banner / history). Does not block the other party from filing. */
 export const hasResolvedDisputeOnOrder = (orderId: string): boolean => {
   return getDisputesByOrderId(orderId).some((d) => d.status === 'RESOLVED');
 };
@@ -430,6 +434,7 @@ interface CreateDisputeParams {
 export const createDispute = async (params: CreateDisputeParams): Promise<Dispute | null> => {
   const openedByUserId = getCurrentUserId();
   if (!openedByUserId) return null;
+  if (userHasDisputeOnOrder(params.orderId, openedByUserId)) return null;
 
   const dispute: Dispute = {
     id: `dispute_${Date.now()}`,

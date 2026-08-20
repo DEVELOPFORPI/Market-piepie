@@ -20,6 +20,7 @@ import {
   fetchProductHasOpenBuyerDisputeOnOtherTrade,
   getDisputes,
   getDisputesByOrderId,
+  getDisputeByOrderId,
   hasHomeVisibleDisputeOnOtherTrade,
   hasResolvedDisputeOnOrder,
 } from '@/utils/disputeStorage';
@@ -207,12 +208,6 @@ function ChatActionChipRow({ chips }: { chips: ChatChipAction[] }) {
       ))}
     </div>
   );
-}
-
-function hasResolvedDisputeForChat(room: ChatRoomType | null, order: Order | null): boolean {
-  if (order && hasResolvedDisputeOnOrder(order.id)) return true;
-  if (room?.order?.id && hasResolvedDisputeOnOrder(room.order.id)) return true;
-  return getDisputes().some((d) => d.status === 'RESOLVED' && disputeMatchesChat(d, room, order));
 }
 
 function openDisputesForChat(room: ChatRoomType | null, order: Order | null) {
@@ -697,10 +692,14 @@ export const ChatRoom: React.FC = () => {
   };
   const disputeEnabled = canOpenDispute(currentOrder);
   const openDisputesForOrder = openDisputesForChat(room, currentOrder);
-  const myOpenDispute = openDisputesForOrder.find((d) => d.openedByUserId === userId);
+  const myFiledDispute = currentOrder && userId
+    ? getDisputeByOrderId(currentOrder.id, userId)
+    : undefined;
+  const myOpenDispute = myFiledDispute && myFiledDispute.status !== 'RESOLVED'
+    ? myFiledDispute
+    : openDisputesForOrder.find((d) => d.openedByUserId === userId);
   const hasOpenDisputeOnOrder = openDisputesForOrder.length > 0;
-  /** Resolved once = closed for good; only viewing an already open dispute stays available. */
-  const disputeSettled = !hasOpenDisputeOnOrder && hasResolvedDisputeForChat(room, currentOrder);
+  const iAlreadyFiled = Boolean(myFiledDispute);
   // Chip is only my dispute. The header banner already links to the other party's case.
   const disputeChipLabel = myOpenDispute ? t('viewDispute') : t('openDispute');
   const disputeChipTo = myOpenDispute
@@ -739,7 +738,7 @@ export const ChatRoom: React.FC = () => {
   );
   // Fresh chat / pending offer: nothing to dispute yet. Show only when a trade
   // has started (or I already have a case to view).
-  const showDisputeChip = !isShareOrder && !disputeSettled && (!!myOpenDispute || disputeEnabled);
+  const showDisputeChip = !isShareOrder && (!!myOpenDispute || (disputeEnabled && !iAlreadyFiled));
 
   const handleSellerStartMeetup = () => {
     if (!room?.product) {
@@ -805,7 +804,7 @@ export const ChatRoom: React.FC = () => {
           key: 'dispute',
           label: disputeChipLabel,
           onClick: () => navigate(disputeChipTo),
-          disabled: !disputeEnabled,
+          disabled: !myOpenDispute && !disputeEnabled,
         });
       }
       return chips;
@@ -824,7 +823,7 @@ export const ChatRoom: React.FC = () => {
         key: 'dispute',
         label: disputeChipLabel,
         onClick: () => navigate(disputeChipTo),
-        disabled: !disputeEnabled,
+        disabled: !myOpenDispute && !disputeEnabled,
       });
     }
     return chips;
@@ -852,7 +851,7 @@ export const ChatRoom: React.FC = () => {
           key: 'dispute',
           label: disputeChipLabel,
           onClick: () => navigate(disputeChipTo),
-          disabled: !disputeEnabled,
+          disabled: !myOpenDispute && !disputeEnabled,
         });
       }
       return chips;
@@ -891,7 +890,7 @@ export const ChatRoom: React.FC = () => {
         key: 'dispute',
         label: disputeChipLabel,
         onClick: () => navigate(disputeChipTo),
-        disabled: !disputeEnabled,
+        disabled: !myOpenDispute && !disputeEnabled,
       });
     }
     return chips;
