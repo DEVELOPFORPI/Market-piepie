@@ -101,6 +101,7 @@ export function labelOrderStatus(s: OrderStatus): string {
     [ORDER_STATUS_VALUE.RECEIVED]: accountT(lang, 'orderStatusReceived'),
     [ORDER_STATUS_VALUE.COMPLETE]: accountT(lang, 'orderStatusComplete'),
     [ORDER_STATUS_VALUE.DISPUTE]: accountT(lang, 'orderStatusDispute'),
+    [ORDER_STATUS_VALUE.ADMIN_RESOLVED]: orderDetailT(lang, 'statusAdminResolved'),
   };
   return map[s];
 }
@@ -190,6 +191,7 @@ export function descriptionForOrderStatusForTimeline(s: OrderStatus): string {
     [ORDER_STATUS_VALUE.RECEIVED]: 'Receipt confirmed',
     [ORDER_STATUS_VALUE.COMPLETE]: 'Trade completed',
     [ORDER_STATUS_VALUE.DISPUTE]: 'Dispute opened',
+    [ORDER_STATUS_VALUE.ADMIN_RESOLVED]: 'Dispute resolved by admin',
   };
   return map[s] ?? s;
 }

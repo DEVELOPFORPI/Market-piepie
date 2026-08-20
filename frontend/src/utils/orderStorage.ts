@@ -158,6 +158,8 @@ export const isOfferAwaitingSellerResponse = (order?: Order | null): boolean => 
     const type = order.timeline[i]?.type;
     if (type === ORDER_STATUS_VALUE.ACCEPTED) return false;
     if (type === ORDER_STATUS_VALUE.OFFER_DECLINED) return true;
+    // 관리자가 거래를 초기화한 뒤의 새 제안은 예전 수락 기록과 무관하다.
+    if (type === ORDER_STATUS_VALUE.ADMIN_RESOLVED) return true;
   }
   return true;
 };

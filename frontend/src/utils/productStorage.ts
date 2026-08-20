@@ -1,7 +1,7 @@
 import { Product } from '@/types';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
-import { syncProductToDB, syncProductStatusToDB, syncProductDeleteToDB, markProductDeletedLocally } from '@/utils/dbSync';
+import { syncProductToDB, syncProductStatusToDB, syncProductDeleteToDB, markProductDeletedLocally, clearDeletedProductId } from '@/utils/dbSync';
 import { broadcastProductChange } from '@/utils/chatSocket';
 
 /** Shared storage: all users' listings */
@@ -85,7 +85,11 @@ export function trimOldestProducts(maxToRemove: number): void {
 export const deleteProduct = async (productId: string): Promise<boolean> => {
   markProductDeletedLocally(productId);
   const ok = await syncProductDeleteToDB(productId);
-  if (!ok) return false;
+  if (!ok) {
+    // 서버가 거부했으면 목록에서 사라진 채로 남지 않게 되돌린다.
+    clearDeletedProductId(productId);
+    return false;
+  }
   const products = getAllProducts().filter((p) => p.id !== productId);
   setItem(STORAGE_KEY, JSON.stringify(products));
   window.dispatchEvent(new Event('productsChanged'));

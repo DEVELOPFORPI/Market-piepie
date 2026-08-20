@@ -5,7 +5,7 @@ import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { isFreeShareListing } from '@/locale/enUI';
 import { getAllProducts } from '@/utils/productStorage';
-import { createOrder, hasMyOfferBlockingNewOffer, hasProductReservedOrder } from '@/utils/orderStorage';
+import { createOrder, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isMyAcceptedTradeOnProduct } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -67,6 +67,11 @@ export const Offer: React.FC = () => {
         leaveOffer();
         return;
       }
+      if (isMyAcceptedTradeOnProduct(found.id, getCurrentUserId())) {
+        showToast(t('offerAlreadyAccepted'));
+        leaveOffer();
+        return;
+      }
       if (hasMyOfferBlockingNewOffer(found.id, getCurrentUserId())) {
         showToast(t('offerAlreadyPending'));
         leaveOffer();
@@ -92,6 +97,10 @@ export const Offer: React.FC = () => {
     if (justSentOfferIds.has(product.id)) return;
     if (hasProductReservedOrder(product.id)) {
       showToast(t('itemReserved'));
+      return;
+    }
+    if (isMyAcceptedTradeOnProduct(product.id, getCurrentUserId())) {
+      showToast(t('offerAlreadyAccepted'));
       return;
     }
     if (hasMyOfferBlockingNewOffer(product.id, getCurrentUserId())) {

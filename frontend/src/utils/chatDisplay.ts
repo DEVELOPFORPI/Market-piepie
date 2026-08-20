@@ -1,5 +1,9 @@
 import { chatT, type ChatMessageKey } from '@/i18n/chatMessages';
+import { chatRoomT } from '@/i18n/chatRoomMessages';
 import { getAppLanguage, type AppLanguage } from '@/utils/languageStorage';
+
+/** 서버가 가린 메시지에 넣어 주는 고정 문자열 (backend maskDeletedChatMessage와 짝) */
+const ADMIN_DELETED_CONTENT = 'This message was removed by an admin.';
 
 /** Korean / English system chat lines → message key (+ vars). */
 export function chatSystemMessageKey(
@@ -85,6 +89,7 @@ export function displayChatMessageContent(
   lang: AppLanguage = getAppLanguage(),
 ): string {
   if (content == null || typeof content !== 'string') return content;
+  if (content.trim() === ADMIN_DELETED_CONTENT) return chatRoomT(lang, 'adminDeletedMessage');
   const matched = chatSystemMessageKey(content);
   if (!matched) return content;
   const label = chatT(lang, matched.key, matched.vars);

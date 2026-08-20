@@ -43,8 +43,9 @@ function roomHasAcceptedOffer(room: ChatRoom): boolean {
 
 function isBlockedOfferAfterAccept(room: ChatRoom, message: ChatMessage): boolean {
   if (message.type !== 'price_offer') return false;
-  const order = (message.orderId && getOrderById(message.orderId)) || room.order || null;
-  if (order && isOrderTradeInProgress(order.status)) return true;
+  // 주문 상태가 기준. 관리자 분쟁 해결처럼 거래가 초기화되면 지난 수락 카드가 남아 있어도 다시 제안할 수 있어야 한다.
+  const order = (message.orderId && getOrderById(message.orderId)) || getRoomLinkedOrder(room);
+  if (order) return isOrderTradeInProgress(order.status);
   return roomHasAcceptedOffer(room);
 }
 
@@ -221,11 +222,6 @@ export const isChatRoomEnded = (room: ChatRoom | null | undefined): boolean => {
   return !!room && (room.leftUserIds || []).length > 0;
 };
 
-const isListingForSale = (product: Product): boolean => {
-  const latest = getProductById(product.id) || product;
-  return latest.status === PRODUCT_STATUS_VALUE.FOR_SALE;
-};
-
 /** Other participant for current user */
 export const getOtherUser = (room: ChatRoom) => {
   const userId = getCurrentUserId();
@@ -258,16 +254,10 @@ const findOrderForChat = (productId: string, buyerId: string, sellerId: string):
   return active[0];
 };
 
-/** Create or return existing room; never reuse ended or completed-for-sale rooms */
+/** Create or return existing room; a second room only appears after someone leaves */
 export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> => {
   const existing = getChatRoomByProduct(product.id);
-  // Listing reopened for sale: past completed chat must not be reused (Chat / Offer / share)
-  const shouldReuseExisting =
-    !!existing &&
-    !isChatRoomEnded(existing) &&
-    !(isListingForSale(product) && isCompletedChatRoom(existing));
-
-  if (shouldReuseExisting && existing) {
+  if (existing && !isChatRoomEnded(existing)) {
     let room: ChatRoom = existing;
 
     if (!room.order && room.buyerId && room.sellerId) {
@@ -487,12 +477,12 @@ export const getChatRoomByOrder = (order: Order): ChatRoom | null => {
     order.status === ORDER_STATUS_VALUE.DISPUTE ||
     !!(order.buyerCompleted && order.sellerCompleted);
 
-  if (orderIsTerminal) {
-    return samePair.find((r) => isCompletedChatRoom(r)) || samePair[0];
-  }
-
-  // New / in-progress order: reuse only a non-completed open room for this pair
-  return samePair.find((r) => !isCompletedChatRoom(r)) || null;
+  // Prefer the room matching this trade's state, but never open a second room
+  // for a pair that still has an open one.
+  const preferred = orderIsTerminal
+    ? samePair.find((r) => isCompletedChatRoom(r))
+    : samePair.find((r) => !isCompletedChatRoom(r));
+  return preferred || samePair[0];
 };
 
 /** Ensure room for order; create if missing. Optional creator marks other party unread. */
