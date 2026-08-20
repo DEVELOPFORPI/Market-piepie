@@ -177,6 +177,7 @@ export const Home: React.FC = () => {
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('productRegistered', handleStorageChange);
     window.addEventListener('productsChanged', handleStorageChange);
+    window.addEventListener('ordersChanged', handleStorageChange);
     window.addEventListener('regionChanged', handleRegionChange);
     const onFavoritesChanged = () => setFavoritesVersion((v) => v + 1);
     window.addEventListener('favoritesChanged', onFavoritesChanged);
@@ -185,6 +186,7 @@ export const Home: React.FC = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('productRegistered', handleStorageChange);
       window.removeEventListener('productsChanged', handleStorageChange);
+      window.removeEventListener('ordersChanged', handleStorageChange);
       window.removeEventListener('regionChanged', handleRegionChange);
       window.removeEventListener('favoritesChanged', onFavoritesChanged);
     };
