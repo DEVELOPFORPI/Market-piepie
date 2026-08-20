@@ -1565,8 +1565,128 @@ app.get("/api/users/:id/disputes", requireDb, async (req, res) => {
 const ORDER_STATUS_COMPLETE = "완료";
 const PRODUCT_STATUS_SOLD = "판매완료";
 const PRODUCT_STATUS_FOR_SALE = "판매중";
+const PRODUCT_STATUS_RESERVED = "예약중";
 const ORDER_STATUS_DISPUTE = "분쟁";
 const ORDER_STATUS_ADMIN_RESOLVED = "관리자해결";
+
+/** 홈·관리자 공통: 완료 주문이 있으면 판매완료, 약속이 있으면 예약중, 아니면 판매중. */
+function productListingStatusSql(alias = "p") {
+  return `(CASE
+      WHEN EXISTS (
+        SELECT 1 FROM orders o
+         WHERE o.product_id = ${alias}.id
+           AND (o.status IN ('완료','수령완료','completed','complete')
+                OR (o.buyer_completed = true AND o.seller_completed = true))
+      ) THEN '${PRODUCT_STATUS_SOLD}'
+      WHEN EXISTS (
+        SELECT 1 FROM orders o
+         WHERE o.product_id = ${alias}.id
+           AND o.status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+           AND (
+             o.status IN ('약속확정','meetup_set')
+             OR (NULLIF(o.meetup_location, '') IS NOT NULL AND NULLIF(o.meetup_time, '') IS NOT NULL)
+           )
+      ) THEN '${PRODUCT_STATUS_RESERVED}'
+      WHEN ${alias}.status = '${PRODUCT_STATUS_SOLD}' THEN '${PRODUCT_STATUS_SOLD}'
+      ELSE '${PRODUCT_STATUS_FOR_SALE}'
+    END)`;
+}
+
+/** 사용자 칩과 맞춤: 열린 분쟁이면 분쟁, 약속이 있으면 약속확정. */
+function orderDisplayStatusSql(alias = "o") {
+  return `(CASE
+      WHEN EXISTS (
+        SELECT 1 FROM disputes d
+         WHERE d.order_id = ${alias}.id AND d.status <> 'RESOLVED'
+      ) THEN '${ORDER_STATUS_DISPUTE}'
+      WHEN ${alias}.status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+        AND (
+          ${alias}.status IN ('약속확정','meetup_set')
+          OR (NULLIF(${alias}.meetup_location, '') IS NOT NULL AND NULLIF(${alias}.meetup_time, '') IS NOT NULL)
+        ) THEN '약속확정'
+      ELSE ${alias}.status
+    END)`;
+}
+
+function userLiveRatingSql(alias = "u") {
+  return `COALESCE((SELECT ROUND(AVG(rv.rating), 1) FROM reviews rv WHERE rv.reviewee_id = ${alias}.id), 0)`;
+}
+
+function userLiveTrustSql(alias = "u") {
+  return `COALESCE((
+    SELECT GREATEST(0, LEAST(100, ROUND((AVG(rv.rating) / 5) * 100)))
+      FROM reviews rv WHERE rv.reviewee_id = ${alias}.id
+  ), 50)`;
+}
+
+function userLiveTradeCountSql(alias = "u") {
+  return `COALESCE((
+    SELECT COUNT(*) FROM orders o2
+      LEFT JOIN products p2 ON o2.product_id = p2.id
+     WHERE o2.status = '${ORDER_STATUS_COMPLETE}'
+       AND (o2.buyer_id = ${alias}.id OR o2.seller_id = ${alias}.id)
+       AND COALESCE(p2.is_free_share, 0) = 0
+       AND COALESCE(NULLIF(o2.proposed_price, 0), p2.price, 0) > 0
+  ), 0)`;
+}
+
+/** 홈·관리자가 같이 쓰는 기준: 완료 주문이 있으면 판매완료, 약속이 남아 있으면 예약중, 아니면 판매중. */
+async function syncProductListingStatusFromOrders(productId) {
+  if (!productId) return;
+  try {
+    const { rows: products } = await pool.query(
+      "SELECT status FROM products WHERE id=$1",
+      [productId],
+    );
+    if (!products.length) return;
+    const current = products[0].status;
+
+    const { rows: complete } = await pool.query(
+      `SELECT id FROM orders
+        WHERE product_id=$1
+          AND (status IN ('완료','수령완료','completed','complete')
+               OR (buyer_completed=true AND seller_completed=true))
+        LIMIT 1`,
+      [productId],
+    );
+    if (complete.length) {
+      if (current !== PRODUCT_STATUS_SOLD) {
+        await pool.query("UPDATE products SET status=$2 WHERE id=$1", [
+          productId,
+          PRODUCT_STATUS_SOLD,
+        ]);
+      }
+      return;
+    }
+    if (current === PRODUCT_STATUS_SOLD) return;
+
+    const { rows: reserved } = await pool.query(
+      `SELECT id FROM orders
+        WHERE product_id=$1
+          AND status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+          AND (
+            status IN ('약속확정','meetup_set')
+            OR (
+              meetup_location IS NOT NULL AND meetup_location <> ''
+              AND meetup_time IS NOT NULL AND meetup_time <> ''
+            )
+          )
+        LIMIT 1`,
+      [productId],
+    );
+    const next = reserved.length
+      ? PRODUCT_STATUS_RESERVED
+      : PRODUCT_STATUS_FOR_SALE;
+    if (current !== next) {
+      await pool.query("UPDATE products SET status=$2 WHERE id=$1", [
+        productId,
+        next,
+      ]);
+    }
+  } catch (e) {
+    console.warn("[products] listing status sync failed:", e.message);
+  }
+}
 
 /** 분쟁이 진행 중인 상품은 수정·삭제로 증거가 사라지면 안 된다. */
 async function hasOpenDisputeOnProduct(productId) {
@@ -2455,11 +2575,8 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       buyer_completed: rows[0].buyer_completed,
       seller_completed: rows[0].seller_completed,
     });
-    if (rows[0].status === ORDER_STATUS_COMPLETE && rows[0].product_id) {
-      await pool.query("UPDATE products SET status=$2 WHERE id=$1", [
-        rows[0].product_id,
-        PRODUCT_STATUS_SOLD,
-      ]);
+    if (rows[0].product_id) {
+      await syncProductListingStatusFromOrders(rows[0].product_id);
     }
     res.json(rows[0]);
   } catch (e) {
@@ -3830,7 +3947,10 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
       pool.query("SELECT COUNT(*) FROM reviews"),
       pool.query("SELECT COUNT(*) FROM disputes WHERE status='OPEN'"),
       pool.query(
-        "SELECT COUNT(*) FROM orders WHERE status IN ('completed','complete','완료')",
+        `SELECT COUNT(*) FROM orders o
+          WHERE ${orderDisplayStatusSql("o")} <> '${ORDER_STATUS_DISPUTE}'
+            AND (${orderDisplayStatusSql("o")} IN ('완료','수령완료','completed','complete')
+                 OR (o.buyer_completed = true AND o.seller_completed = true))`,
       ),
       pool.query("SELECT COUNT(*) FROM products WHERE is_free_share=true"),
       pool.query("SELECT COUNT(*) FROM inquiries").catch(zero),
@@ -3854,25 +3974,37 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
         )
         .catch(zero),
       pool
-        .query("SELECT COUNT(*) FROM products WHERE status='판매중'")
-        .catch(zero),
-      pool
-        .query("SELECT COUNT(*) FROM products WHERE status='예약중'")
-        .catch(zero),
-      pool
-        .query("SELECT COUNT(*) FROM products WHERE status='판매완료'")
-        .catch(zero),
-      pool
         .query(
-          "SELECT COUNT(*) FROM orders WHERE status IN ('제안중','pending_offer')",
+          `SELECT COUNT(*) FROM products p WHERE ${productListingStatusSql("p")}='${PRODUCT_STATUS_FOR_SALE}'`,
         )
         .catch(zero),
       pool
-        .query("SELECT COUNT(*) FROM orders WHERE status IN ('분쟁','dispute')")
+        .query(
+          `SELECT COUNT(*) FROM products p WHERE ${productListingStatusSql("p")}='${PRODUCT_STATUS_RESERVED}'`,
+        )
         .catch(zero),
       pool
         .query(
-          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute','관리자해결')",
+          `SELECT COUNT(*) FROM products p WHERE ${productListingStatusSql("p")}='${PRODUCT_STATUS_SOLD}'`,
+        )
+        .catch(zero),
+      pool
+        .query(
+          `SELECT COUNT(*) FROM orders o
+            WHERE ${orderDisplayStatusSql("o")} IN ('제안중','pending_offer')`,
+        )
+        .catch(zero),
+      pool
+        .query(
+          `SELECT COUNT(*) FROM orders o
+            WHERE ${orderDisplayStatusSql("o")}='${ORDER_STATUS_DISPUTE}'`,
+        )
+        .catch(zero),
+      pool
+        .query(
+          `SELECT COUNT(*) FROM orders o
+            WHERE ${orderDisplayStatusSql("o")} NOT IN ('completed','complete','완료','수령완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute','관리자해결')
+              AND NOT (o.buyer_completed = true AND o.seller_completed = true)`,
         )
         .catch(zero),
       pool
@@ -3885,7 +4017,8 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
         "SELECT id, nickname, created_at FROM users ORDER BY created_at DESC LIMIT 5",
       ),
       pool.query(
-        "SELECT id, status, created_at FROM orders ORDER BY created_at DESC LIMIT 5",
+        `SELECT id, ${orderDisplayStatusSql("o")} AS status, created_at
+           FROM orders o ORDER BY created_at DESC LIMIT 5`,
       ),
       pool
         .query(
@@ -3958,14 +4091,20 @@ app.get("/api/admin/users", requireDb, requireAdmin, async (req, res) => {
                 WHERE r.reporter_id = u.id OR (r.target_type = 'user' AND r.target_id = u.id)) AS report_count,
               (SELECT COUNT(*) FROM disputes d
                 WHERE d.buyer_id = u.id OR d.seller_id = u.id) AS dispute_count`;
-  const fullSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
-              trade_count, activity_region, seller_type, pi_verified, pi_username,
+  const liveRep = `,
+              ${userLiveTrustSql("u")} AS trust_score,
+              ${userLiveRatingSql("u")} AS rating,
+              ${userLiveTradeCountSql("u")} AS trade_count`;
+  const fullSelect = `SELECT id, nickname, profile_image, bio, kyc_status,
+              activity_region, seller_type, pi_verified, pi_username,
               account_status, suspension_reason, suspended_at, created_at
+              ${liveRep}
               ${activityCounts}
        FROM users u ORDER BY created_at DESC LIMIT 500`;
-  const fallbackSelect = `SELECT id, nickname, profile_image, bio, kyc_status, trust_score, rating,
-              trade_count, activity_region, seller_type, pi_verified,
+  const fallbackSelect = `SELECT id, nickname, profile_image, bio, kyc_status,
+              activity_region, seller_type, pi_verified,
               account_status, suspension_reason, suspended_at, created_at
+              ${liveRep}
               ${activityCounts}
        FROM users u ORDER BY created_at DESC LIMIT 500`;
   try {
@@ -3995,13 +4134,16 @@ app.get("/api/admin/users/:id", requireDb, requireAdmin, async (req, res) => {
       req.params.id,
     ]);
     if (!rows.length) return res.status(404).json({ error: "Not found" });
-    const [products, orders, posts, reports, disputes] = await Promise.all([
+    const [products, orders, posts, reports, disputes, reputation] = await Promise.all([
       pool.query(
-        "SELECT id,title,status,price,admin_hidden,created_at FROM products WHERE seller_id=$1 ORDER BY created_at DESC LIMIT 100",
+        `SELECT id, title, ${productListingStatusSql("p")} AS status, price, admin_hidden, created_at
+           FROM products p WHERE seller_id=$1 ORDER BY created_at DESC LIMIT 100`,
         [req.params.id],
       ),
       pool.query(
-        "SELECT id,product_id,buyer_id,seller_id,status,proposed_price,created_at FROM orders WHERE buyer_id=$1 OR seller_id=$1 ORDER BY created_at DESC LIMIT 100",
+        `SELECT id, product_id, buyer_id, seller_id,
+                ${orderDisplayStatusSql("o")} AS status, proposed_price, created_at
+           FROM orders o WHERE buyer_id=$1 OR seller_id=$1 ORDER BY created_at DESC LIMIT 100`,
         [req.params.id],
       ),
       pool.query(
@@ -4022,9 +4164,13 @@ app.get("/api/admin/users/:id", requireDb, requireAdmin, async (req, res) => {
           ORDER BY created_at DESC LIMIT 100`,
         [req.params.id],
       ),
+      computeUserReputation(req.params.id),
     ]);
     res.json({
       ...rows[0],
+      trust_score: reputation.trust_score,
+      rating: reputation.rating,
+      trade_count: reputation.trade_count,
       products: products.rows,
       orders: orders.rows,
       posts: posts.rows,
@@ -4317,14 +4463,19 @@ app.delete(
 app.get("/api/admin/products", requireDb, requireAdmin, async (req, res) => {
   const { status, q, free_share, hidden } = req.query;
   try {
-    let query = `SELECT p.*, u.nickname AS seller_nickname
+    const listingStatusExpr = productListingStatusSql("p");
+    let query = `SELECT p.id, p.title, p.price, p.category, p.region, p.images,
+                        p.is_free_share, p.allow_offer, p.seller_id, p.description,
+                        p.admin_hidden, p.admin_hidden_reason, p.created_at,
+                        u.nickname AS seller_nickname,
+                        ${listingStatusExpr} AS status
                  FROM products p
                  LEFT JOIN users u ON p.seller_id = u.id
                  WHERE 1=1`;
     const params = [];
     if (status) {
       params.push(status);
-      query += ` AND p.status=$${params.length}`;
+      query += ` AND ${listingStatusExpr}=$${params.length}`;
     }
     if (free_share === "true") {
       query += ` AND p.is_free_share=true`;
