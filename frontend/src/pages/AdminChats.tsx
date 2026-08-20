@@ -18,6 +18,8 @@ interface ChatRoomRow {
   report_count: number | string;
   last_message_time: string | null;
   created_at: string;
+  admin_hidden?: boolean | number;
+  admin_hidden_reason?: string | null;
 }
 
 interface AdminChatMessage {
@@ -40,9 +42,12 @@ const FILTERS = [
   { value: 'dispute', label: '분쟁 연결' },
   { value: 'reported', label: '신고 접수' },
   { value: 'deleted', label: '가린 메시지 있음' },
+  { value: 'hidden', label: '숨긴 채팅방' },
 ];
 
 const num = (v: number | string | null | undefined): number => Number(v) || 0;
+const isHidden = (v: boolean | number | string | null | undefined): boolean =>
+  v === true || v === 1 || v === '1';
 
 export const AdminChats: React.FC = () => {
   const [rooms, setRooms] = useState<ChatRoomRow[]>([]);
@@ -108,12 +113,31 @@ export const AdminChats: React.FC = () => {
     load();
   };
 
-  const handleDeleteRoom = async (room: ChatRoomRow) => {
-    if (num(room.dispute_count) > 0 || num(room.report_count) > 0) {
-      alert('분쟁 또는 신고가 연결된 채팅방은 삭제할 수 없습니다.');
+  const handleHideRoom = async (room: ChatRoomRow) => {
+    const hide = !isHidden(room.admin_hidden);
+    let reason: string | null = null;
+    if (hide) {
+      reason = prompt('사용자에게 이 채팅방을 숨깁니다. 사유를 남겨주세요. (선택)') ?? null;
+    } else if (!confirm('이 채팅방을 다시 보이게 할까요?')) {
       return;
     }
-    if (!confirm(`채팅방 ${room.id}를 삭제할까요?\n대화 내용이 모두 사라지며 되돌릴 수 없습니다.`)) return;
+    const res = await api.put(`/api/admin/chat-rooms/${room.id}`,
+      { hidden: hide, reason },
+      { headers: adminPasswordHeaders() },
+    );
+    if (!res.ok) {
+      alert(`처리 실패: ${res.error || `HTTP ${res.status}`}`);
+      return;
+    }
+    setSelected((cur) => (cur?.id === room.id ? { ...cur, admin_hidden: hide ? 1 : 0, admin_hidden_reason: hide ? reason : null } : cur));
+    load();
+  };
+
+  const handleDeleteRoom = async (room: ChatRoomRow) => {
+    const extra = (num(room.dispute_count) > 0 || num(room.report_count) > 0)
+      ? '\n이 방에는 분쟁 또는 신고가 연결되어 있습니다.'
+      : '';
+    if (!confirm(`채팅방 ${room.id}를 삭제할까요?\n대화 내용이 모두 사라지며 되돌릴 수 없습니다.${extra}`)) return;
     const res = await api.delete(`/api/admin/chat-rooms/${room.id}`, { headers: adminPasswordHeaders() });
     if (!res.ok) {
       alert(`삭제 실패: ${res.error || `HTTP ${res.status}`}`);
@@ -127,9 +151,6 @@ export const AdminChats: React.FC = () => {
     () => rooms.filter((r) => num(r.dispute_count) > 0).length,
     [rooms],
   );
-
-  /** 분쟁·신고가 걸린 방은 증거가 사라지므로 삭제 버튼을 노출하지 않는다. */
-  const canDeleteRoom = (room: ChatRoomRow) => num(room.dispute_count) === 0 && num(room.report_count) === 0;
 
   return (
     <div className="p-6 lg:p-10">
@@ -145,7 +166,7 @@ export const AdminChats: React.FC = () => {
         </div>
       </div>
       <p className="text-xs text-gray-500 mb-6">
-        대화 내용에는 주소·연락처 같은 개인정보가 포함될 수 있습니다. 확인이 필요한 경우에만 열어주세요.
+        숨기면 사용자 목록에서만 빠지고 대화는 남습니다. 삭제는 대화를 통째로 지웁니다.
       </p>
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -199,6 +220,9 @@ export const AdminChats: React.FC = () => {
                         가림 {num(r.deleted_message_count)}
                       </span>
                     )}
+                    {isHidden(r.admin_hidden) && (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-800 text-white text-xs font-medium">숨김</span>
+                    )}
                     <span className="text-xs text-gray-400 ml-auto">
                       {new Date(r.last_message_time || r.created_at).toLocaleString()}
                     </span>
@@ -212,14 +236,20 @@ export const AdminChats: React.FC = () => {
                     <span>메시지 {num(r.message_count)}개</span>
                   </div>
                 </div>
-                {canDeleteRoom(r) && (
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleHideRoom(r); }}
+                    className="text-gray-600 text-xs font-medium hover:underline"
+                  >
+                    {isHidden(r.admin_hidden) ? '숨김 해제' : '숨기기'}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteRoom(r); }}
-                    className="text-red-500 text-xs font-medium hover:underline shrink-0"
+                    className="text-red-500 text-xs font-medium hover:underline"
                   >
                     삭제
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ))}
@@ -316,12 +346,14 @@ export const AdminChats: React.FC = () => {
               <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                 닫기
               </button>
-              {canDeleteRoom(selected) && (
-                <button onClick={() => handleDeleteRoom(selected)}
-                  className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg bg-red-500 hover:bg-red-600">
-                  채팅방 삭제
-                </button>
-              )}
+              <button onClick={() => handleHideRoom(selected)}
+                className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+                {isHidden(selected.admin_hidden) ? '숨김 해제' : '채팅방 숨기기'}
+              </button>
+              <button onClick={() => handleDeleteRoom(selected)}
+                className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg bg-red-500 hover:bg-red-600">
+                채팅방 삭제
+              </button>
             </div>
           </div>
         </div>

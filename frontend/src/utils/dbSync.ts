@@ -1171,6 +1171,7 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
     lastReadAt,
 
     leftUserIds,
+    adminHidden: !!row.admin_hidden,
 
     product,
 

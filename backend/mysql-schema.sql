@@ -110,6 +110,9 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
   unread_count INT NOT NULL DEFAULT 0,
   left_user_ids JSON NOT NULL DEFAULT (JSON_ARRAY()),
   read_state JSON NOT NULL DEFAULT (JSON_OBJECT()),
+  admin_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_chat_rooms_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
   CONSTRAINT fk_chat_rooms_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
@@ -318,6 +321,7 @@ CREATE INDEX idx_orders_seller ON orders(seller_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_chat_rooms_buyer ON chat_rooms(buyer_id);
 CREATE INDEX idx_chat_rooms_seller ON chat_rooms(seller_id);
+CREATE INDEX idx_chat_rooms_admin_hidden ON chat_rooms(admin_hidden);
 CREATE INDEX idx_chat_messages_room ON chat_messages(room_id);
 CREATE INDEX idx_chat_messages_deleted ON chat_messages(deleted_at);
 CREATE INDEX idx_reports_target ON reports(target_type, target_id);

@@ -209,6 +209,7 @@ export interface ChatRoom {
   readStatus?: Record<string, boolean>;
   lastReadAt?: Record<string, string>;
   leftUserIds?: string[];
+  adminHidden?: boolean;
 }
 
 export interface Review {

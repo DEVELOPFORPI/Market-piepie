@@ -165,6 +165,7 @@ export const getChatRooms = (): ChatRoom[] => {
   return getAllChatRooms().filter(
     (r) =>
       (r.buyerId === userId || r.sellerId === userId) &&
+      !r.adminHidden &&
       !(r.leftUserIds || []).includes(userId || '')
   );
 };
@@ -195,7 +196,8 @@ export const getChatRoomByProduct = (productId: string): ChatRoom | null => {
     (r) =>
       r.product?.id === productId &&
       r.buyerId === userId &&
-      !(r.leftUserIds || []).length
+      !(r.leftUserIds || []).length &&
+      !r.adminHidden
   ) || null;
 };
 
@@ -219,7 +221,7 @@ const isCompletedChatRoom = (room: ChatRoom): boolean => {
 
 /** Anyone left → room is closed for both parties */
 export const isChatRoomEnded = (room: ChatRoom | null | undefined): boolean => {
-  return !!room && (room.leftUserIds || []).length > 0;
+  return !!room && ((room.leftUserIds || []).length > 0 || !!room.adminHidden);
 };
 
 /** Other participant for current user */
