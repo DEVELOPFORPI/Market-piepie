@@ -106,6 +106,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   const isFreeListing = isFreeShareListing(product);
   const isSold = product.status === PRODUCT_STATUS_VALUE.SOLD || hasProductCompletedOrder(product.id);
   const isTrading = !isSold && hasProductReservedOrder(product.id);
+  const displayStatus: ProductStatus = isSold
+    ? PRODUCT_STATUS_VALUE.SOLD
+    : isTrading
+      ? PRODUCT_STATUS_VALUE.RESERVED
+      : PRODUCT_STATUS_VALUE.FOR_SALE;
   const statusLabel =
     isFreeListing && !isSold && !isTrading
       ? t('free')
@@ -205,8 +210,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               </Badge>
             ) : (
               <>
-                {!isSold && !isTrading && (!isFreeListing || product.status !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
-                  <Badge variant={statusVariant[product.status]} size="sm">
+                {!isSold && !isTrading && (!isFreeListing || displayStatus !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
+                  <Badge variant={statusVariant[displayStatus]} size="sm">
                     {statusLabel}
                   </Badge>
                 )}
@@ -310,8 +315,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </Badge>
           ) : (
             <>
-              {!isSold && !isTrading && (!isFreeListing || product.status !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
-                <Badge variant={statusVariant[product.status]} size="sm">
+              {!isSold && !isTrading && (!isFreeListing || displayStatus !== PRODUCT_STATUS_VALUE.FOR_SALE) && (
+                <Badge variant={statusVariant[displayStatus]} size="sm">
                   {statusLabel}
                 </Badge>
               )}
