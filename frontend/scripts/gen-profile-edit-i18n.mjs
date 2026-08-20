@@ -92,6 +92,15 @@ const entries = {
     fa: 'تغییرات ذخیره‌نشده دارید. دور ریخته شوند؟',
     ur: 'غیر محفوظ تبدیلیاں ہیں۔ مسترد کریں؟',
   },
+  discardUnsaved: {
+    en: 'Leave', ko: '나가기', zh: '离开', ja: '離れる',
+    es: 'Salir', pt: 'Sair', fr: 'Quitter', de: 'Verlassen',
+    id: 'Keluar', vi: 'Rời đi', th: 'ออก', hi: 'छोड़ें',
+    ar: 'مغادرة', ru: 'Уйти', tr: 'Çık', it: 'Esci',
+    pl: 'Wyjdź', nl: 'Verlaten', fil: 'Umalis', uk: 'Вийти',
+    bn: 'বেরোন', ms: 'Keluar', sw: 'Toka', fa: 'خروج',
+    ur: 'باہر نکلیں',
+  },
   couldNotSaveProfile: {
     en: 'Could not save profile to server. Check your connection and try again.',
     ko: '프로필을 서버에 저장하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',

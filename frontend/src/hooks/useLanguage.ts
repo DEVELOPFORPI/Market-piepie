@@ -429,6 +429,7 @@ const PROFILE_EDIT_KEYS = new Set<string>([
   'bioPlaceholder',
   'save',
   'discardUnsavedConfirm',
+  'discardUnsaved',
   'couldNotSaveProfile',
   'profileAlt',
 ]);

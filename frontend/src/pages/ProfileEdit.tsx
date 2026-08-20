@@ -25,6 +25,7 @@ import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
 import { KYCBadge } from '@/components/common/KYCBadge';
 import { CollectedBadgesRow } from '@/components/profile/CollectedBadgesRow';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { showToast } from '@/utils/toast';
@@ -50,6 +51,7 @@ export const ProfileEdit: React.FC = () => {
   const [activityRegion, setActivityRegion] = useState(stored.activityRegion ?? '');
   const [hasChanges, setHasChanges] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -119,13 +121,17 @@ export const ProfileEdit: React.FC = () => {
   };
 
   const handleCancel = () => {
-    if (hasChanges) {
-      if (confirm(t('discardUnsavedConfirm'))) {
-        navigate('/my');
+    void (async () => {
+      if (hasChanges) {
+        const ok = await askConfirm({
+          message: t('discardUnsavedConfirm'),
+          confirmLabel: t('discardUnsaved'),
+          cancelLabel: t('cancel'),
+        });
+        if (!ok) return;
       }
-    } else {
       navigate('/my');
-    }
+    })();
   };
 
   return (
@@ -295,6 +301,8 @@ export const ProfileEdit: React.FC = () => {
         </div>
 
       </div>
+
+      {confirmDialog}
     </div>
   );
 };

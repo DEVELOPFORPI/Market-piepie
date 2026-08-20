@@ -7,6 +7,7 @@ import { getUserPosts, deleteUserPost } from '@/utils/communityStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncMyPostsFromDB } from '@/utils/dbSync';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -26,6 +27,7 @@ export const MyPosts: React.FC = () => {
   useGuestPageGuard('post');
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const [posts, setPosts] = useState<Post[]>([]);
   const [filterCategory, setFilterCategory] = useState<CategoryFilter>('all');
 
@@ -49,10 +51,16 @@ export const MyPosts: React.FC = () => {
   }, [posts, filterCategory]);
 
   const handleDelete = (post: Post) => {
-    if (confirm(t('deleteConfirm', { title: post.title }))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('deleteConfirm', { title: post.title }),
+        confirmLabel: t('delete'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       deleteUserPost(post.id);
       loadPosts();
-    }
+    })();
   };
 
   const tabLabel = (category: CategoryFilter): string => {
@@ -199,6 +207,7 @@ export const MyPosts: React.FC = () => {
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 };

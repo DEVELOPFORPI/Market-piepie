@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { addUserPost, getPostById, ensurePostById, updateUserPost, updateDisputePost, COMMUNITY_QUOTA_EXCEEDED_MESSAGE } from '@/utils/communityStorage';
 import { syncPostsFromDB } from '@/utils/dbSync';
@@ -27,6 +28,7 @@ const CAT_KEY: Record<PostCategory, AppMessageKey> = {
 
 export const PostWrite: React.FC = () => {
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   useGuestPageGuard('post');
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
@@ -107,7 +109,11 @@ export const PostWrite: React.FC = () => {
 
     try {
       if (hasSensitiveContent(content)) {
-        const proceed = confirm(t('sensitiveConfirm'));
+        const proceed = await askConfirm({
+          message: t('sensitiveConfirm'),
+          confirmLabel: t('ok'),
+          cancelLabel: t('cancel'),
+        });
         if (!proceed) return;
       }
     } catch { /* ignore */ }
@@ -370,6 +376,7 @@ export const PostWrite: React.FC = () => {
           )}
         </div>
       </BottomSheet>
+      {confirmDialog}
     </div>
   );
 };
