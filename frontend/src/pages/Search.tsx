@@ -14,7 +14,7 @@ type FilterListingType = 'all' | 'free' | 'sale';
 const FILTER_LISTING_TYPES: { value: FilterListingType; labelKey: HomeMessageKey }[] = [
   { value: 'all', labelKey: 'chipAll' },
   { value: 'free', labelKey: 'chipFree' },
-  { value: 'sale', labelKey: 'listingSale' },
+  { value: 'sale', labelKey: 'chipForSale' },
 ];
 
 export const Search: React.FC = () => {

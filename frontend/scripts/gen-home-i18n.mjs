@@ -297,6 +297,38 @@ for (const [lang, labels] of Object.entries(navOverrides)) {
   });
 }
 
+const tradingOverrides = {
+  en: 'Reserved',
+  ko: '예약중',
+  zh: '已预订',
+  ja: '予約中',
+  es: 'Reservado',
+  pt: 'Reservado',
+  fr: 'Réservé',
+  de: 'Reserviert',
+  id: 'Dipesan',
+  vi: 'Đã giữ chỗ',
+  th: 'จองแล้ว',
+  hi: 'आरक्षित',
+  ar: 'محجوز',
+  ru: 'Зарезервировано',
+  tr: 'Rezerve',
+  it: 'Prenotato',
+  pl: 'Zarezerwowane',
+  nl: 'Gereserveerd',
+  fil: 'Naka-reserve',
+  uk: 'Зарезервовано',
+  bn: 'সংরক্ষিত',
+  ms: 'Ditempah',
+  sw: 'Imehifadhiwa',
+  fa: 'رزرو شده',
+  ur: 'محفوظ',
+};
+const tradingIndex = keys.indexOf('trading');
+for (const [lang, label] of Object.entries(tradingOverrides)) {
+  table[lang][tradingIndex] = label;
+}
+
 for (const [lang, arr] of Object.entries(table)) {
   if (arr.length !== keys.length) {
     throw new Error(`${lang}: expected ${keys.length} got ${arr.length}`);

@@ -38,7 +38,7 @@ const CHIP_I18N: Record<HomeFeedChip, HomeMessageKey> = {
 const FILTER_LISTING_TYPES: { value: FilterListingType; labelKey: HomeMessageKey }[] = [
   { value: 'all', labelKey: 'chipAll' },
   { value: 'free', labelKey: 'chipFree' },
-  { value: 'sale', labelKey: 'listingSale' },
+  { value: 'sale', labelKey: 'chipForSale' },
 ];
 
 const feedChips: HomeFeedChip[] = [

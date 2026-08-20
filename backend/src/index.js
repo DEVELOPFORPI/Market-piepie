@@ -1563,6 +1563,24 @@ app.get("/api/users/:id/disputes", requireDb, async (req, res) => {
 });
 
 const ORDER_STATUS_COMPLETE = "완료";
+const PRODUCT_STATUS_SOLD = "판매완료";
+
+async function healSoldProductsForUser(userId) {
+  if (!userId) return;
+  try {
+    await pool.query(
+      `UPDATE products p
+         INNER JOIN orders o ON o.product_id = p.id
+          SET p.status = $1
+        WHERE o.status = $2
+          AND (o.buyer_id = $3 OR o.seller_id = $3)
+          AND p.status <> $1`,
+      [PRODUCT_STATUS_SOLD, ORDER_STATUS_COMPLETE, userId],
+    );
+  } catch (e) {
+    console.warn("[orders] sold product heal failed:", e.message);
+  }
+}
 
 /**
  * 신뢰도·평점·거래수는 클라이언트가 보내온 값을 믿지 않고
@@ -1988,6 +2006,7 @@ app.get("/api/orders", requireDb, async (req, res) => {
   // 필터가 없으면 전체 주문이 나가므로 항상 본인으로 범위를 좁힌다.
   const user_id = buyer_id || seller_id ? req.query.user_id : req.authUserId;
   try {
+    await healSoldProductsForUser(user_id || req.authUserId);
     let query = `SELECT o.*,
       o.meetup_location AS meetup_place,
       SUBSTRING_INDEX(COALESCE(o.meetup_time,''), ' ', 1) AS meetup_date,
@@ -2342,6 +2361,12 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       buyer_completed: rows[0].buyer_completed,
       seller_completed: rows[0].seller_completed,
     });
+    if (rows[0].status === ORDER_STATUS_COMPLETE && rows[0].product_id) {
+      await pool.query("UPDATE products SET status=$2 WHERE id=$1", [
+        rows[0].product_id,
+        PRODUCT_STATUS_SOLD,
+      ]);
+    }
     res.json(rows[0]);
   } catch (e) {
     console.error("[PUT /api/orders/:id] error:", e.message, "body:", req.body);

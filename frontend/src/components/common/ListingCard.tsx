@@ -6,6 +6,7 @@ import { getLikeCount, isFavorite, toggleFavorite } from '@/utils/favoriteStorag
 import { guestGuard } from '@/utils/guestGate';
 import { getChatRoomCountByProductId } from '@/utils/chatStorage';
 import { getDisputeCountByProductId } from '@/utils/disputeStorage';
+import { hasProductReservedOrder, hasProductCompletedOrder } from '@/utils/orderStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { AvatarWithBadgeOverlay } from './AvatarWithBadgeOverlay';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -103,12 +104,14 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   };
 
   const isFreeListing = isFreeShareListing(product);
+  const isSold = product.status === PRODUCT_STATUS_VALUE.SOLD || hasProductCompletedOrder(product.id);
+  const isTrading = !isSold && hasProductReservedOrder(product.id);
   const statusLabel =
-    isFreeListing && product.status === PRODUCT_STATUS_VALUE.FOR_SALE
+    isFreeListing && !isSold && !isTrading
       ? t('free')
-      : product.status === PRODUCT_STATUS_VALUE.RESERVED
+      : isTrading
         ? t('trading')
-        : product.status === PRODUCT_STATUS_VALUE.SOLD
+        : isSold
           ? t('sold')
           : t('forSale');
   const timeLabel = relativeTimeLocalized(product.createdAt, t);
@@ -159,9 +162,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     seller?.id != null
       ? resolveProfileAvatarUrl(seller.id, seller.profileImage)
       : '/default-avatar.jpg';
-
-  const isSold = product.status === PRODUCT_STATUS_VALUE.SOLD;
-  const isTrading = product.status === PRODUCT_STATUS_VALUE.RESERVED;
   const isAdminHidden = Boolean(product.adminHidden);
 
   if (layout === 'list') {

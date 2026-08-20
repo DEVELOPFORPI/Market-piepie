@@ -10,11 +10,11 @@ import { getAllProducts, deleteProduct, updateProductStatus, saveProduct } from 
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { hasProductReservedOrder, getOrdersByProductId } from '@/utils/orderStorage';
+import { hasProductReservedOrder, hasProductCompletedOrder, getOrdersByProductId } from '@/utils/orderStorage';
 import { hasProductActiveDispute, hasHomeVisibleDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
-import { labelProductStatus, labelProductAvailability, labelInDispute, isFreeShareListing, relativeTimeShort } from '@/locale/enUI';
+import { labelProductAvailability, labelInDispute, isFreeShareListing, relativeTimeShort } from '@/locale/enUI';
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
@@ -64,13 +64,17 @@ function sellerListingMenu(
 }
 
 function isSellerListingMenuSelected(key: SellerListingMenuKey, p: Product): boolean {
+  if (p.status === PRODUCT_STATUS_VALUE.SOLD || hasProductCompletedOrder(p.id)) {
+    return key === PRODUCT_STATUS_VALUE.SOLD;
+  }
+  if (hasProductReservedOrder(p.id)) return key === PRODUCT_STATUS_VALUE.RESERVED;
   if (key === 'free') {
-    return isFreeShareListing(p) && p.status === PRODUCT_STATUS_VALUE.FOR_SALE;
+    return isFreeShareListing(p);
   }
   if (key === 'for_sale') {
-    return !isFreeShareListing(p) && p.status === PRODUCT_STATUS_VALUE.FOR_SALE;
+    return !isFreeShareListing(p);
   }
-  return p.status === key;
+  return false;
 }
 
 export const ProductDetail: React.FC = () => {
@@ -179,14 +183,30 @@ export const ProductDetail: React.FC = () => {
       if (id) {
         const fresh = getAllProducts().find((p) => p.id === id);
         if (fresh) setProduct(fresh);
+        if (
+          fresh
+          && hasProductCompletedOrder(fresh.id)
+          && fresh.status !== PRODUCT_STATUS_VALUE.SOLD
+        ) {
+          void updateProductStatus(fresh.id, PRODUCT_STATUS_VALUE.SOLD);
+        } else if (
+          fresh
+          && fresh.status === PRODUCT_STATUS_VALUE.RESERVED
+          && !hasProductReservedOrder(fresh.id)
+          && !hasProductCompletedOrder(fresh.id)
+        ) {
+          void updateProductStatus(fresh.id, PRODUCT_STATUS_VALUE.FOR_SALE);
+        }
       }
       setCtaRefresh((n) => n + 1);
     };
     window.addEventListener('disputesChanged', refresh);
     window.addEventListener('ordersChanged', refresh);
+    window.addEventListener('productsChanged', refresh);
     return () => {
       window.removeEventListener('disputesChanged', refresh);
       window.removeEventListener('ordersChanged', refresh);
+      window.removeEventListener('productsChanged', refresh);
     };
   }, [id]);
 
@@ -260,17 +280,25 @@ export const ProductDetail: React.FC = () => {
   };
 
   const productMeetupReserved = hasProductReservedOrder(product.id);
+  const productCompleted = hasProductCompletedOrder(product.id)
+    || product.status === PRODUCT_STATUS_VALUE.SOLD;
+  const listingView = {
+    ...product,
+    status: productCompleted
+      ? PRODUCT_STATUS_VALUE.SOLD
+      : productMeetupReserved
+        ? PRODUCT_STATUS_VALUE.RESERVED
+        : PRODUCT_STATUS_VALUE.FOR_SALE,
+  };
   const anyActiveDispute = hasProductActiveDispute(product.id);
   const publicDisputeOpen = hasHomeVisibleDispute(product.id);
   const sellerStatusLocked = anyActiveDispute || productMeetupReserved;
   const sellerHeaderStatusLabel = publicDisputeOpen
     ? labelInDispute()
-    : productMeetupReserved
-      ? labelProductStatus(PRODUCT_STATUS_VALUE.RESERVED)
-      : labelProductAvailability(product);
+    : labelProductAvailability(listingView);
   const buyerHeaderStatusLabel = publicDisputeOpen
     ? labelInDispute()
-    : labelProductAvailability(product);
+    : labelProductAvailability(listingView);
   const headerStatusLabel = isMine ? sellerHeaderStatusLabel : buyerHeaderStatusLabel;
   const headerStatusLocked = isMine ? sellerStatusLocked : publicDisputeOpen;
 
@@ -572,7 +600,7 @@ export const ProductDetail: React.FC = () => {
             </div>
           ) : (
             <div className="flex gap-3">
-              {product.status !== PRODUCT_STATUS_VALUE.SOLD && (
+              {listingView.status !== PRODUCT_STATUS_VALUE.SOLD && (
                 <button
                   onClick={() => navigate(`/register/edit/${product.id}`)}
                   className="flex-1 px-4 py-3 text-white rounded-lg font-medium text-sm"
@@ -589,9 +617,9 @@ export const ProductDetail: React.FC = () => {
               </button>
             </div>
           )
-        ) : product.status === PRODUCT_STATUS_VALUE.SOLD ? (
+        ) : listingView.status === PRODUCT_STATUS_VALUE.SOLD ? (
           <p className="text-sm text-gray-500 py-2">{t('listingSold')}</p>
-        ) : product.status === PRODUCT_STATUS_VALUE.RESERVED ? (
+        ) : hasProductReservedOrder(product.id) ? (
           <p className="text-sm text-gray-500 py-2">{t('itemReserved')}</p>
         ) : hasHomeVisibleDispute(product.id) ? (
           <p className="text-sm text-gray-500 py-2">{t('listingOpenDispute')}</p>

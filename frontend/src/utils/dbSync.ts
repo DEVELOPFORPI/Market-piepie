@@ -1454,7 +1454,10 @@ export async function syncDisputesFromDB(userId: string): Promise<void> {
       const local = localRaw ? JSON.parse(localRaw) : [];
       if (Array.isArray(local)) {
         for (const d of local) {
-          if (d?.id) byId.set(String(d.id), d);
+          if (!d?.id) continue;
+          const mine = d.buyerId === userId || d.sellerId === userId;
+          if (mine && !isWithinGraceWindow(d.createdAt)) continue;
+          byId.set(String(d.id), d);
         }
       }
     } catch {
@@ -1608,6 +1611,76 @@ function isRealDbNickname(nickname: string, userId: string): boolean {
   );
 }
 
+/** DB에 프로필이 없을 때, 예전 로컬 캐시(닉네임·거래·분쟁·뱃지)를 버린다. */
+export function resetLocalCacheForIncompleteProfile(userId: string): void {
+  if (!userId) return;
+
+  const keys = [
+    `marketpiepie_onboarding_v1_${userId}`,
+    'marketpiepie_device_profile_once_v1',
+    `user_profile_${userId}`,
+    `userRegion_${userId}`,
+    `unlocked_activity_badges_${userId}`,
+    `purchased_activity_badges_${userId}`,
+    `notified_badge_ids_${userId}`,
+    `myFavorites_${userId}`,
+    `my_written_reviews_${userId}`,
+  ];
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const stripMine = (raw: string | null, keep: (row: Record<string, unknown>) => boolean): string => {
+    try {
+      const list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) return raw || '[]';
+      return JSON.stringify(list.filter(keep));
+    } catch {
+      return raw || '[]';
+    }
+  };
+
+  setItem(
+    'all_orders',
+    stripMine(getItem('all_orders'), (o) => {
+      const buyerId = (o.buyer as { id?: string } | undefined)?.id;
+      const sellerId = (o.seller as { id?: string } | undefined)?.id;
+      return buyerId !== userId && sellerId !== userId;
+    }),
+  );
+  setItem(
+    'myDisputes',
+    stripMine(getItem('myDisputes'), (d) => d.buyerId !== userId && d.sellerId !== userId),
+  );
+  for (const key of ['community_user_posts', 'community_feed_posts', 'community_dispute_posts'] as const) {
+    setItem(
+      key,
+      stripMine(getItem(key), (p) => (p.author as { id?: string } | undefined)?.id !== userId),
+    );
+  }
+  try {
+    const map = JSON.parse(getItem('all_received_reviews') || '{}') as Record<string, unknown>;
+    if (map && typeof map === 'object') {
+      delete map[userId];
+      setItem('all_received_reviews', JSON.stringify(map));
+    }
+  } catch {
+    /* ignore */
+  }
+
+  window.dispatchEvent(new Event('profileSaved'));
+  window.dispatchEvent(new Event('ordersChanged'));
+  window.dispatchEvent(new Event('disputesChanged'));
+  window.dispatchEvent(new Event('reviewsChanged'));
+  window.dispatchEvent(new Event('postsChanged'));
+  window.dispatchEvent(new Event('activityBadgesChanged'));
+  window.dispatchEvent(new Event('regionChanged'));
+}
+
 /**
  * DB 프로필 상태 확인 (로그인 라우팅용).
  * - complete: users에 실제 닉네임 있음 → 홈으로
@@ -1706,14 +1779,8 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
         window.dispatchEvent(new Event('profileSaved'));
         if (dbRegion) window.dispatchEvent(new Event('regionChanged'));
       } else if (existing) {
-        const dbRegion = String(u.activity_region || '').trim();
-        if (dbRegion && dbRegion !== String(existing.activityRegion || '').trim()) {
-          const profile = { ...existing, activityRegion: dbRegion };
-          localStorage.setItem(profileKey, JSON.stringify(profile));
-          try { localStorage.setItem(`userRegion_${userId}`, dbRegion); } catch { /* ignore */ }
-          window.dispatchEvent(new Event('profileSaved'));
-          window.dispatchEvent(new Event('regionChanged'));
-        }
+        // DB에 실제 프로필이 없으면 로컬 잔여 데이터를 쓰지 않는다
+        resetLocalCacheForIncompleteProfile(userId);
       }
     }
   } catch { /* ignore */ }

@@ -93,17 +93,20 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
   return true;
 };
 
+export const applyProductStatusLocally = (productId: string, status: Product['status']): void => {
+  const products = getAllProducts();
+  const product = products.find((p) => p.id === productId);
+  if (!product || product.status === status) return;
+  product.status = status;
+  setItem(STORAGE_KEY, JSON.stringify(products));
+  window.dispatchEvent(new Event('productsChanged'));
+  broadcastProductChange('status_changed', productId);
+};
+
 export const updateProductStatus = async (productId: string, status: Product['status']): Promise<boolean> => {
   const ok = await syncProductStatusToDB(productId, status);
   if (!ok) return false;
-  const products = getAllProducts();
-  const product = products.find((p) => p.id === productId);
-  if (product) {
-    product.status = status;
-    setItem(STORAGE_KEY, JSON.stringify(products));
-    window.dispatchEvent(new Event('productsChanged'));
-    broadcastProductChange('status_changed', productId);
-  }
+  applyProductStatusLocally(productId, status);
   return true;
 };
 

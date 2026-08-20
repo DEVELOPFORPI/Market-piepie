@@ -14,7 +14,7 @@ import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { syncOrderToDB, syncOrderStatusToDB, syncOrderFromDB, syncOrderDeleteToDB } from '@/utils/dbSync';
 import { addNotification } from '@/utils/notificationStorage';
-import { getProductById, updateProductStatus } from '@/utils/productStorage';
+import { getProductById, updateProductStatus, applyProductStatusLocally } from '@/utils/productStorage';
 import { addPriceOfferToChat, addPriceOfferResultToChat, clearOrderFromRoom } from '@/utils/chatStorage';
 import { broadcastOrderUpdate } from '@/utils/chatSocket';
 import {
@@ -114,11 +114,29 @@ export const hasProductActiveTrade = (productId: string): boolean => {
   );
 };
 
+/** Whether product has a finished trade (receipt or complete). */
+export const hasProductCompletedOrder = (productId: string): boolean => {
+  return getAllOrders().some((o) => {
+    if (o.product?.id !== productId) return false;
+    return (
+      o.status === ORDER_STATUS_VALUE.COMPLETE
+      || o.status === ORDER_STATUS_VALUE.RECEIVED
+      || Boolean(o.buyerCompleted && o.sellerCompleted)
+    );
+  });
+};
+
 /** Whether product has a reserved order (meetup set). Canceled meetup (accepted but no meetup) does not count. */
 export const hasProductReservedOrder = (productId: string): boolean => {
   return getAllOrders().some((o) => {
-    if (o.product?.id !== productId || o.status === ORDER_STATUS_VALUE.COMPLETE || o.status === ORDER_STATUS_VALUE.DISPUTE)
+    if (
+      o.product?.id !== productId
+      || o.status === ORDER_STATUS_VALUE.COMPLETE
+      || o.status === ORDER_STATUS_VALUE.RECEIVED
+      || o.status === ORDER_STATUS_VALUE.DISPUTE
+    ) {
       return false;
+    }
     if (o.status === ORDER_STATUS_VALUE.MEETUP_SET) return true;
     if (o.meetupPlace && o.meetupDate && o.meetupTime) return true;
     return false;
@@ -154,27 +172,48 @@ export const getMyPendingOfferOrder = (productId: string, buyerId?: string | nul
 
 const ORDER_STATUS_SET = new Set<string>(Object.values(ORDER_STATUS_VALUE));
 
-/** Order statuses where the listing should show as trading (reserved), not for sale. */
-const PRODUCT_TRADING_ORDER_STATUSES = new Set<OrderStatus>([
-  ORDER_STATUS_VALUE.ACCEPTED,
-  ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
-  ORDER_STATUS_VALUE.MEETUP_SET,
-  ORDER_STATUS_VALUE.SHIPPED,
-  ORDER_STATUS_VALUE.DELIVERED,
-  ORDER_STATUS_VALUE.RECEIVED,
-  ORDER_STATUS_VALUE.DISPUTE,
-]);
+const markProductStatusFromOrder = async (
+  productId: string,
+  status: Product['status'],
+): Promise<void> => {
+  const ok = await updateProductStatus(productId, status);
+  if (!ok) applyProductStatusLocally(productId, status);
+};
+
+const syncProductListingStatus = async (productId: string): Promise<void> => {
+  if (!productId) return;
+  const product = getProductById(productId);
+  if (!product) return;
+  if (hasProductCompletedOrder(productId)) {
+    if (product.status !== PRODUCT_STATUS_VALUE.SOLD) {
+      await markProductStatusFromOrder(productId, PRODUCT_STATUS_VALUE.SOLD);
+    }
+    return;
+  }
+  if (product.status === PRODUCT_STATUS_VALUE.SOLD) return;
+  if (hasProductReservedOrder(productId)) {
+    if (product.status !== PRODUCT_STATUS_VALUE.RESERVED) {
+      await markProductStatusFromOrder(productId, PRODUCT_STATUS_VALUE.RESERVED);
+    }
+    return;
+  }
+  if (product.status === PRODUCT_STATUS_VALUE.RESERVED) {
+    await markProductStatusFromOrder(productId, PRODUCT_STATUS_VALUE.FOR_SALE);
+  }
+};
 
 const syncProductStatusFromOrder = (order: Order): void => {
   const productId = order.product?.id;
   if (!productId) return;
-  if (order.status === ORDER_STATUS_VALUE.COMPLETE) {
-    void updateProductStatus(productId, PRODUCT_STATUS_VALUE.SOLD);
+  if (
+    order.status === ORDER_STATUS_VALUE.COMPLETE
+    || order.status === ORDER_STATUS_VALUE.RECEIVED
+    || (order.buyerCompleted && order.sellerCompleted)
+  ) {
+    void markProductStatusFromOrder(productId, PRODUCT_STATUS_VALUE.SOLD);
     return;
   }
-  if (PRODUCT_TRADING_ORDER_STATUSES.has(order.status)) {
-    void updateProductStatus(productId, PRODUCT_STATUS_VALUE.RESERVED);
-  }
+  void syncProductListingStatus(productId);
 };
 
 /** Status to restore when a dispute is resolved (last non-dispute order status in timeline). */
@@ -211,6 +250,7 @@ export const mergeRemoteOrder = (remoteOrder: Order): void => {
     orders.push(remoteOrder);
   }
   setOrdersWithQuotaRetry(orders, remoteOrder.id);
+  syncProductStatusFromOrder(remoteOrder);
   window.dispatchEvent(new Event('ordersChanged'));
 };
 
@@ -337,9 +377,10 @@ export const updateOrderStatus = async (
   });
   if (!ok) return false;
 
+  const wasPendingOffer = order.status === ORDER_STATUS_VALUE.PENDING_OFFER;
   order.status = status;
   order.timeline.push(timelineEvent);
-  if (status === ORDER_STATUS_VALUE.ACCEPTED) {
+  if (status === ORDER_STATUS_VALUE.ACCEPTED && wasPendingOffer) {
     void addNotification({
       targetUserId: order.buyer.id,
       type: 'order',
@@ -384,7 +425,7 @@ export const confirmOrderCompletion = async (
       description: 'Trade completed',
     });
 
-    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+    void markProductStatusFromOrder(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
     const other = role === 'buyer' ? order.seller : order.buyer;
     void addNotification({
       targetUserId: other.id,
@@ -433,7 +474,7 @@ export const completeOrderOnReceive = async (orderId: string): Promise<Order | u
   });
   if (!ok) return undefined;
 
-  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
+  void markProductStatusFromOrder(order.product.id, PRODUCT_STATUS_VALUE.SOLD);
   const actorId = getCurrentUserId();
   const notifyTarget = actorId === order.seller.id ? order.buyer : order.seller;
   addNotification({
@@ -482,7 +523,7 @@ export const updateOrderMeetup = async (
   order.meetupAccepted = true;
   order.status = ORDER_STATUS_VALUE.MEETUP_SET;
   order.timeline.push(timelineEvent);
-  void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
+  void markProductStatusFromOrder(order.product.id, PRODUCT_STATUS_VALUE.RESERVED);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   notifyOrderCounterpart(order);
@@ -542,10 +583,7 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
   order.meetupAccepted = false;
   order.status = nextStatus;
   order.timeline.push(timelineEvent);
-  const product = getProductById(order.product.id);
-  if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
-    void updateProductStatus(order.product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
-  }
+  await syncProductListingStatus(order.product.id);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
   return order;

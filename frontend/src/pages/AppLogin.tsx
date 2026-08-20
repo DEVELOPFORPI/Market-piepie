@@ -15,7 +15,7 @@ import { isDeviceProfileOnce, isOnboardingComplete } from '@/utils/onboardingSto
 import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
 import { useAppPrices } from '@/utils/appPrices';
 
-import { checkMyProfileInDB } from '@/utils/dbSync';
+import { checkMyProfileInDB, resetLocalCacheForIncompleteProfile } from '@/utils/dbSync';
 
 
 
@@ -75,9 +75,7 @@ export const AppLogin: React.FC = () => {
       setPiStep('Loading profile...');
       const profileStatus = await checkMyProfileInDB(verified.uid);
       if (profileStatus === 'incomplete') {
-        localStorage.removeItem('marketpiepie_onboarding_v1_' + verified.uid);
-        localStorage.removeItem('marketpiepie_device_profile_once_v1');
-        localStorage.removeItem(`user_profile_${verified.uid}`);
+        resetLocalCacheForIncompleteProfile(verified.uid);
         navigate('/signup', { replace: true });
         return;
       }
@@ -117,8 +115,7 @@ export const AppLogin: React.FC = () => {
       }
       login(pendingVerified.uid, true);
       try { sessionStorage.setItem('pi_suggested_nickname', pendingVerified.username || ''); } catch {}
-      localStorage.removeItem('marketpiepie_onboarding_v1_' + pendingVerified.uid);
-      localStorage.removeItem('marketpiepie_device_profile_once_v1');
+      resetLocalCacheForIncompleteProfile(pendingVerified.uid);
       navigate('/signup', { replace: true });
     } catch (e: any) {
       console.error('Pi verification payment failed:', e);

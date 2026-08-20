@@ -57,7 +57,7 @@ import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
-import { initDBSync, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
+import { checkMyProfileInDB, initDBSync, resetLocalCacheForIncompleteProfile, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
 import { isApiRateLimited } from './utils/api';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
 import { addRemoteMessage, addRemoteRoom, updateRoomFromRemote, getChatRoom } from './utils/chatStorage';
@@ -171,12 +171,19 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     const kick = async () => {
       await ensureImplicitSession();
       const userId = getCurrentUserId() || undefined;
+      if (userId && !userId.startsWith('guest_') && !isTestLoginEnabled()) {
+        const profileStatus = await checkMyProfileInDB(userId);
+        if (profileStatus === 'incomplete') {
+          resetLocalCacheForIncompleteProfile(userId);
+          navigate('/signup', { replace: true });
+        }
+      }
       initDBSync(userId);
       connectChatSocket();
     };
     kick();
     return () => { disconnectChatSocket(); };
-  }, [heavyReady]);
+  }, [heavyReady, navigate]);
 
   useEffect(() => {
     if (!heavyReady) return;
@@ -340,14 +347,14 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     return <Navigate to="/welcome" replace />;
   }
 
-  // Production: incomplete onboarding → welcome flow
+  // Production: logged in but no profile yet → signup (not welcome)
   if (
     !testModeEnabled &&
     loggedIn &&
     !isOnboardingComplete() &&
     !isOnboardingExemptPath(location.pathname)
   ) {
-    return <Navigate to="/welcome" replace />;
+    return <Navigate to="/signup" replace />;
   }
 
   if (isAdminPath && !isAdminVerified()) {
