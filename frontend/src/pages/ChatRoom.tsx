@@ -10,7 +10,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
-import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, getMyPendingOfferOrder, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isOfferAwaitingSellerResponse, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -112,7 +112,7 @@ function getActionablePriceOfferMessageId(msgs: ChatMessage[]): string | null {
   }
   if (!newest?.orderId) return null;
   const order = getOrderById(newest.orderId);
-  if (!order || order.status !== ORDER_STATUS_VALUE.PENDING_OFFER) return null;
+  if (!isOfferAwaitingSellerResponse(order)) return null;
   return newest.id;
 }
 
@@ -732,6 +732,7 @@ export const ChatRoom: React.FC = () => {
     && !productForOffer.isFreeShare
     && (productForOffer.price ?? 0) > 0
     && productForOffer.status !== PRODUCT_STATUS_VALUE.SOLD
+    && !hasProductReservedOrder(productForOffer.id)
   );
   // Hide dispute tab for free-share chats
   const isShareOrder = !!(
@@ -791,7 +792,7 @@ export const ChatRoom: React.FC = () => {
           key: 'offer',
           label: t('sendOffer'),
           onClick: () => {
-            if (getMyPendingOfferOrder(room.product!.id, getCurrentUserId())) {
+            if (hasMyOfferBlockingNewOffer(room.product!.id, getCurrentUserId())) {
               showToast(t('offerAlreadyPending'));
               return;
             }
@@ -1625,7 +1626,7 @@ export const ChatRoom: React.FC = () => {
             const showActions =
               isSeller
               && offerOrder
-              && offerOrder.status === ORDER_STATUS_VALUE.PENDING_OFFER
+              && isOfferAwaitingSellerResponse(offerOrder)
               && msg.id === actionablePriceOfferMessageId
               && !meetupBannerInfo
               && !listingHeldByOtherDispute
@@ -1689,7 +1690,7 @@ export const ChatRoom: React.FC = () => {
                         onClick={() => {
                           if (!msg.orderId) return;
                           const order = getOrderById(msg.orderId);
-                          if (!order?.product) return;
+                          if (!order?.product || !isOfferAwaitingSellerResponse(order)) return;
                           const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
                           void (async () => {
                           const ok = await askConfirm({

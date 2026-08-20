@@ -10,7 +10,7 @@ import { getAllProducts, deleteProduct, updateProductStatus, saveProduct } from 
 import { getCurrentUserId } from '@/utils/authStorage';
 import { isFavorite, toggleFavorite, getLikeCount } from '@/utils/favoriteStorage';
 import { createOrGetChatRoom, getChatRoomCountByProductId } from '@/utils/chatStorage';
-import { hasProductReservedOrder, hasProductCompletedOrder, getOrdersByProductId } from '@/utils/orderStorage';
+import { hasProductReservedOrder, hasProductCompletedOrder, getOrdersByProductId, isMyAcceptedTradeOnProduct } from '@/utils/orderStorage';
 import { hasProductActiveDispute, hasHomeVisibleDispute } from '@/utils/disputeStorage';
 import { syncOrdersFromDB, syncDisputesFromDB } from '@/utils/dbSync';
 import { ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
@@ -319,6 +319,7 @@ export const ProductDetail: React.FC = () => {
       (o) => o.buyer?.id === uid && o.status === ORDER_STATUS_VALUE.PENDING_OFFER,
     ),
   );
+  const myTradeInProgress = isMyAcceptedTradeOnProduct(product.id, uid);
 
   if (loading) {
     return (
@@ -646,7 +647,7 @@ export const ProductDetail: React.FC = () => {
               {t('navChat')}
             </button>
             {product.allowOffer !== false && !product.isFreeShare && product.price > 0 && (
-              hasPendingOffer ? (
+              hasPendingOffer || myTradeInProgress ? (
                 <div className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm flex items-center justify-center gap-2">
                   <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
