@@ -4,7 +4,6 @@ import type { AppLanguage } from '@/utils/languageStorage';
 export type DisputePageMessageKey =
   | 'disputeDetailsTitle'
   | 'openDisputeTitle'
-  | 'viewOtherReadonly'
   | 'otherParty'
   | 'statusHeading'
   | 'yourDispute'
@@ -44,7 +43,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   en: {
     disputeDetailsTitle: 'Dispute details',
     openDisputeTitle: 'Open dispute',
-    viewOtherReadonly: 'You are viewing the other party\'s dispute (read-only).',
     otherParty: 'Other party',
     statusHeading: 'Status',
     yourDispute: 'Your dispute',
@@ -83,7 +81,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ko: {
     disputeDetailsTitle: '분쟁 상세',
     openDisputeTitle: '분쟁 열기',
-    viewOtherReadonly: '상대방이 연 분쟁을 보고 있습니다 (읽기 전용).',
     otherParty: '상대방',
     statusHeading: '상태',
     yourDispute: '내가 연 분쟁',
@@ -122,7 +119,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   zh: {
     disputeDetailsTitle: '争议详情',
     openDisputeTitle: '发起争议',
-    viewOtherReadonly: '您正在查看对方的争议（只读）。',
     otherParty: '对方',
     statusHeading: '状态',
     yourDispute: '你发起的争议',
@@ -161,7 +157,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ja: {
     disputeDetailsTitle: '紛争の詳細',
     openDisputeTitle: '紛争を開く',
-    viewOtherReadonly: '相手が開いた紛争を表示しています（読み取り専用）。',
     otherParty: '相手',
     statusHeading: 'ステータス',
     yourDispute: 'あなたが開いた紛争',
@@ -200,7 +195,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   es: {
     disputeDetailsTitle: 'Detalles de la disputa',
     openDisputeTitle: 'Abrir disputa',
-    viewOtherReadonly: 'Estás viendo la disputa de la otra parte (solo lectura).',
     otherParty: 'Otra parte',
     statusHeading: 'Estado',
     yourDispute: 'Tu disputa',
@@ -239,7 +233,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   pt: {
     disputeDetailsTitle: 'Detalhes da disputa',
     openDisputeTitle: 'Abrir disputa',
-    viewOtherReadonly: 'Você está vendo a disputa da outra parte (somente leitura).',
     otherParty: 'Outra parte',
     statusHeading: 'Status',
     yourDispute: 'Sua disputa',
@@ -278,7 +271,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   fr: {
     disputeDetailsTitle: 'Détails du litige',
     openDisputeTitle: 'Ouvrir un litige',
-    viewOtherReadonly: 'Vous consultez le litige de l’autre partie (lecture seule).',
     otherParty: 'Autre partie',
     statusHeading: 'Statut',
     yourDispute: 'Votre litige',
@@ -317,7 +309,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   de: {
     disputeDetailsTitle: 'Streitfall-Details',
     openDisputeTitle: 'Streitfall öffnen',
-    viewOtherReadonly: 'Du siehst den Streitfall der anderen Partei (nur lesen).',
     otherParty: 'Andere Partei',
     statusHeading: 'Status',
     yourDispute: 'Dein Streitfall',
@@ -356,7 +347,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   id: {
     disputeDetailsTitle: 'Detail sengketa',
     openDisputeTitle: 'Buka sengketa',
-    viewOtherReadonly: 'Anda melihat sengketa pihak lain (hanya baca).',
     otherParty: 'Pihak lain',
     statusHeading: 'Status',
     yourDispute: 'Sengketa Anda',
@@ -395,7 +385,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   vi: {
     disputeDetailsTitle: 'Chi tiết tranh chấp',
     openDisputeTitle: 'Mở tranh chấp',
-    viewOtherReadonly: 'Bạn đang xem tranh chấp của đối phương (chỉ đọc).',
     otherParty: 'Đối phương',
     statusHeading: 'Trạng thái',
     yourDispute: 'Tranh chấp của bạn',
@@ -434,7 +423,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   th: {
     disputeDetailsTitle: 'รายละเอียดข้อพิพาท',
     openDisputeTitle: 'เปิดข้อพิพาท',
-    viewOtherReadonly: 'คุณกำลังดูข้อพิพาทของอีกฝ่าย (อ่านอย่างเดียว)',
     otherParty: 'อีกฝ่าย',
     statusHeading: 'สถานะ',
     yourDispute: 'ข้อพิพาทของคุณ',
@@ -473,7 +461,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   hi: {
     disputeDetailsTitle: 'विवाद विवरण',
     openDisputeTitle: 'विवाद खोलें',
-    viewOtherReadonly: 'आप दूसरे पक्ष का विवाद देख रहे हैं (केवल पढ़ने योग्य)।',
     otherParty: 'दूसरा पक्ष',
     statusHeading: 'स्थिति',
     yourDispute: 'आपका विवाद',
@@ -512,7 +499,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ar: {
     disputeDetailsTitle: 'تفاصيل النزاع',
     openDisputeTitle: 'فتح نزاع',
-    viewOtherReadonly: 'أنت تعرض نزاع الطرف الآخر (للقراءة فقط).',
     otherParty: 'الطرف الآخر',
     statusHeading: 'الحالة',
     yourDispute: 'نزاعك',
@@ -551,7 +537,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ru: {
     disputeDetailsTitle: 'Сведения о споре',
     openDisputeTitle: 'Открыть спор',
-    viewOtherReadonly: 'Вы просматриваете спор другой стороны (только чтение).',
     otherParty: 'Другая сторона',
     statusHeading: 'Статус',
     yourDispute: 'Ваш спор',
@@ -590,7 +575,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   tr: {
     disputeDetailsTitle: 'Anlaşmazlık ayrıntıları',
     openDisputeTitle: 'Anlaşmazlık aç',
-    viewOtherReadonly: 'Karşı tarafın anlaşmazlığını görüntülüyorsunuz (salt okunur).',
     otherParty: 'Karşı taraf',
     statusHeading: 'Durum',
     yourDispute: 'Anlaşmazlığınız',
@@ -629,7 +613,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   it: {
     disputeDetailsTitle: 'Dettagli controversia',
     openDisputeTitle: 'Apri controversia',
-    viewOtherReadonly: 'Stai visualizzando la controversia dell’altra parte (sola lettura).',
     otherParty: 'Altra parte',
     statusHeading: 'Stato',
     yourDispute: 'La tua controversia',
@@ -668,7 +651,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   pl: {
     disputeDetailsTitle: 'Szczegóły sporu',
     openDisputeTitle: 'Otwórz spór',
-    viewOtherReadonly: 'Przeglądasz spór drugiej strony (tylko do odczytu).',
     otherParty: 'Druga strona',
     statusHeading: 'Status',
     yourDispute: 'Twój spór',
@@ -707,7 +689,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   nl: {
     disputeDetailsTitle: 'Geschildetails',
     openDisputeTitle: 'Geschil openen',
-    viewOtherReadonly: 'Je bekijkt het geschil van de andere partij (alleen-lezen).',
     otherParty: 'Andere partij',
     statusHeading: 'Status',
     yourDispute: 'Jouw geschil',
@@ -746,7 +727,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   fil: {
     disputeDetailsTitle: 'Detalye ng dispute',
     openDisputeTitle: 'Magbukas ng dispute',
-    viewOtherReadonly: 'Tinitingnan mo ang dispute ng kabilang partido (read-only).',
     otherParty: 'Kabilang partido',
     statusHeading: 'Status',
     yourDispute: 'Dispute mo',
@@ -785,7 +765,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   uk: {
     disputeDetailsTitle: 'Подробиці спору',
     openDisputeTitle: 'Відкрити спір',
-    viewOtherReadonly: 'Ви переглядаєте спір іншої сторони (лише читання).',
     otherParty: 'Інша сторона',
     statusHeading: 'Статус',
     yourDispute: 'Ваш спір',
@@ -824,7 +803,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   bn: {
     disputeDetailsTitle: 'বিবাদের বিবরণ',
     openDisputeTitle: 'বিবাদ খুলুন',
-    viewOtherReadonly: 'আপনি অন্য পক্ষের বিবাদ দেখছেন (শুধুমাত্র পাঠ)।',
     otherParty: 'অন্য পক্ষ',
     statusHeading: 'অবস্থা',
     yourDispute: 'আপনার বিবাদ',
@@ -863,7 +841,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ms: {
     disputeDetailsTitle: 'Butiran pertikaian',
     openDisputeTitle: 'Buka pertikaian',
-    viewOtherReadonly: 'Anda melihat pertikaian pihak lain (baca sahaja).',
     otherParty: 'Pihak lain',
     statusHeading: 'Status',
     yourDispute: 'Pertikaian anda',
@@ -902,7 +879,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   sw: {
     disputeDetailsTitle: 'Maelezo ya mzozo',
     openDisputeTitle: 'Fungua mzozo',
-    viewOtherReadonly: 'Unaangalia mzozo wa upande mwingine (soma tu).',
     otherParty: 'Upande mwingine',
     statusHeading: 'Hali',
     yourDispute: 'Mzozo wako',
@@ -941,7 +917,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   fa: {
     disputeDetailsTitle: 'جزئیات اختلاف',
     openDisputeTitle: 'باز کردن اختلاف',
-    viewOtherReadonly: 'اختلاف طرف مقابل را می‌بینید (فقط خواندنی).',
     otherParty: 'طرف مقابل',
     statusHeading: 'وضعیت',
     yourDispute: 'اختلاف شما',
@@ -980,7 +955,6 @@ const DISPUTE_PAGE_MESSAGES: Record<AppLanguage, Record<DisputePageMessageKey, s
   ur: {
     disputeDetailsTitle: 'تنازعہ کی تفصیل',
     openDisputeTitle: 'تنازعہ کھولیں',
-    viewOtherReadonly: 'آپ دوسری فریق کا تنازعہ دیکھ رہے ہیں (صرف پڑھنے کے لیے)۔',
     otherParty: 'دوسری فریق',
     statusHeading: 'حیثیت',
     yourDispute: 'آپ کا تنازعہ',

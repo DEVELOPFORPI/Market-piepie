@@ -390,12 +390,6 @@ export const Dispute: React.FC = () => {
       />
 
       <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
-        {viewingOtherDispute && dispute && (
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            <p className="text-sm text-gray-600">{t('viewOtherReadonly')}</p>
-          </div>
-        )}
-
         {orderDisputes.length > 0 && (
           <div className="space-y-3">
             {[...orderDisputes]

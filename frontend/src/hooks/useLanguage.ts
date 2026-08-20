@@ -621,7 +621,6 @@ const ORDER_DETAIL_KEYS = new Set<string>([
 const DISPUTE_PAGE_KEYS = new Set<string>([
   'disputeDetailsTitle',
   'openDisputeTitle',
-  'viewOtherReadonly',
   'otherParty',
   'statusHeading',
   'yourDispute',
