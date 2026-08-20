@@ -22,7 +22,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { getOrderById, getOrders, cancelOrderMeetup } from '@/utils/orderStorage';
+import { getOrderById, getOrders, cancelOrderMeetup, isOrderTradeInProgress } from '@/utils/orderStorage';
 import { getProductById, updateProductStatus } from '@/utils/productStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 
@@ -34,6 +34,19 @@ const CHATROOMS_KEY = 'all_chatrooms';
  * 방 생성 → DB 저장 promise를 기억해 두고, 첫 메시지는 이걸 기다린 후 전송.
  */
 const pendingRoomSyncs = new Map<string, Promise<boolean>>();
+
+function roomHasAcceptedOffer(room: ChatRoom): boolean {
+  return (room.messages || []).some(
+    (m) => m.type === 'price_offer_result' && m.offerResult === 'accepted',
+  );
+}
+
+function isBlockedOfferAfterAccept(room: ChatRoom, message: ChatMessage): boolean {
+  if (message.type !== 'price_offer') return false;
+  const order = (message.orderId && getOrderById(message.orderId)) || room.order || null;
+  if (order && isOrderTradeInProgress(order.status)) return true;
+  return roomHasAcceptedOffer(room);
+}
 
 const trackRoomSync = (room: ChatRoom): Promise<boolean> => {
   const existing = pendingRoomSyncs.get(room.id);
@@ -49,6 +62,7 @@ export const addRemoteMessage = (roomId: string, message: ChatMessage): void => 
   const rooms = getAllChatRooms();
   const room = rooms.find((r) => r.id === roomId);
   if (!room || isChatRoomEnded(room)) return;
+  if (isBlockedOfferAfterAccept(room, message)) return;
   if (!room.messages) room.messages = [];
   if (room.messages.some((m) => m.id === message.id)) return;
   room.messages.push(message);
@@ -318,6 +332,9 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
     return false;
   }
   if (isChatRoomEnded(room)) {
+    return false;
+  }
+  if (isBlockedOfferAfterAccept(room, message)) {
     return false;
   }
 
@@ -705,7 +722,11 @@ export const addReviewToChat = async (order: Order, reviewerNickname: string) =>
 
 /** Buyer price/share offer card (create room if needed); free share uses share copy */
 export const addPriceOfferToChat = async (order: Order) => {
+  if (isOrderTradeInProgress(order.status)) return;
   const room = await ensureChatRoomForOrder(order, order.buyer.id);
+  if (isBlockedOfferAfterAccept(room, { type: 'price_offer', orderId: order.id } as ChatMessage)) {
+    return;
+  }
   const originalPrice = order.product?.price ?? 0;
   const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
   const msg: ChatMessage = {

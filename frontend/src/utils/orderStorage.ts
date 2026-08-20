@@ -126,6 +126,53 @@ export const hasProductCompletedOrder = (productId: string): boolean => {
   });
 };
 
+/** Accepted or later — a trade has started, so a new price offer is not allowed. */
+const TRADE_IN_PROGRESS_STATUSES = new Set<OrderStatus>([
+  ORDER_STATUS_VALUE.ACCEPTED,
+  ORDER_STATUS_VALUE.AWAITING_SHIPPING_INFO,
+  ORDER_STATUS_VALUE.MEETUP_SET,
+  ORDER_STATUS_VALUE.SHIPPED,
+  ORDER_STATUS_VALUE.DELIVERED,
+  ORDER_STATUS_VALUE.RECEIVED,
+  ORDER_STATUS_VALUE.DISPUTE,
+]);
+
+export const isOrderTradeInProgress = (status: OrderStatus): boolean =>
+  TRADE_IN_PROGRESS_STATUSES.has(status);
+
+/** This buyer already has a pending or accepted offer on this listing. */
+export const hasMyOfferBlockingNewOffer = (productId: string, buyerId?: string | null): boolean => {
+  if (!productId || !buyerId) return false;
+  return getAllOrders().some(
+    (o) =>
+      o.product?.id === productId
+      && o.buyer?.id === buyerId
+      && (o.status === ORDER_STATUS_VALUE.PENDING_OFFER || isOrderTradeInProgress(o.status)),
+  );
+};
+
+/** Seller can accept/decline only a waiting offer — not one already accepted, even if status was reset. */
+export const isOfferAwaitingSellerResponse = (order?: Order | null): boolean => {
+  if (!order || order.status !== ORDER_STATUS_VALUE.PENDING_OFFER) return false;
+  for (let i = (order.timeline || []).length - 1; i >= 0; i--) {
+    const type = order.timeline[i]?.type;
+    if (type === ORDER_STATUS_VALUE.ACCEPTED) return false;
+    if (type === ORDER_STATUS_VALUE.OFFER_DECLINED) return true;
+  }
+  return true;
+};
+
+/** Current user is the buyer on an accepted/in-progress trade for this listing. */
+export const isMyAcceptedTradeOnProduct = (productId: string, buyerId?: string | null): boolean => {
+  if (!productId || !buyerId) return false;
+  return getAllOrders().some(
+    (o) =>
+      o.product?.id === productId
+      && o.buyer?.id === buyerId
+      && isOrderTradeInProgress(o.status),
+  );
+};
+
 /** Whether product has a reserved order (meetup set). Canceled meetup (accepted but no meetup) does not count. */
 export const hasProductReservedOrder = (productId: string): boolean => {
   return getAllOrders().some((o) => {
@@ -371,10 +418,14 @@ export const updateOrderStatus = async (
     timestamp: new Date().toISOString(),
     description: timelineDescription,
   };
-  const ok = await syncOrderStatusToDB(orderId, status, timelineEvent, {
+  const extras = {
     receipt_condition: order.receiptCondition || null,
     receipt_notes: order.receiptNotes || null,
-  });
+  };
+  let ok = await syncOrderStatusToDB(orderId, status, timelineEvent, extras);
+  if (!ok) {
+    ok = (await syncOrderToDB(order)) && (await syncOrderStatusToDB(orderId, status, timelineEvent, extras));
+  }
   if (!ok) return false;
 
   const wasPendingOffer = order.status === ORDER_STATUS_VALUE.PENDING_OFFER;
@@ -627,6 +678,12 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
 
   const existing = findOpenOrderForTrade(params.product.id, myUser.id, params.product.seller.id);
   if (existing) {
+    if (
+      existing.status === ORDER_STATUS_VALUE.PENDING_OFFER
+      || isOrderTradeInProgress(existing.status)
+    ) {
+      return null;
+    }
     existing.proposedPrice = params.proposedPrice;
     existing.tradeMethod = params.tradeMethod;
     // 약속 취소 후 재제안 등: 기존 주문을 다시 쓰더라도 수락 버튼이 뜨려면 대기 상태여야 한다.
