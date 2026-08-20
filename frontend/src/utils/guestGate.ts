@@ -17,33 +17,13 @@ export type GuestGuardReason =
   | 'dispute'
   | 'default';
 
-const REASON_MESSAGES: Record<GuestGuardReason, string> = {
-  chat: 'Log in with Pi Network to chat with sellers.',
-  profile: 'Log in with Pi Network to manage your profile.',
-  sell: 'Log in with Pi Network to sell your items.',
-  post: 'Log in with Pi Network to write a community post.',
-  offer: 'Log in with Pi Network to make an offer.',
-  share: 'Log in with Pi Network to apply for free share.',
-  like: 'Log in with Pi Network to like posts and listings.',
-  comment: 'Log in with Pi Network to leave a comment.',
-  report: 'Log in with Pi Network to report content.',
-  inquiry: 'Log in with Pi Network to contact support.',
-  notification: 'Log in with Pi Network to see your notifications.',
-  order: 'Log in with Pi Network to view your trades.',
-  review: 'Log in with Pi Network to leave a review.',
-  dispute: 'Log in with Pi Network to open a dispute.',
-  default: 'Log in with Pi Network to unlock all features.',
-};
-
 export function isGuest(): boolean {
   return isGuestUser(getCurrentUserId());
 }
 
-export function showGuestLoginPrompt(reason: GuestGuardReason = 'default'): void {
+export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): void {
   const existing = document.getElementById('guest-gate-overlay');
   if (existing) existing.remove();
-
-  const description = REASON_MESSAGES[reason];
 
   const overlay = document.createElement('div');
   overlay.id = 'guest-gate-overlay';
@@ -64,8 +44,7 @@ export function showGuestLoginPrompt(reason: GuestGuardReason = 'default'): void
         <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
       </svg>
     </div>
-    <div style="font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:8px">Sign in to continue</div>
-    <div style="font-size:13px;color:#888;margin-bottom:24px;line-height:1.5">${description}</div>
+    <div style="font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:24px">Sign in to continue</div>
     <button id="guest-gate-login" style="
       width:100%;padding:14px 0;border:none;border-radius:28px;font-size:15px;font-weight:700;
       color:#fff;background:#00A8A3;cursor:pointer;margin-bottom:6px
