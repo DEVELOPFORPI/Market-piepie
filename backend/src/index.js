@@ -2541,6 +2541,7 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
       LEFT JOIN products p ON cr.product_id = p.id
       WHERE 1=1`;
     const params = [];
+    query += ` AND COALESCE(cr.admin_hidden, 0) = 0`;
     if (user_id) {
       params.push(user_id);
       // Hide only for users who left; the other party still sees the ended room
@@ -2582,7 +2583,7 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
   if (!requireSession(req, res)) return;
   try {
     const { rows: roomCheck } = await pool.query(
-      "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+      "SELECT buyer_id, seller_id, admin_hidden FROM chat_rooms WHERE id=$1",
       [req.params.id],
     );
     if (!roomCheck.length)
@@ -2592,6 +2593,9 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
       req.authUserId !== roomCheck[0].seller_id
     ) {
       return res.status(403).json({ error: "Forbidden" });
+    }
+    if (roomCheck[0].admin_hidden) {
+      return res.status(404).json({ error: "Room not found" });
     }
     const { rows } = await pool.query(
       `SELECT m.*, ${jsonObjectSql("u", "users")} AS sender FROM chat_messages m
@@ -2677,7 +2681,7 @@ app.post("/api/chat-rooms", requireDb, requireAuth, async (req, res) => {
 app.patch("/api/chat-rooms/:id", requireDb, requireAuth, async (req, res) => {
   try {
     const { rows: roomCheck } = await pool.query(
-      "SELECT buyer_id, seller_id, read_state, left_user_ids FROM chat_rooms WHERE id=$1",
+      "SELECT buyer_id, seller_id, read_state, left_user_ids, admin_hidden FROM chat_rooms WHERE id=$1",
       [req.params.id],
     );
     if (!roomCheck.length)
@@ -2687,6 +2691,9 @@ app.patch("/api/chat-rooms/:id", requireDb, requireAuth, async (req, res) => {
       req.authUserId !== roomCheck[0].seller_id
     ) {
       return res.status(403).json({ error: "Forbidden" });
+    }
+    if (roomCheck[0].admin_hidden) {
+      return res.status(409).json({ error: "This chat was hidden by an admin" });
     }
 
     const sets = [];
@@ -2754,7 +2761,7 @@ app.post(
     }
     try {
       const { rows: roomCheck } = await pool.query(
-        "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+        "SELECT buyer_id, seller_id, admin_hidden FROM chat_rooms WHERE id=$1",
         [req.params.id],
       );
       if (!roomCheck.length)
@@ -2764,6 +2771,9 @@ app.post(
         req.authUserId !== roomCheck[0].seller_id
       ) {
         return res.status(403).json({ error: "Forbidden" });
+      }
+      if (roomCheck[0].admin_hidden) {
+        return res.status(409).json({ error: "This chat was hidden by an admin" });
       }
       const effectiveSenderId =
         sender_id === "system" ? "system" : req.authUserId;
@@ -4561,6 +4571,7 @@ app.get("/api/admin/chat-rooms", requireDb, requireAdmin, async (req, res) => {
     let query = `
       SELECT r.id, r.product_id, r.order_id, r.buyer_id, r.seller_id,
              r.created_at, r.last_message_time, r.left_user_ids,
+             r.admin_hidden, r.admin_hidden_reason, r.admin_hidden_at,
              p.title AS product_title,
              bu.nickname AS buyer_nickname,
              su.nickname AS seller_nickname,
@@ -4583,6 +4594,8 @@ app.get("/api/admin/chat-rooms", requireDb, requireAdmin, async (req, res) => {
     else if (filter === "reported") query += ` AND ${ROOM_REPORT_COUNT_SQL} > 0`;
     else if (filter === "deleted") {
       query += ` AND (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id=r.id AND m.deleted_at IS NOT NULL) > 0`;
+    } else if (filter === "hidden") {
+      query += ` AND COALESCE(r.admin_hidden, 0) = 1`;
     }
     query += ` ORDER BY COALESCE(r.last_message_time, r.created_at) DESC LIMIT 300`;
     const { rows } = await pool.query(query, params);
@@ -4657,20 +4670,45 @@ app.put(
   },
 );
 
-// 방 삭제: 분쟁·신고가 걸린 방은 증거가 사라지므로 막는다.
+// 방 숨기기 / 되돌리기 — 사용자 목록에서만 빠지고 대화는 남는다.
+app.put(
+  "/api/admin/chat-rooms/:id",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const { hidden, reason } = req.body || {};
+    try {
+      const hide = hidden !== false;
+      const { rows } = await queryReturning(
+        `UPDATE chat_rooms
+            SET admin_hidden = $1,
+                admin_hidden_reason = CASE WHEN $1 THEN $2 ELSE NULL END,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hide ? 1 : 0, reason || null, req.params.id],
+        "chat_rooms",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+// 방 삭제: 대화까지 지워진다. 분쟁·신고가 있어도 관리자가 지울 수 있다.
 app.delete(
   "/api/admin/chat-rooms/:id",
   requireDb,
   requireAdmin,
   async (req, res) => {
     try {
-      const links = await getChatRoomModerationLinks(req.params.id);
-      if (!links) return res.status(404).json({ error: "Room not found" });
-      if (links.disputeCount > 0 || links.reportCount > 0) {
-        return res.status(409).json({
-          error: "분쟁 또는 신고가 연결된 채팅방은 삭제할 수 없습니다.",
-        });
-      }
+      const { rows } = await pool.query("SELECT id FROM chat_rooms WHERE id=$1", [
+        req.params.id,
+      ]);
+      if (!rows.length) return res.status(404).json({ error: "Room not found" });
       await pool.query("DELETE FROM chat_rooms WHERE id=$1", [req.params.id]);
       res.json({ ok: true });
     } catch (e) {
