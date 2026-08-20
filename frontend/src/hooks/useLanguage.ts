@@ -539,6 +539,7 @@ const MEETUP_SCHEDULE_KEYS = new Set<string>([
   'meetupConfirmedAlert',
   'cancelMeetupConfirm',
   'meetupCanceledAlert',
+  'onlySellerCanMeetup',
 ]);
 
 const RECEIVE_CONFIRM_KEYS = new Set<string>([

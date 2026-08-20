@@ -83,6 +83,13 @@ export const MeetupSchedule: React.FC = () => {
         setLoading(false);
         return;
       }
+      const currentUserId = getCurrentUserId();
+      if (!currentUserId || currentUserId !== order.seller.id) {
+        showToast(t('onlySellerCanMeetup'));
+        navigate(-1);
+        setLoading(false);
+        return;
+      }
       const held = await isListingHeldByOtherBuyerDispute(order.product.id, {
         excludeOrderId: order.id,
         excludeBuyerId: order.buyer.id,
@@ -148,6 +155,11 @@ export const MeetupSchedule: React.FC = () => {
     })();
 
     const orderBefore = getOrderById(orderId);
+    const currentUserId = getCurrentUserId();
+    if (!orderBefore || !currentUserId || currentUserId !== orderBefore.seller.id) {
+      showToast(t('onlySellerCanMeetup'));
+      return;
+    }
     const wasEdit = !!(orderBefore?.meetupPlace || orderBefore?.meetupDate || orderBefore?.meetupTime);
 
     const updatedOrder = await updateOrderMeetup(orderId, {
@@ -182,7 +194,11 @@ export const MeetupSchedule: React.FC = () => {
   const handleCancelMeetup = async () => {
     if (!orderId) return;
     const orderBefore = getOrderById(orderId);
-    if (!orderBefore) return;
+    const currentUserId = getCurrentUserId();
+    if (!orderBefore || !currentUserId || currentUserId !== orderBefore.seller.id) {
+      showToast(t('onlySellerCanMeetup'));
+      return;
+    }
     if (!confirm(t('cancelMeetupConfirm'))) return;
     const cancelled = await cancelOrderMeetup(orderId);
     if (cancelled) {

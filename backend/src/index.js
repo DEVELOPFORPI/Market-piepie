@@ -1207,10 +1207,17 @@ app.post("/api/payments/incomplete", incompletePaymentLimiter, async (req, res) 
       );
       return res.status(403).json({ error: "Forbidden" });
     }
+    // 완료(txid 있음)는 복구를 위해 로그인 전에도 허용한다.
+    // 취소는 본인 Pi 로그인일 때만 — 비로그인으로 남의 결제를 끊지 못하게 한다.
 
     const txid = info.transaction && info.transaction.txid;
 
     if (!txid && !isValidPricedPayment(info)) {
+      if (!callerIsPiUser) {
+        return res
+          .status(401)
+          .json({ error: "Login required to cancel incomplete payment" });
+      }
       await piApiCall("POST", "/payments/" + paymentId + "/cancel", {});
       await upsertPaymentRecord(paymentId, "cancelled", { paymentInfo: info });
       return res.status(400).json({ error: "Invalid payment amount" });
@@ -1236,6 +1243,11 @@ app.post("/api/payments/incomplete", incompletePaymentLimiter, async (req, res) 
 
       res.json(result);
     } else {
+      if (!callerIsPiUser) {
+        return res
+          .status(401)
+          .json({ error: "Login required to cancel incomplete payment" });
+      }
       const result = await piApiCall(
         "POST",
         "/payments/" + paymentId + "/cancel",
@@ -1819,6 +1831,18 @@ app.post("/api/products", requireDb, requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
   const effectiveSellerId = req.authUserId;
   try {
+    if (id) {
+      const { rows: existingProduct } = await pool.query(
+        "SELECT seller_id FROM products WHERE id=$1",
+        [id],
+      );
+      if (
+        existingProduct.length &&
+        existingProduct[0].seller_id !== req.authUserId
+      ) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+    }
     const { rows } = await queryReturning(
       `INSERT INTO products (id, title, description, price, category, region, status, images, seller_id, trade_methods, today_trade_available, is_free_share, allow_offer)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -2255,6 +2279,14 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       });
       return res.status(403).json({ error: "Forbidden" });
     }
+    const changingMeetup =
+      req.body.meetup_location !== undefined ||
+      req.body.meetup_place !== undefined ||
+      req.body.meetup_date !== undefined ||
+      req.body.meetup_time !== undefined;
+    if (changingMeetup && req.authUserId !== orderCheck[0].seller_id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     // ???? meetup_place/meetup_date? ???? DB?? meetup_location + meetup_time(combined)? ??
     const meetupLocation =
       req.body.meetup_location !== undefined
@@ -2580,9 +2612,28 @@ app.post(
       meetup_place,
       meetup_date,
     } = req.body;
-    if (sender_id && req.authUserId !== sender_id)
+    if (
+      sender_id &&
+      sender_id !== req.authUserId &&
+      sender_id !== "system"
+    ) {
       return res.status(403).json({ error: "Forbidden" });
+    }
     try {
+      const { rows: roomCheck } = await pool.query(
+        "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+        [req.params.id],
+      );
+      if (!roomCheck.length)
+        return res.status(404).json({ error: "Room not found" });
+      if (
+        req.authUserId !== roomCheck[0].buyer_id &&
+        req.authUserId !== roomCheck[0].seller_id
+      ) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const effectiveSenderId =
+        sender_id === "system" ? "system" : req.authUserId;
       const meetupLocation = meetup_place || meetup_location || null;
       const meetupTimeCombined =
         meetup_date && meetup_time
@@ -2595,7 +2646,7 @@ app.post(
         [
           id,
           req.params.id,
-          sender_id,
+          effectiveSenderId,
           content,
           type || "text",
           images || [],
@@ -2624,13 +2675,13 @@ app.post(
           : {};
       if (room) {
         [room.buyer_id, room.seller_id].forEach((uid) => {
-          if (uid && uid !== sender_id) {
+          if (uid && uid !== effectiveSenderId) {
             readState[uid] = { ...(readState[uid] || {}), read: false };
           }
         });
-        if (sender_id) {
-          readState[sender_id] = {
-            ...(readState[sender_id] || {}),
+        if (effectiveSenderId && effectiveSenderId !== "system") {
+          readState[effectiveSenderId] = {
+            ...(readState[effectiveSenderId] || {}),
             read: true,
             lastReadAt: new Date().toISOString(),
           };
@@ -2712,7 +2763,20 @@ app.post("/api/posts", requireDb, requireAuth, async (req, res) => {
   } = req.body;
   if (author_id && req.authUserId !== author_id)
     return res.status(403).json({ error: "Forbidden" });
+  const effectiveAuthorId = req.authUserId;
   try {
+    if (id) {
+      const { rows: existingPost } = await pool.query(
+        "SELECT author_id FROM community_posts WHERE id=$1",
+        [id],
+      );
+      if (
+        existingPost.length &&
+        existingPost[0].author_id !== req.authUserId
+      ) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+    }
     const { rows } = await queryReturning(
       `INSERT INTO community_posts (id, title, content, category, author_id, images, tags, region, latitude, longitude, order_id, attached_product_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -2724,7 +2788,7 @@ app.post("/api/posts", requireDb, requireAuth, async (req, res) => {
         title,
         content,
         category,
-        author_id,
+        effectiveAuthorId,
         images || [],
         tags || [],
         region,
@@ -4731,8 +4795,37 @@ io.on("connection", async (socket) => {
 
   socket.on("send_message", async (data) => {
     const { roomId, message, room } = data;
+    if (!roomId || !message) return;
+    const claimedSender = message.senderId;
+    if (claimedSender !== userId && claimedSender !== "system") return;
 
-    if (pool && room) {
+    let roomBuyerId = room?.buyerId;
+    let roomSellerId = room?.sellerId;
+    if (pool) {
+      try {
+        const { rows } = await pool.query(
+          "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+          [roomId],
+        );
+        if (
+          !rows.length ||
+          (userId !== rows[0].buyer_id && userId !== rows[0].seller_id)
+        ) {
+          return;
+        }
+        roomBuyerId = rows[0].buyer_id;
+        roomSellerId = rows[0].seller_id;
+      } catch {
+        return;
+      }
+    } else if (
+      userId !== roomBuyerId &&
+      userId !== roomSellerId
+    ) {
+      return;
+    }
+
+    if (pool) {
       try {
         await pool.query(
           `INSERT INTO chat_messages (id, room_id, sender_id, content, type, images, order_id, original_price, proposed_price, offer_result, meetup_location, meetup_time)
@@ -4740,7 +4833,7 @@ io.on("connection", async (socket) => {
           [
             message.id,
             roomId,
-            message.senderId,
+            claimedSender === "system" ? "system" : userId,
             message.content,
             message.type || "text",
             message.images || [],
@@ -4761,7 +4854,7 @@ io.on("connection", async (socket) => {
 
     socket.to(`room:${roomId}`).emit("new_message", { roomId, message });
 
-    const participantIds = [room?.buyerId, room?.sellerId].filter(Boolean);
+    const participantIds = [roomBuyerId, roomSellerId].filter(Boolean);
     participantIds.forEach((uid) => {
       if (uid !== message.senderId) {
         io.to(`user:${uid}`).emit("room_updated", {

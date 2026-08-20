@@ -583,7 +583,7 @@ export const ChatRoom: React.FC = () => {
     };
   }, [roomId]);
 
-  // Resolve order: query param -> room.order id -> active pair+product order (never orphan COMPLETE onto fresh chat)
+  // Resolve order: query param -> room.order -> this pair's active order, else this pair's completed order
   const currentOrder = (() => {
     if (orderIdFromQuery) {
       const o = getOrderById(orderIdFromQuery);
@@ -591,13 +591,18 @@ export const ChatRoom: React.FC = () => {
     }
     if (room?.order?.id) {
       const o = getOrderById(room.order.id);
-      if (o && getDisputesByOrderId(o.id).some((d) => d.status !== 'RESOLVED')) return o;
+      if (o) return o;
     }
     if (!room?.product?.id) return null;
     const myOrders = getOrders().filter((o) => o.product.id === room.product!.id);
-    const isActiveOrder = (o: import('@/types').Order) =>
-      o.status !== ORDER_STATUS_VALUE.COMPLETE &&
-      !(o.buyerCompleted && o.sellerCompleted);
+    const isCompleteOrder = (o: import('@/types').Order) =>
+      o.status === ORDER_STATUS_VALUE.COMPLETE ||
+      !!(o.buyerCompleted && o.sellerCompleted);
+    const isActiveOrder = (o: import('@/types').Order) => !isCompleteOrder(o);
+    const newest = (list: import('@/types').Order[]) =>
+      [...list].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0] ?? null;
 
     if (room.buyerId && room.sellerId) {
       const forPair = myOrders.filter(
@@ -615,16 +620,13 @@ export const ChatRoom: React.FC = () => {
             o.status === ORDER_STATUS_VALUE.RECEIVED
         );
         if (withMeetup) return withMeetup;
-        return activeForPair.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )[0];
+        return newest(activeForPair);
       }
-      return null;
+      return newest(forPair.filter(isCompleteOrder));
     }
     const active = myOrders.filter(isActiveOrder);
     if (active.length === 0) return null;
-    active.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return active[0] ?? null;
+    return newest(active);
   })();
 
   const userId = getCurrentUserId();

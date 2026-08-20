@@ -459,6 +459,8 @@ export const updateOrderMeetup = async (
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
+  const actorId = getCurrentUserId();
+  if (!actorId || actorId !== order.seller.id) return undefined;
 
   const timelineEvent = {
     id: nextTimelineId(),
@@ -516,6 +518,8 @@ export const cancelOrderMeetup = async (orderId: string): Promise<Order | undefi
   const orders = getAllOrders();
   const order = orders.find((o) => o.id === orderId);
   if (!order) return undefined;
+  const actorId = getCurrentUserId();
+  if (!actorId || actorId !== order.seller.id) return undefined;
   const timelineEvent = {
     id: nextTimelineId(),
     type: ORDER_STATUS_VALUE.ACCEPTED,
@@ -587,7 +591,8 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
   if (existing) {
     existing.proposedPrice = params.proposedPrice;
     existing.tradeMethod = params.tradeMethod;
-    if (existing.status === ORDER_STATUS_VALUE.OFFER_DECLINED) {
+    // 약속 취소 후 재제안 등: 기존 주문을 다시 쓰더라도 수락 버튼이 뜨려면 대기 상태여야 한다.
+    if (existing.status !== ORDER_STATUS_VALUE.DISPUTE) {
       existing.status = ORDER_STATUS_VALUE.PENDING_OFFER;
     }
     if (params.meetupPlace) existing.meetupPlace = params.meetupPlace;

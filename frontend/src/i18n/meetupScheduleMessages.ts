@@ -26,7 +26,8 @@ export type MeetupScheduleMessageKey =
   | 'meetupUpdatedAlert'
   | 'meetupConfirmedAlert'
   | 'cancelMeetupConfirm'
-  | 'meetupCanceledAlert';
+  | 'meetupCanceledAlert'
+  | 'onlySellerCanMeetup';
 
 const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = {
   en: {
@@ -55,6 +56,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Meetup confirmed. Your partner has been notified.',
     cancelMeetupConfirm: 'Cancel this meetup? The other person will be notified.',
     meetupCanceledAlert: 'Meetup canceled.',
+    onlySellerCanMeetup: 'Only the seller can set or cancel the meetup.',
   },
   ko: {
     editMeetup: '약속 수정',
@@ -82,6 +84,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: '약속이 확정되었습니다. 상대에게 알림을 보냈습니다.',
     cancelMeetupConfirm: '이 약속을 취소할까요? 상대에게 알림이 갑니다.',
     meetupCanceledAlert: '약속이 취소되었습니다.',
+    onlySellerCanMeetup: '판매자만 약속을 잡거나 취소할 수 있습니다.',
   },
   zh: {
     editMeetup: '编辑会面',
@@ -109,6 +112,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: '会面已确认，已通知对方。',
     cancelMeetupConfirm: '取消此次会面？将通知对方。',
     meetupCanceledAlert: '会面已取消。',
+    onlySellerCanMeetup: '只有卖家可以安排或取消会面。',
   },
   ja: {
     editMeetup: '待ち合わせを編集',
@@ -136,6 +140,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: '待ち合わせを確定しました。相手に通知しました。',
     cancelMeetupConfirm: 'この待ち合わせをキャンセルしますか？相手に通知されます。',
     meetupCanceledAlert: '待ち合わせをキャンセルしました。',
+    onlySellerCanMeetup: '待ち合わせの設定・キャンセルは出品者のみ可能です。',
   },
   es: {
     editMeetup: 'Editar quedada',
@@ -163,6 +168,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Quedada confirmada. Se avisó a tu pareja.',
     cancelMeetupConfirm: '¿Cancelar esta quedada? Se avisará a la otra persona.',
     meetupCanceledAlert: 'Quedada cancelada.',
+    onlySellerCanMeetup: 'Solo el vendedor puede fijar o cancelar la quedada.',
   },
   pt: {
     editMeetup: 'Editar encontro',
@@ -190,6 +196,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Encontro confirmado. Seu parceiro foi notificado.',
     cancelMeetupConfirm: 'Cancelar este encontro? A outra pessoa será notificada.',
     meetupCanceledAlert: 'Encontro cancelado.',
+    onlySellerCanMeetup: 'Só o vendedor pode marcar ou cancelar o encontro.',
   },
   fr: {
     editMeetup: 'Modifier le rendez-vous',
@@ -217,6 +224,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Rendez-vous confirmé. Votre partenaire a été notifié.',
     cancelMeetupConfirm: 'Annuler ce rendez-vous ? L’autre personne sera notifiée.',
     meetupCanceledAlert: 'Rendez-vous annulé.',
+    onlySellerCanMeetup: 'Seul le vendeur peut fixer ou annuler le rendez-vous.',
   },
   de: {
     editMeetup: 'Treffen bearbeiten',
@@ -244,6 +252,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Treffen bestätigt. Dein Partner wurde benachrichtigt.',
     cancelMeetupConfirm: 'Dieses Treffen absagen? Die andere Person wird benachrichtigt.',
     meetupCanceledAlert: 'Treffen abgesagt.',
+    onlySellerCanMeetup: 'Nur der Verkäufer kann das Treffen festlegen oder absagen.',
   },
   id: {
     editMeetup: 'Edit meetup',
@@ -271,6 +280,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Meetup dikonfirmasi. Mitra Anda telah dinotifikasi.',
     cancelMeetupConfirm: 'Batalkan meetup ini? Pihak lain akan dinotifikasi.',
     meetupCanceledAlert: 'Meetup dibatalkan.',
+    onlySellerCanMeetup: 'Hanya penjual yang dapat mengatur atau membatalkan meetup.',
   },
   vi: {
     editMeetup: 'Sửa lịch hẹn',
@@ -298,6 +308,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Đã xác nhận lịch hẹn. Đối phương đã được thông báo.',
     cancelMeetupConfirm: 'Hủy lịch hẹn này? Đối phương sẽ được thông báo.',
     meetupCanceledAlert: 'Đã hủy lịch hẹn.',
+    onlySellerCanMeetup: 'Chỉ người bán mới có thể đặt hoặc hủy lịch hẹn.',
   },
   th: {
     editMeetup: 'แก้ไขนัดเจอ',
@@ -325,6 +336,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'ยืนยันนัดแล้ว แจ้งอีกฝ่ายแล้ว',
     cancelMeetupConfirm: 'ยกเลิกนัดนี้หรือไม่? จะแจ้งอีกฝ่าย',
     meetupCanceledAlert: 'ยกเลิกนัดแล้ว',
+    onlySellerCanMeetup: 'เฉพาะผู้ขายเท่านั้นที่ตั้งหรือยกเลิกนัดได้',
   },
   hi: {
     editMeetup: 'मीटअप संपादित करें',
@@ -352,6 +364,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'मीटअप की पुष्टि हो गई। साथी को सूचित कर दिया गया।',
     cancelMeetupConfirm: 'यह मीटअप रद्द करें? दूसरे व्यक्ति को सूचित किया जाएगा।',
     meetupCanceledAlert: 'मीटअप रद्द हो गया।',
+    onlySellerCanMeetup: 'केवल विक्रेता मीटअप सेट या रद्द कर सकता है।',
   },
   ar: {
     editMeetup: 'تعديل اللقاء',
@@ -379,6 +392,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'تم تأكيد اللقاء. تم إشعار شريكك.',
     cancelMeetupConfirm: 'إلغاء هذا اللقاء؟ سيُشعَر الطرف الآخر.',
     meetupCanceledAlert: 'تم إلغاء اللقاء.',
+    onlySellerCanMeetup: 'يمكن للبائع فقط تحديد اللقاء أو إلغاؤه.',
   },
   ru: {
     editMeetup: 'Изменить встречу',
@@ -406,6 +420,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Встреча подтверждена. Партнёр уведомлён.',
     cancelMeetupConfirm: 'Отменить эту встречу? Другой участник будет уведомлён.',
     meetupCanceledAlert: 'Встреча отменена.',
+    onlySellerCanMeetup: 'Только продавец может назначить или отменить встречу.',
   },
   tr: {
     editMeetup: 'Buluşmayı düzenle',
@@ -433,6 +448,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Buluşma onaylandı. Karşı taraf bilgilendirildi.',
     cancelMeetupConfirm: 'Bu buluşma iptal edilsin mi? Diğer kişi bilgilendirilir.',
     meetupCanceledAlert: 'Buluşma iptal edildi.',
+    onlySellerCanMeetup: 'Buluşmayı yalnızca satıcı ayarlayabilir veya iptal edebilir.',
   },
   it: {
     editMeetup: 'Modifica incontro',
@@ -460,6 +476,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Incontro confermato. Il partner è stato avvisato.',
     cancelMeetupConfirm: 'Annullare questo incontro? L’altra persona verrà avvisata.',
     meetupCanceledAlert: 'Incontro annullato.',
+    onlySellerCanMeetup: 'Solo il venditore può impostare o annullare l\'incontro.',
   },
   pl: {
     editMeetup: 'Edytuj spotkanie',
@@ -487,6 +504,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Spotkanie potwierdzone. Partner został powiadomiony.',
     cancelMeetupConfirm: 'Anulować to spotkanie? Druga osoba zostanie powiadomiona.',
     meetupCanceledAlert: 'Spotkanie anulowane.',
+    onlySellerCanMeetup: 'Tylko sprzedawca może ustawić lub odwołać spotkanie.',
   },
   nl: {
     editMeetup: 'Meetup bewerken',
@@ -514,6 +532,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Meetup bevestigd. Je partner is op de hoogte gebracht.',
     cancelMeetupConfirm: 'Deze meetup annuleren? De andere persoon wordt op de hoogte gebracht.',
     meetupCanceledAlert: 'Meetup geannuleerd.',
+    onlySellerCanMeetup: 'Alleen de verkoper kan de meetup instellen of annuleren.',
   },
   fil: {
     editMeetup: 'I-edit ang meetup',
@@ -541,6 +560,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Na-confirm ang meetup. Na-notify ang partner mo.',
     cancelMeetupConfirm: 'I-cancel ang meetup na ito? Ma-notify ang kabilang party.',
     meetupCanceledAlert: 'Na-cancel ang meetup.',
+    onlySellerCanMeetup: 'Tanging ang seller lang ang puwedeng magtakda o mag-cancel ng meetup.',
   },
   uk: {
     editMeetup: 'Редагувати зустріч',
@@ -568,6 +588,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Зустріч підтверджено. Партнера повідомлено.',
     cancelMeetupConfirm: 'Скасувати цю зустріч? Іншу особу буде повідомлено.',
     meetupCanceledAlert: 'Зустріч скасовано.',
+    onlySellerCanMeetup: 'Лише продавець може призначити або скасувати зустріч.',
   },
   bn: {
     editMeetup: 'মিটআপ সম্পাদনা',
@@ -595,6 +616,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'মিটআপ নিশ্চিত। অংশীদারকে জানানো হয়েছে।',
     cancelMeetupConfirm: 'এই মিটআপ বাতিল করবেন? অন্য পক্ষকে জানানো হবে।',
     meetupCanceledAlert: 'মিটআপ বাতিল হয়েছে।',
+    onlySellerCanMeetup: 'শুধু বিক্রেতা মিটআপ সেট বা বাতিল করতে পারেন।',
   },
   ms: {
     editMeetup: 'Edit meetup',
@@ -622,6 +644,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Meetup disahkan. Rakan anda telah dimaklumkan.',
     cancelMeetupConfirm: 'Batalkan meetup ini? Pihak satu lagi akan dimaklumkan.',
     meetupCanceledAlert: 'Meetup dibatalkan.',
+    onlySellerCanMeetup: 'Hanya penjual boleh tetapkan atau batal meetup.',
   },
   sw: {
     editMeetup: 'Hariri mkutano',
@@ -649,6 +672,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'Mkutano umethibitishwa. Mshirika wako amearifiwa.',
     cancelMeetupConfirm: 'Ghairi mkutano huu? Mtu mwingine ataarifiwa.',
     meetupCanceledAlert: 'Mkutano umeghairiwa.',
+    onlySellerCanMeetup: 'Ni muuzaji tu anayeweza kuweka au kughairi mkutano.',
   },
   fa: {
     editMeetup: 'ویرایش قرار',
@@ -676,6 +700,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'قرار تأیید شد و به طرف مقابل اطلاع داده شد.',
     cancelMeetupConfirm: 'این قرار لغو شود؟ به طرف مقابل اطلاع داده می‌شود.',
     meetupCanceledAlert: 'قرار لغو شد.',
+    onlySellerCanMeetup: 'فقط فروشنده می‌تواند قرار را تنظیم یا لغو کند.',
   },
   ur: {
     editMeetup: 'میٹ اپ ترمیم',
@@ -703,6 +728,7 @@ const MESSAGES: Record<AppLanguage, Record<MeetupScheduleMessageKey, string>> = 
     meetupConfirmedAlert: 'میٹ اپ تصدیق ہو گیا۔ پارٹنر کو مطلع کر دیا گیا۔',
     cancelMeetupConfirm: 'یہ میٹ اپ منسوخ کریں؟ دوسرے شخص کو اطلاع جائے گی۔',
     meetupCanceledAlert: 'میٹ اپ منسوخ ہو گیا۔',
+    onlySellerCanMeetup: 'صرف فروخت کنندہ میٹ اپ سیٹ یا منسوخ کر سکتا ہے۔',
   },
 };
 
