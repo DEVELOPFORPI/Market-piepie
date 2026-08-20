@@ -229,7 +229,9 @@ export const SignupProfile: React.FC = () => {
             onClick={() => { saveDraft({ nickname, bio, profileImage }); navigate('/region/select'); }}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-left text-gray-800 flex justify-between items-center"
           >
-            <span>{activityRegion || getRegion() || t('regionPlaceholder')}</span>
+            <span className={activityRegion || getRegion() ? 'text-gray-800' : 'text-gray-400'}>
+              {activityRegion || getRegion() || t('regionUnset')}
+            </span>
             <span className="text-gray-400">›</span>
           </button>
         </div>

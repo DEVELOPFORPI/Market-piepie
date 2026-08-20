@@ -19,6 +19,7 @@ const keys = [
   'locationConsentNote',
   'locationConsentAgree',
   'locationConsentCancel',
+  'regionUnset',
 ];
 
 const table = {
@@ -423,6 +424,37 @@ const table = {
     'بعد میں',
   ],
 };
+
+const regionUnsetOverrides = {
+  en: 'Choose your area',
+  ko: '활동 지역을 선택하세요',
+  zh: '请选择活动地区',
+  ja: '活動エリアを選択',
+  es: 'Elige tu zona',
+  pt: 'Escolha sua região',
+  fr: 'Choisissez votre zone',
+  de: 'Region wählen',
+  id: 'Pilih area Anda',
+  vi: 'Chọn khu vực của bạn',
+  th: 'เลือกพื้นที่ของคุณ',
+  hi: 'अपना क्षेत्र चुनें',
+  ar: 'اختر منطقتك',
+  ru: 'Выберите район',
+  tr: 'Bölgenizi seçin',
+  it: 'Scegli la tua zona',
+  pl: 'Wybierz okolicę',
+  nl: 'Kies je regio',
+  fil: 'Piliin ang iyong lugar',
+  uk: 'Оберіть свій район',
+  bn: 'আপনার এলাকা বেছে নিন',
+  ms: 'Pilih kawasan anda',
+  sw: 'Chagua eneo lako',
+  fa: 'منطقه خود را انتخاب کنید',
+  ur: 'اپنا علاقہ منتخب کریں',
+};
+for (const [lang, arr] of Object.entries(table)) {
+  arr.push(regionUnsetOverrides[lang] || regionUnsetOverrides.en);
+}
 
 for (const [lang, arr] of Object.entries(table)) {
   if (arr.length !== keys.length) throw new Error(`${lang}: ${arr.length} != ${keys.length}`);

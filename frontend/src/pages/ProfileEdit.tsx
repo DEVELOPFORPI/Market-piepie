@@ -278,8 +278,8 @@ export const ProfileEdit: React.FC = () => {
               className="w-full flex items-center justify-between px-4 py-3 border-2 rounded-xl text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
               style={{ borderColor: activityRegion ? '#00A8A3' : '#e5e7eb' }}
             >
-              <span className="text-sm text-gray-700">
-                {activityRegion || t('regionPlaceholder')}
+              <span className={`text-sm ${activityRegion ? 'text-gray-700' : 'text-gray-400'}`}>
+                {activityRegion || t('regionUnset')}
               </span>
               <span className="text-sm font-medium" style={{ color: '#00A8A3' }}>
                 {activityRegion ? t('change') : t('setRegion')}
