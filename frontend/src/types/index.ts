@@ -25,6 +25,8 @@ export const ORDER_STATUS_VALUE = {
   RECEIVED: '수령완료',
   COMPLETE: '완료',
   DISPUTE: '분쟁',
+  /** 관리자가 분쟁을 해결해 거래를 채팅 시작 시점으로 되돌린 상태 (진행 중 거래 없음) */
+  ADMIN_RESOLVED: '관리자해결',
 } as const;
 export type OrderStatus = (typeof ORDER_STATUS_VALUE)[keyof typeof ORDER_STATUS_VALUE];
 

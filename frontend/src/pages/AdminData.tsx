@@ -207,7 +207,7 @@ export const AdminData: React.FC = () => {
           sub={`완료 ${stats.completedOrders} · 분쟁 ${stats.ordersDispute ?? 0}`}
         />
         <StatCard label="게시물" value={stats.posts} to="/admin/posts" />
-        <StatCard label="채팅방" value={stats.chatRooms} />
+        <StatCard label="채팅방" value={stats.chatRooms} to="/admin/chats" />
         <StatCard
           label="신고"
           value={stats.reports ?? 0}

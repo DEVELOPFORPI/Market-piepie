@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   offer_result VARCHAR(50),
   meetup_location TEXT,
   meetup_time VARCHAR(255),
+  deleted_at DATETIME(3) NULL,
+  deleted_by_admin TINYINT(1) NOT NULL DEFAULT 0,
+  deleted_reason VARCHAR(500) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_chat_messages_room FOREIGN KEY (room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE,
   CONSTRAINT fk_chat_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
@@ -316,6 +319,8 @@ CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_chat_rooms_buyer ON chat_rooms(buyer_id);
 CREATE INDEX idx_chat_rooms_seller ON chat_rooms(seller_id);
 CREATE INDEX idx_chat_messages_room ON chat_messages(room_id);
+CREATE INDEX idx_chat_messages_deleted ON chat_messages(deleted_at);
+CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 CREATE INDEX idx_community_posts_category ON community_posts(category);
 CREATE INDEX idx_community_posts_author ON community_posts(author_id);
 CREATE INDEX idx_post_likes_post ON post_likes(post_id);

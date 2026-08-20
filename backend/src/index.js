@@ -1564,6 +1564,84 @@ app.get("/api/users/:id/disputes", requireDb, async (req, res) => {
 
 const ORDER_STATUS_COMPLETE = "완료";
 const PRODUCT_STATUS_SOLD = "판매완료";
+const PRODUCT_STATUS_FOR_SALE = "판매중";
+const ORDER_STATUS_DISPUTE = "분쟁";
+const ORDER_STATUS_ADMIN_RESOLVED = "관리자해결";
+
+/** 분쟁이 진행 중인 상품은 수정·삭제로 증거가 사라지면 안 된다. */
+async function hasOpenDisputeOnProduct(productId) {
+  if (!productId) return false;
+  const { rows } = await pool.query(
+    `SELECT d.id FROM disputes d
+       INNER JOIN orders o ON o.id = d.order_id
+      WHERE o.product_id = $1 AND d.status <> 'RESOLVED'
+      LIMIT 1`,
+    [productId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * 관리자가 분쟁을 해결하면 거래를 처음 채팅을 시작한 시점으로 되돌린다.
+ * 약속·배송·수령 기록을 모두 비워 어느 쪽도 중단된 거래를 이어가지 못하게 하고,
+ * 상품은 다시 판매중으로 열어 새 제안을 받을 수 있게 한다.
+ */
+async function resetOrderAfterAdminDisputeResolved(orderId) {
+  if (!orderId) return;
+  try {
+    const { rows: stillOpen } = await pool.query(
+      "SELECT id FROM disputes WHERE order_id=$1 AND status <> 'RESOLVED' LIMIT 1",
+      [orderId],
+    );
+    if (stillOpen.length) return;
+
+    const { rows: orderRows } = await pool.query(
+      "SELECT status, product_id FROM orders WHERE id=$1",
+      [orderId],
+    );
+    if (!orderRows.length || orderRows[0].status !== ORDER_STATUS_DISPUTE) return;
+
+    await pool.query(
+      `UPDATE orders
+          SET status=$2,
+              meetup_location=NULL, meetup_time=NULL, meetup_accepted=FALSE,
+              shipping_address=NULL, shipping_name=NULL, shipping_phone=NULL,
+              tracking_number=NULL, shipping_company=NULL,
+              shipping_proof_images=JSON_ARRAY(),
+              receipt_condition=NULL, receipt_notes=NULL,
+              seller_completed=FALSE, buyer_completed=FALSE
+        WHERE id=$1`,
+      [orderId, ORDER_STATUS_ADMIN_RESOLVED],
+    );
+    await pool.query(
+      `INSERT INTO order_timeline_events (id, order_id, type, description)
+       VALUES ($1,$2,$3,$4)
+       ON DUPLICATE KEY UPDATE id=id`,
+      [
+        `t_disp_${orderId}_${Date.now()}`,
+        orderId,
+        ORDER_STATUS_ADMIN_RESOLVED,
+        "Dispute resolved by admin",
+      ],
+    );
+
+    const productId = orderRows[0].product_id;
+    if (productId) {
+      const { rows: otherComplete } = await pool.query(
+        "SELECT id FROM orders WHERE product_id=$1 AND id<>$2 AND status=$3 LIMIT 1",
+        [productId, orderId, ORDER_STATUS_COMPLETE],
+      );
+      if (!otherComplete.length) {
+        await pool.query(
+          "UPDATE products SET status=$2 WHERE id=$1 AND status<>$2",
+          [productId, PRODUCT_STATUS_FOR_SALE],
+        );
+      }
+    }
+  } catch (e) {
+    console.warn("[disputes] order reset failed:", e.message);
+  }
+}
 
 async function healSoldProductsForUser(userId) {
   if (!userId) return;
@@ -1860,6 +1938,12 @@ app.post("/api/products", requireDb, requireAuth, async (req, res) => {
       ) {
         return res.status(403).json({ error: "Forbidden" });
       }
+      // 등록은 막지 않고, 분쟁 중인 기존 상품의 덮어쓰기만 막는다.
+      if (existingProduct.length && (await hasOpenDisputeOnProduct(id))) {
+        return res
+          .status(409)
+          .json({ error: "This listing is in dispute and cannot be edited" });
+      }
     }
     const { rows } = await queryReturning(
       `INSERT INTO products (id, title, description, price, category, region, status, images, seller_id, trade_methods, today_trade_available, is_free_share, allow_offer)
@@ -1903,6 +1987,11 @@ app.put("/api/products/:id", requireDb, requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     if (existing[0].seller_id !== req.authUserId)
       return res.status(403).json({ error: "Forbidden" });
+    if (await hasOpenDisputeOnProduct(req.params.id)) {
+      return res
+        .status(409)
+        .json({ error: "This listing is in dispute and cannot be edited" });
+    }
     const {
       title,
       description,
@@ -1980,6 +2069,11 @@ app.delete("/api/products/:id", requireDb, requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     if (existing[0].seller_id !== req.authUserId)
       return res.status(403).json({ error: "Forbidden" });
+    if (await hasOpenDisputeOnProduct(req.params.id)) {
+      return res
+        .status(409)
+        .json({ error: "This listing is in dispute and cannot be deleted" });
+    }
     await pool.query(
       `UPDATE favorites SET product_id=NULL WHERE product_id=$1`,
       [req.params.id],
@@ -2470,6 +2564,20 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
   }
 });
 
+/** 프론트에서 언어별 문구로 치환하는 고정 문자열 (chatDisplay.ts와 짝) */
+const CHAT_MSG_ADMIN_DELETED = "This message was removed by an admin.";
+
+/** 관리자가 가린 메시지는 원문 대신 안내 문구만 내려준다. 원문은 DB에 남는다. */
+function maskDeletedChatMessage(row) {
+  if (!row || !row.deleted_at) return row;
+  return {
+    ...row,
+    content: CHAT_MSG_ADMIN_DELETED,
+    images: [],
+    deleted_reason: undefined,
+  };
+}
+
 app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
   if (!requireSession(req, res)) return;
   try {
@@ -2491,7 +2599,7 @@ app.get("/api/chat-rooms/:id/messages", requireDb, async (req, res) => {
        WHERE m.room_id=$1 ORDER BY m.created_at ASC LIMIT 500`,
       [req.params.id],
     );
-    res.json(rows);
+    res.json(rows.map(maskDeletedChatMessage));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3754,7 +3862,7 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
         .catch(zero),
       pool
         .query(
-          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute')",
+          "SELECT COUNT(*) FROM orders WHERE status NOT IN ('completed','complete','완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute','관리자해결')",
         )
         .catch(zero),
       pool
@@ -4150,6 +4258,7 @@ app.put(
       if (!rows.length) return res.status(404).json({ error: "Not found" });
       const dispute = rows[0];
       if (status === "RESOLVED") {
+        await resetOrderAfterAdminDisputeResolved(dispute.order_id);
         const title = String(dispute.product_title || "Listing");
         const targets = [dispute.buyer_id, dispute.seller_id].filter(Boolean);
         for (const targetId of targets) {
@@ -4412,6 +4521,163 @@ app.put("/api/admin/reports/:id", requireDb, requireAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ---------------------------------------------------------------------------
+// 관리자 채팅 중재
+// 대화 본문에는 주소·연락처가 그대로 남으므로 목록에서는 메타데이터만 주고,
+// 본문은 방을 직접 열었을 때만 내려준다.
+// ---------------------------------------------------------------------------
+
+/** 같은 주문 또는 같은 상품·구매자·판매자 조합의 분쟁을 이 방에 연결된 것으로 본다. */
+const ROOM_DISPUTE_JOIN_SQL = `FROM disputes d
+     LEFT JOIN orders o ON o.id = d.order_id
+    WHERE (r.order_id IS NOT NULL AND d.order_id = r.order_id)
+       OR (o.product_id = r.product_id AND o.buyer_id = r.buyer_id AND o.seller_id = r.seller_id)`;
+
+const ROOM_DISPUTE_COUNT_SQL = `(SELECT COUNT(*) ${ROOM_DISPUTE_JOIN_SQL})`;
+const ROOM_OPEN_DISPUTE_COUNT_SQL = `(SELECT COUNT(*) ${ROOM_DISPUTE_JOIN_SQL} AND d.status <> 'RESOLVED')`;
+const ROOM_REPORT_COUNT_SQL = `(SELECT COUNT(*) FROM reports rp
+    WHERE rp.target_type IN ('chat','chat_room') AND rp.target_id = r.id)`;
+
+async function getChatRoomModerationLinks(roomId) {
+  const { rows } = await pool.query(
+    `SELECT ${ROOM_DISPUTE_COUNT_SQL} AS dispute_count,
+            ${ROOM_REPORT_COUNT_SQL} AS report_count
+       FROM chat_rooms r WHERE r.id=$1`,
+    [roomId],
+  );
+  if (!rows.length) return null;
+  return {
+    disputeCount: Number(rows[0].dispute_count || 0),
+    reportCount: Number(rows[0].report_count || 0),
+  };
+}
+
+// 목록: 메시지 본문·마지막 메시지는 내려주지 않는다.
+app.get("/api/admin/chat-rooms", requireDb, requireAdmin, async (req, res) => {
+  const { q, filter } = req.query;
+  try {
+    const params = [];
+    let query = `
+      SELECT r.id, r.product_id, r.order_id, r.buyer_id, r.seller_id,
+             r.created_at, r.last_message_time, r.left_user_ids,
+             p.title AS product_title,
+             bu.nickname AS buyer_nickname,
+             su.nickname AS seller_nickname,
+             (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id=r.id) AS message_count,
+             (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id=r.id AND m.deleted_at IS NOT NULL) AS deleted_message_count,
+             ${ROOM_DISPUTE_COUNT_SQL} AS dispute_count,
+             ${ROOM_OPEN_DISPUTE_COUNT_SQL} AS open_dispute_count,
+             ${ROOM_REPORT_COUNT_SQL} AS report_count
+        FROM chat_rooms r
+        LEFT JOIN products p ON p.id = r.product_id
+        LEFT JOIN users bu ON bu.id = r.buyer_id
+        LEFT JOIN users su ON su.id = r.seller_id
+       WHERE 1=1`;
+    if (q) {
+      params.push(`%${q}%`);
+      const i = `$${params.length}`;
+      query += ` AND (p.title LIKE ${i} OR bu.nickname LIKE ${i} OR su.nickname LIKE ${i} OR r.id LIKE ${i})`;
+    }
+    if (filter === "dispute") query += ` AND ${ROOM_DISPUTE_COUNT_SQL} > 0`;
+    else if (filter === "reported") query += ` AND ${ROOM_REPORT_COUNT_SQL} > 0`;
+    else if (filter === "deleted") {
+      query += ` AND (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id=r.id AND m.deleted_at IS NOT NULL) > 0`;
+    }
+    query += ` ORDER BY COALESCE(r.last_message_time, r.created_at) DESC LIMIT 300`;
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 대화 열람
+app.get(
+  "/api/admin/chat-rooms/:id/messages",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const links = await getChatRoomModerationLinks(req.params.id);
+      if (!links) return res.status(404).json({ error: "Room not found" });
+      const { rows } = await pool.query(
+        `SELECT m.id, m.sender_id, m.content, m.type, m.images, m.order_id,
+                m.original_price, m.proposed_price, m.offer_result,
+                m.deleted_at, m.deleted_by_admin, m.deleted_reason, m.created_at,
+                u.nickname AS sender_nickname
+           FROM chat_messages m
+           LEFT JOIN users u ON u.id = m.sender_id
+          WHERE m.room_id=$1
+          ORDER BY m.created_at ASC
+          LIMIT 1000`,
+        [req.params.id],
+      );
+      res.json(rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+// 메시지 가리기 / 되돌리기 — 원문은 지우지 않는다.
+app.put(
+  "/api/admin/chat-messages/:id",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const { deleted, reason } = req.body || {};
+    try {
+      const hide = deleted !== false;
+      const { rows } = await queryReturning(
+        `UPDATE chat_messages
+            SET deleted_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
+                deleted_by_admin = CASE WHEN $1 THEN 1 ELSE 0 END,
+                deleted_reason = CASE WHEN $1 THEN $2 ELSE NULL END
+          WHERE id = $3`,
+        [hide ? 1 : 0, reason || null, req.params.id],
+        "chat_messages",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      const updated = rows[0];
+      // 채팅 목록 미리보기에 가린 문구가 그대로 남지 않도록 맞춰 준다.
+      if (hide && updated.room_id) {
+        await pool.query(
+          `UPDATE chat_rooms SET last_message=$2
+            WHERE id=$1 AND (last_message_time IS NULL OR last_message_time <= $3)`,
+          [updated.room_id, CHAT_MSG_ADMIN_DELETED, updated.created_at],
+        );
+      }
+      res.json(updated);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+// 방 삭제: 분쟁·신고가 걸린 방은 증거가 사라지므로 막는다.
+app.delete(
+  "/api/admin/chat-rooms/:id",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const links = await getChatRoomModerationLinks(req.params.id);
+      if (!links) return res.status(404).json({ error: "Room not found" });
+      if (links.disputeCount > 0 || links.reportCount > 0) {
+        return res.status(409).json({
+          error: "분쟁 또는 신고가 연결된 채팅방은 삭제할 수 없습니다.",
+        });
+      }
+      await pool.query("DELETE FROM chat_rooms WHERE id=$1", [req.params.id]);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
 
 // ??? ???????? (??????)
 app.get("/api/admin/inquiries", requireDb, requireAdmin, async (_req, res) => {

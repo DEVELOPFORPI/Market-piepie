@@ -52,7 +52,8 @@ export type ChatRoomMessageKey =
   | 'roomEndedInput'
   | 'couldNotSendPhotos'
   | 'messageSendFailed'
-  | 'listingRemovedAlert';
+  | 'listingRemovedAlert'
+  | 'adminDeletedMessage';
 
 const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>> = {
   en: {
@@ -107,6 +108,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Could not send photos. Check your connection and try again.',
     messageSendFailed: 'Message could not be sent. Check your connection and try again.',
     listingRemovedAlert: 'This listing was removed.',
+    adminDeletedMessage: 'This message was removed by an admin.',
   },
   ko: {
     reviewSubmitted: '리뷰 작성 완료',
@@ -160,6 +162,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '사진을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     messageSendFailed: '메시지를 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     listingRemovedAlert: '이 상품이 삭제되었습니다.',
+    adminDeletedMessage: '관리자가 가린 메시지입니다.',
   },
   zh: {
     reviewSubmitted: '已提交评价',
@@ -213,6 +216,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '无法发送照片，请检查网络后重试。',
     messageSendFailed: '消息发送失败，请检查网络后重试。',
     listingRemovedAlert: '该商品已删除。',
+    adminDeletedMessage: '该消息已被管理员移除。',
   },
   ja: {
     reviewSubmitted: 'レビュー投稿済み',
@@ -266,6 +270,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '写真を送れませんでした。接続を確認して再試行してください。',
     messageSendFailed: 'メッセージを送信できませんでした。接続を確認して再試行してください。',
     listingRemovedAlert: 'この出品は削除されました。',
+    adminDeletedMessage: '管理者が削除したメッセージです。',
   },
   es: {
     reviewSubmitted: 'Reseña enviada',
@@ -319,6 +324,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'No se pudieron enviar las fotos. Comprueba la conexión e inténtalo de nuevo.',
     messageSendFailed: 'No se pudo enviar el mensaje. Comprueba la conexión e inténtalo de nuevo.',
     listingRemovedAlert: 'Este anuncio se eliminó.',
+    adminDeletedMessage: 'Un administrador eliminó este mensaje.',
   },
   pt: {
     reviewSubmitted: 'Avaliação enviada',
@@ -372,6 +378,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Não foi possível enviar as fotos. Verifique a conexão e tente novamente.',
     messageSendFailed: 'Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.',
     listingRemovedAlert: 'Este anúncio foi removido.',
+    adminDeletedMessage: 'Esta mensagem foi removida por um administrador.',
   },
   fr: {
     reviewSubmitted: 'Avis envoyé',
@@ -425,6 +432,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Impossible d’envoyer les photos. Vérifiez la connexion et réessayez.',
     messageSendFailed: 'Le message n’a pas pu être envoyé. Vérifiez la connexion et réessayez.',
     listingRemovedAlert: 'Cette annonce a été supprimée.',
+    adminDeletedMessage: 'Ce message a été supprimé par un administrateur.',
   },
   de: {
     reviewSubmitted: 'Bewertung gesendet',
@@ -478,6 +486,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Fotos konnten nicht gesendet werden. Verbindung prüfen.',
     messageSendFailed: 'Nachricht konnte nicht gesendet werden. Verbindung prüfen.',
     listingRemovedAlert: 'Diese Anzeige wurde entfernt.',
+    adminDeletedMessage: 'Diese Nachricht wurde von einem Admin entfernt.',
   },
   id: {
     reviewSubmitted: 'Ulasan dikirim',
@@ -531,6 +540,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Tidak dapat mengirim foto. Periksa koneksi dan coba lagi.',
     messageSendFailed: 'Pesan tidak dapat dikirim. Periksa koneksi dan coba lagi.',
     listingRemovedAlert: 'Listing ini dihapus.',
+    adminDeletedMessage: 'Pesan ini dihapus oleh admin.',
   },
   vi: {
     reviewSubmitted: 'Đã gửi đánh giá',
@@ -584,6 +594,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Không gửi được ảnh. Kiểm tra kết nối và thử lại.',
     messageSendFailed: 'Không gửi được tin nhắn. Kiểm tra kết nối và thử lại.',
     listingRemovedAlert: 'Tin đăng này đã bị xóa.',
+    adminDeletedMessage: 'Tin nhắn này đã bị quản trị viên xóa.',
   },
   th: {
     reviewSubmitted: 'ส่งรีวิวแล้ว',
@@ -637,6 +648,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ส่งรูปไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่',
     messageSendFailed: 'ส่งข้อความไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่',
     listingRemovedAlert: 'ประกาศนี้ถูกลบแล้ว',
+    adminDeletedMessage: 'ข้อความนี้ถูกผู้ดูแลระบบลบแล้ว',
   },
   hi: {
     reviewSubmitted: 'समीक्षा भेजी गई',
@@ -690,6 +702,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'फ़ोटो नहीं भेजी जा सकीं। कनेक्शन जांचें।',
     messageSendFailed: 'संदेश नहीं भेजा जा सका। कनेक्शन जांचें।',
     listingRemovedAlert: 'यह लिस्टिंग हटा दी गई।',
+    adminDeletedMessage: 'यह संदेश व्यवस्थापक ने हटा दिया।',
   },
   ar: {
     reviewSubmitted: 'تم إرسال التقييم',
@@ -743,6 +756,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'تعذر إرسال الصور. تحقق من الاتصال وحاول مرة أخرى.',
     messageSendFailed: 'تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى.',
     listingRemovedAlert: 'تم حذف هذا الإعلان.',
+    adminDeletedMessage: 'تمت إزالة هذه الرسالة بواسطة المشرف.',
   },
   ru: {
     reviewSubmitted: 'Отзыв отправлен',
@@ -796,6 +810,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Не удалось отправить фото. Проверьте соединение.',
     messageSendFailed: 'Не удалось отправить сообщение. Проверьте соединение.',
     listingRemovedAlert: 'Это объявление удалено.',
+    adminDeletedMessage: 'Это сообщение удалено администратором.',
   },
   tr: {
     reviewSubmitted: 'Yorum gönderildi',
@@ -849,6 +864,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Fotoğraflar gönderilemedi. Bağlantınızı kontrol edin.',
     messageSendFailed: 'Mesaj gönderilemedi. Bağlantınızı kontrol edin.',
     listingRemovedAlert: 'Bu ilan kaldırıldı.',
+    adminDeletedMessage: 'Bu mesaj yönetici tarafından kaldırıldı.',
   },
   it: {
     reviewSubmitted: 'Recensione inviata',
@@ -902,6 +918,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Impossibile inviare le foto. Controlla la connessione.',
     messageSendFailed: 'Messaggio non inviato. Controlla la connessione.',
     listingRemovedAlert: 'Questo annuncio è stato rimosso.',
+    adminDeletedMessage: 'Questo messaggio è stato rimosso da un amministratore.',
   },
   pl: {
     reviewSubmitted: 'Opinia wysłana',
@@ -955,6 +972,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Nie udało się wysłać zdjęć. Sprawdź połączenie.',
     messageSendFailed: 'Nie udało się wysłać wiadomości. Sprawdź połączenie.',
     listingRemovedAlert: 'To ogłoszenie zostało usunięte.',
+    adminDeletedMessage: 'Ta wiadomość została usunięta przez administratora.',
   },
   nl: {
     reviewSubmitted: 'Review verzonden',
@@ -1008,6 +1026,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Foto’s konden niet worden verzonden. Controleer je verbinding.',
     messageSendFailed: 'Bericht kon niet worden verzonden. Controleer je verbinding.',
     listingRemovedAlert: 'Deze advertentie is verwijderd.',
+    adminDeletedMessage: 'Dit bericht is verwijderd door een beheerder.',
   },
   fil: {
     reviewSubmitted: 'Naipasa ang review',
@@ -1061,6 +1080,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Hindi maipadala ang mga larawan. Suriin ang koneksyon.',
     messageSendFailed: 'Hindi maipadala ang mensahe. Suriin ang koneksyon.',
     listingRemovedAlert: 'Inalis ang listing na ito.',
+    adminDeletedMessage: 'Inalis ng admin ang mensaheng ito.',
   },
   uk: {
     reviewSubmitted: 'Відгук надіслано',
@@ -1114,6 +1134,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Не вдалося надіслати фото. Перевірте з’єднання.',
     messageSendFailed: 'Не вдалося надіслати повідомлення. Перевірте з’єднання.',
     listingRemovedAlert: 'Це оголошення видалено.',
+    adminDeletedMessage: 'Це повідомлення видалив адміністратор.',
   },
   bn: {
     reviewSubmitted: 'রিভিউ পাঠানো হয়েছে',
@@ -1167,6 +1188,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ছবি পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।',
     messageSendFailed: 'বার্তা পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।',
     listingRemovedAlert: 'এই লিস্টিং সরানো হয়েছে।',
+    adminDeletedMessage: 'এই বার্তাটি অ্যাডমিন সরিয়ে দিয়েছেন।',
   },
   ms: {
     reviewSubmitted: 'Ulasan dihantar',
@@ -1220,6 +1242,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Tidak dapat hantar foto. Semak sambungan.',
     messageSendFailed: 'Mesej tidak dapat dihantar. Semak sambungan.',
     listingRemovedAlert: 'Senarai ini dialih keluar.',
+    adminDeletedMessage: 'Mesej ini dialih keluar oleh admin.',
   },
   sw: {
     reviewSubmitted: 'Hakiki imetumwa',
@@ -1273,6 +1296,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Imeshindwa kutuma picha. Angalia muunganisho.',
     messageSendFailed: 'Ujumbe haukuweza kutumwa. Angalia muunganisho.',
     listingRemovedAlert: 'Tangazo hili limeondolewa.',
+    adminDeletedMessage: 'Ujumbe huu umeondolewa na msimamizi.',
   },
   fa: {
     reviewSubmitted: 'نظر ارسال شد',
@@ -1326,6 +1350,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ارسال عکس ممکن نشد. اتصال را بررسی کنید.',
     messageSendFailed: 'ارسال پیام ممکن نشد. اتصال را بررسی کنید.',
     listingRemovedAlert: 'این آگهی حذف شد.',
+    adminDeletedMessage: 'این پیام توسط مدیر حذف شد.',
   },
   ur: {
     reviewSubmitted: 'جائزہ بھیج دیا گیا',
@@ -1379,6 +1404,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'تصاویر نہ بھیجی جا سکیں۔ کنکشن چیک کریں۔',
     messageSendFailed: 'پیغام نہ بھیجا جا سکا۔ کنکشن چیک کریں۔',
     listingRemovedAlert: 'یہ لسٹنگ ہٹا دی گئی۔',
+    adminDeletedMessage: 'یہ پیغام ایڈمن نے ہٹا دیا۔',
   },
 };
 

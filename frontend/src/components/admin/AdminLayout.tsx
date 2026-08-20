@@ -73,6 +73,14 @@ function IconFlag() {
   );
 }
 
+function IconChat() {
+  return (
+    <svg className="h-5 w-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 9h10M7 13h6m-6 8l-3-3V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H10l-3 3z" />
+    </svg>
+  );
+}
+
 function IconPrice() {
   return (
     <svg className="h-5 w-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -133,6 +141,10 @@ export const AdminLayout: React.FC = () => {
           <NavLink to="/admin/posts" className={linkClass}>
             <IconDocument />
             게시물
+          </NavLink>
+          <NavLink to="/admin/chats" className={linkClass}>
+            <IconChat />
+            채팅
           </NavLink>
           <NavLink to="/admin/disputes" className={linkClass}>
             <IconGavel />

@@ -10,7 +10,7 @@ import {
   TRADE_METHOD_VALUE,
 } from '@/types';
 import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
-import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isOfferAwaitingSellerResponse, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
+import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isMyAcceptedTradeOnProduct, isOfferAwaitingSellerResponse, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
 import { addNotification } from '@/utils/notificationStorage';
@@ -792,7 +792,12 @@ export const ChatRoom: React.FC = () => {
           key: 'offer',
           label: t('sendOffer'),
           onClick: () => {
-            if (hasMyOfferBlockingNewOffer(room.product!.id, getCurrentUserId())) {
+            const uid = getCurrentUserId();
+            if (isMyAcceptedTradeOnProduct(room.product!.id, uid)) {
+              showToast(t('offerAlreadyAccepted'));
+              return;
+            }
+            if (hasMyOfferBlockingNewOffer(room.product!.id, uid)) {
               showToast(t('offerAlreadyPending'));
               return;
             }

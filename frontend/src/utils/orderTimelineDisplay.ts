@@ -29,6 +29,8 @@ export function orderTimelineMessageMatch(
     'Marked as shipped': 'tlMarkedShipped',
     'Marked as delivered': 'tlMarkedDelivered',
     'Dispute opened': 'tlDisputeOpened',
+    'Dispute resolved by admin': 'tlAdminResolvedDispute',
+    '관리자 분쟁 해결': 'tlAdminResolvedDispute',
     'Dispute resolved.': 'tlDisputeResolved',
     'Dispute resolved': 'tlDisputeResolved',
     '분쟁 해결': 'tlDisputeResolved',

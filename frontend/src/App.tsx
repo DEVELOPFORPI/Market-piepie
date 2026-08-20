@@ -40,6 +40,7 @@ import { AdminData } from './pages/AdminData';
 import { AdminInquiries } from './pages/AdminInquiries';
 import { AdminProducts } from './pages/AdminProducts';
 import { AdminPosts } from './pages/AdminPosts';
+import { AdminChats } from './pages/AdminChats';
 import { AdminReports } from './pages/AdminReports';
 import { AdminPrices } from './pages/AdminPrices';
 import { InquiryWrite } from './pages/InquiryWrite';
@@ -488,6 +489,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
             <Route path="prices" element={<AdminPrices />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="posts" element={<AdminPosts />} />
+            <Route path="chats" element={<AdminChats />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="data" element={<AdminData />} />
             <Route path="inquiries" element={<AdminInquiries />} />

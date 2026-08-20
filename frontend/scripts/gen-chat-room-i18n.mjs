@@ -488,6 +488,15 @@ const entries = {
     bn: 'এই লিস্টিং সরানো হয়েছে।', ms: 'Senarai ini dialih keluar.', sw: 'Tangazo hili limeondolewa.', fa: 'این آگهی حذف شد.',
     ur: 'یہ لسٹنگ ہٹا دی گئی۔',
   },
+  adminDeletedMessage: {
+    en: 'This message was removed by an admin.', ko: '관리자가 가린 메시지입니다.', zh: '该消息已被管理员移除。', ja: '管理者が削除したメッセージです。',
+    es: 'Un administrador eliminó este mensaje.', pt: 'Esta mensagem foi removida por um administrador.', fr: 'Ce message a été supprimé par un administrateur.', de: 'Diese Nachricht wurde von einem Admin entfernt.',
+    id: 'Pesan ini dihapus oleh admin.', vi: 'Tin nhắn này đã bị quản trị viên xóa.', th: 'ข้อความนี้ถูกผู้ดูแลระบบลบแล้ว', hi: 'यह संदेश व्यवस्थापक ने हटा दिया।',
+    ar: 'تمت إزالة هذه الرسالة بواسطة المشرف.', ru: 'Это сообщение удалено администратором.', tr: 'Bu mesaj yönetici tarafından kaldırıldı.', it: 'Questo messaggio è stato rimosso da un amministratore.',
+    pl: 'Ta wiadomość została usunięta przez administratora.', nl: 'Dit bericht is verwijderd door een beheerder.', fil: 'Inalis ng admin ang mensaheng ito.', uk: 'Це повідомлення видалив адміністратор.',
+    bn: 'এই বার্তাটি অ্যাডমিন সরিয়ে দিয়েছেন।', ms: 'Mesej ini dialih keluar oleh admin.', sw: 'Ujumbe huu umeondolewa na msimamizi.', fa: 'این پیام توسط مدیر حذف شد.',
+    ur: 'یہ پیغام ایڈمن نے ہٹا دیا۔',
+  },
 };
 
 const keys = Object.keys(entries);
