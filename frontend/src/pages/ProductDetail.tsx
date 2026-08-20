@@ -18,6 +18,7 @@ import { labelProductAvailability, labelInDispute, isFreeShareListing, relativeT
 import { guestGuard } from '@/utils/guestGate';
 import { api } from '@/utils/api';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
@@ -80,6 +81,7 @@ function isSellerListingMenuSelected(key: SellerListingMenuKey, p: Product): boo
 export const ProductDetail: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const { id } = useParams();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -211,11 +213,17 @@ export const ProductDetail: React.FC = () => {
   }, [id]);
 
   const handleDelete = () => {
-    if (confirm(t('deleteConfirm', { title: product.title }))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('deleteConfirm', { title: product.title }),
+        confirmLabel: t('delete'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       deleteProduct(product.id);
       window.dispatchEvent(new Event('productRegistered'));
       navigate(-1);
-    }
+    })();
   };
 
   const handleSellerListingMenu = async (key: SellerListingMenuKey) => {
@@ -657,6 +665,7 @@ export const ProductDetail: React.FC = () => {
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 };

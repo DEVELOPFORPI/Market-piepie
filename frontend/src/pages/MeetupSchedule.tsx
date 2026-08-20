@@ -6,6 +6,7 @@ import { addMeetupConfirmedToChat, addMeetupUpdatedToChat, addMeetupCancelledToC
 import { addNotification } from '@/utils/notificationStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { NOTIFY_MEETUP_CANCELED, NOTIFY_MEETUP_CONFIRMED, NOTIFY_MEETUP_UPDATED } from '@/locale/enUI';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { showToast } from '@/utils/toast';
@@ -56,6 +57,7 @@ export const MeetupSchedule: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const [place, setPlace] = useState('');
   const [date, setDate] = useState('');
   const [hour12, setHour12] = useState<number | ''>('');
@@ -199,7 +201,12 @@ export const MeetupSchedule: React.FC = () => {
       showToast(t('onlySellerCanMeetup'));
       return;
     }
-    if (!confirm(t('cancelMeetupConfirm'))) return;
+    const ok = await askConfirm({
+      message: t('cancelMeetupConfirm'),
+      confirmLabel: t('cancelMeetup'),
+      cancelLabel: t('cancel'),
+    });
+    if (!ok) return;
     const cancelled = await cancelOrderMeetup(orderId);
     if (cancelled) {
       await addMeetupCancelledToChat(cancelled);
@@ -360,6 +367,7 @@ export const MeetupSchedule: React.FC = () => {
           </button>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 };

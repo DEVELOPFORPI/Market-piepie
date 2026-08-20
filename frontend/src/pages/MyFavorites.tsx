@@ -6,6 +6,7 @@ import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
 import { isFreeShareListing } from '@/locale/enUI';
 import { getFavorites, removeFavorite } from '@/utils/favoriteStorage';
 import { getProductById } from '@/utils/productStorage';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -18,6 +19,7 @@ export const MyFavorites: React.FC = () => {
   useGuestPageGuard('like');
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const [favorites, setFavorites] = useState<Product[]>([]);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
@@ -50,10 +52,16 @@ export const MyFavorites: React.FC = () => {
   }, [favorites, filterStatus]);
 
   const handleUnfavorite = (product: Product) => {
-    if (confirm(t('removeFromSavedConfirm', { title: product.title }))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('removeFromSavedConfirm', { title: product.title }),
+        confirmLabel: t('ok'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       removeFavorite(product.id);
       loadFavorites();
-    }
+    })();
   };
 
   return (
@@ -179,6 +187,7 @@ export const MyFavorites: React.FC = () => {
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 };

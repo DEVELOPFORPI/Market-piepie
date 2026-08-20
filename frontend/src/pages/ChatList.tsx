@@ -12,12 +12,14 @@ import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { NotificationBellButton } from '@/components/common/NotificationBellButton';
 import { syncChatRoomsFromDB, syncDisputesFromDB, syncNotificationsFromDB } from '@/utils/dbSync';
 import { chatRoomHasOpenDispute } from '@/utils/disputeStorage';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 
 export const ChatList: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   useGuestPageGuard('chat');
 
@@ -124,12 +126,19 @@ export const ChatList: React.FC = () => {
 
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(t('leaveNChatsConfirm', { n: selectedIds.size }))) return;
-    const ids = Array.from(selectedIds);
-    setRooms((prev) => prev.filter((r) => !ids.includes(r.id)));
-    setSelectedIds(new Set());
-    setDeleteMode(false);
-    void Promise.all(ids.map((id) => leaveChatRoom(id))).then(() => loadRooms());
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('leaveNChatsConfirm', { n: selectedIds.size }),
+        confirmLabel: t('leaveChat'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
+      const ids = Array.from(selectedIds);
+      setRooms((prev) => prev.filter((r) => !ids.includes(r.id)));
+      setSelectedIds(new Set());
+      setDeleteMode(false);
+      void Promise.all(ids.map((id) => leaveChatRoom(id))).then(() => loadRooms());
+    })();
   };
 
   const handleTouchStart = useCallback((roomId: string, e: React.TouchEvent) => {
@@ -168,10 +177,16 @@ export const ChatList: React.FC = () => {
 
   const handleLeaveRoom = (roomId: string) => {
     setContextMenu(null);
-    if (confirm(t('leaveChatConfirm'))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('leaveChatConfirm'),
+        confirmLabel: t('leaveChat'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       setRooms((prev) => prev.filter((r) => r.id !== roomId));
       void leaveChatRoom(roomId).then(() => loadRooms());
-    }
+    })();
   };
 
   const handleContextMenu = useCallback((roomId: string, e: React.MouseEvent) => {
@@ -403,6 +418,7 @@ export const ChatList: React.FC = () => {
           </button>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 };

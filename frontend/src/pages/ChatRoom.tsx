@@ -30,6 +30,7 @@ import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ModalShell } from '@/components/common/ModalShell';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
@@ -245,6 +246,7 @@ function buildOrderDisputeBannerRows(
 export const ChatRoom: React.FC = () => {
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const timeLocale = localeForAppLanguage(lang);
   const location = useLocation();
   const { id: roomId } = useParams();
@@ -865,7 +867,12 @@ export const ChatRoom: React.FC = () => {
           primary: true,
           onClick: () => {
             void (async () => {
-              if (!confirm(t('confirmTradeCompletion'))) return;
+              const ok = await askConfirm({
+                message: t('confirmTradeCompletion'),
+                confirmLabel: t('confirmComplete'),
+                cancelLabel: t('cancel'),
+              });
+              if (!ok) return;
               const updated = await completeOrderOnReceive(currentOrder.id);
               if (updated?.status === ORDER_STATUS_VALUE.COMPLETE) {
                 void addTradeCompletedToChat(updated);
@@ -1233,11 +1240,17 @@ export const ChatRoom: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    if (roomId && confirm(t('leaveChatConfirm'))) {
-                      void leaveChatRoom(roomId).then((ok) => {
-                        if (ok) navigate('/chat', { replace: true });
+                    if (!roomId) return;
+                    void askConfirm({
+                      message: t('leaveChatConfirm'),
+                      confirmLabel: t('leaveChat'),
+                      cancelLabel: t('cancel'),
+                    }).then((ok) => {
+                      if (!ok) return;
+                      void leaveChatRoom(roomId).then((left) => {
+                        if (left) navigate('/chat', { replace: true });
                       });
-                    }
+                    });
                   }}
                   className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
                 >
@@ -1678,9 +1691,15 @@ export const ChatRoom: React.FC = () => {
                           const order = getOrderById(msg.orderId);
                           if (!order?.product) return;
                           const isShare = order.proposedPrice === 0 || order.product?.isFreeShare || order.product?.price === 0;
-                          if (!confirm(isShare
-                            ? t('declineShareConfirm', { title: order.product.title })
-                            : t('declineOfferConfirm', { title: order.product.title }))) return;
+                          void (async () => {
+                          const ok = await askConfirm({
+                            message: isShare
+                              ? t('declineShareConfirm', { title: order.product.title })
+                              : t('declineOfferConfirm', { title: order.product.title }),
+                            confirmLabel: t('ok'),
+                            cancelLabel: t('cancel'),
+                          });
+                          if (!ok) return;
                           addNotification({
                             targetUserId: order.buyer.id,
                             type: 'chat',
@@ -1701,6 +1720,7 @@ export const ChatRoom: React.FC = () => {
                             }
                             setMessages(getMessages(roomId!));
                           });
+                          })();
                         }}
                         className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
                       >
@@ -1982,6 +2002,7 @@ export const ChatRoom: React.FC = () => {
           </>
         ) : null}
       </ModalShell>
+      {confirmDialog}
     </div>
   );
 };

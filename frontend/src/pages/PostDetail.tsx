@@ -23,6 +23,7 @@ import { getProductById } from '@/utils/productStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { guestGuard } from '@/utils/guestGate';
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import { labelDisputeStoredValue, localizeDisputePostTitle } from '@/utils/disputeLabels';
@@ -176,6 +177,7 @@ export const PostDetail: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { lang, t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const [post, setPost] = useState<Post | null>(null);
   const localizedRegion = useLocalizedRegion(post?.region, post?.latitude, post?.longitude);
   const [commentText, setCommentText] = useState('');
@@ -435,11 +437,17 @@ export const PostDetail: React.FC = () => {
 
   const handleDeleteComment = (commentId: string) => {
     if (!id) return;
-    if (confirm(t('deleteCommentConfirm'))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('deleteCommentConfirm'),
+        confirmLabel: t('delete'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       deleteComment(id, commentId);
       loadComments();
       loadPost();
-    }
+    })();
   };
 
   const handleDeletePost = () => {
@@ -448,10 +456,16 @@ export const PostDetail: React.FC = () => {
       showToast(t('cannotDeleteDispute'));
       return;
     }
-    if (confirm(t('deletePostConfirm', { title: post.title }))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('deletePostConfirm', { title: post.title }),
+        confirmLabel: t('delete'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       deleteUserPost(post.id);
       navigate('/community', { replace: true });
-    }
+    })();
   };
 
   if (loading) {
@@ -890,6 +904,7 @@ export const PostDetail: React.FC = () => {
           targetLabel={commentReportTarget.content.slice(0, 80)}
         />
       )}
+      {confirmDialog}
     </div>
   );
 };

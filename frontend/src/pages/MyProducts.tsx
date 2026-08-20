@@ -6,6 +6,7 @@ import { Product, ProductStatus, PRODUCT_STATUS_VALUE } from '@/types';
 import { isFreeShareListing } from '@/locale/enUI';
 import { getMyProducts, deleteProduct } from '@/utils/productStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -16,6 +17,7 @@ export const MyProducts: React.FC = () => {
   useGuestPageGuard('sell');
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -34,11 +36,17 @@ export const MyProducts: React.FC = () => {
   }, []);
 
   const handleDelete = (productId: string, productTitle: string) => {
-    if (confirm(t('deleteConfirm', { title: productTitle }))) {
+    void (async () => {
+      const ok = await askConfirm({
+        message: t('deleteConfirm', { title: productTitle }),
+        confirmLabel: t('delete'),
+        cancelLabel: t('cancel'),
+      });
+      if (!ok) return;
       deleteProduct(productId);
       loadProducts();
       window.dispatchEvent(new Event('productRegistered'));
-    }
+    })();
   };
 
   const filteredProducts = (() => {
@@ -178,6 +186,7 @@ export const MyProducts: React.FC = () => {
           </span>
         </span>
       </button>
+      {confirmDialog}
     </div>
   );
 };

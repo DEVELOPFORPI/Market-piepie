@@ -24,6 +24,7 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
 import { labelTradeMethod, NOTIFY_DISPUTE_FILED } from '@/locale/enUI';
 import { Order, User } from '@/types';
+import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
 import { disputeOpenedTimelineText } from '@/utils/orderTimelineDisplay';
@@ -102,6 +103,7 @@ export const Dispute: React.FC = () => {
   useGuestPageGuard('dispute');
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
   const dateLocale = localeForAppLanguage(lang);
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
@@ -321,7 +323,12 @@ export const Dispute: React.FC = () => {
       showToast(t('onlyOpenerCanResolve'));
       return;
     }
-    if (!confirm(t('markResolvedConfirm'))) return;
+    const agreed = await askConfirm({
+      message: t('markResolvedConfirm'),
+      confirmLabel: t('ok'),
+      cancelLabel: t('cancel'),
+    });
+    if (!agreed) return;
     const ok = await updateDisputeStatus(dispute.id, 'RESOLVED', 'Resolved by mutual agreement.');
     if (!ok) {
       showToast(t('couldNotUpdateDisputeStatus'));
@@ -744,6 +751,7 @@ export const Dispute: React.FC = () => {
       </div>
       )}
       <ImageLightbox src={viewImage} onClose={() => setViewImage(null)} alt={t('evidence')} />
+      {confirmDialog}
     </div>
   );
 };
