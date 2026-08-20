@@ -15,7 +15,8 @@ export type RegionMessageKey =
   | 'locationConsentBody'
   | 'locationConsentNote'
   | 'locationConsentAgree'
-  | 'locationConsentCancel';
+  | 'locationConsentCancel'
+  | 'regionUnset';
 
 const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
   en: {
@@ -33,6 +34,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Area name only. Location stays private.',
     locationConsentAgree: 'Allow',
     locationConsentCancel: 'Not now',
+    regionUnset: 'Choose your area',
   },
   ko: {
     useCurrentLocation: '현재 위치 사용',
@@ -49,6 +51,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: '지역명만 저장되며 위치는 비공개입니다.',
     locationConsentAgree: '허용',
     locationConsentCancel: '나중에',
+    regionUnset: '활동 지역을 선택하세요',
   },
   zh: {
     useCurrentLocation: '使用当前位置',
@@ -65,6 +68,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: '只保存地区名，精确位置不公开。',
     locationConsentAgree: '允许',
     locationConsentCancel: '以后再说',
+    regionUnset: '请选择活动地区',
   },
   ja: {
     useCurrentLocation: '現在地を使う',
@@ -81,6 +85,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: '地域名のみ保存。正確な位置は非公開です。',
     locationConsentAgree: '許可',
     locationConsentCancel: '後で',
+    regionUnset: '活動エリアを選択',
   },
   es: {
     useCurrentLocation: 'Usar ubicación actual',
@@ -97,6 +102,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Solo el nombre de zona. Ubicación privada.',
     locationConsentAgree: 'Permitir',
     locationConsentCancel: 'Ahora no',
+    regionUnset: 'Elige tu zona',
   },
   pt: {
     useCurrentLocation: 'Usar localização atual',
@@ -113,6 +119,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Só o nome da área. Localização privada.',
     locationConsentAgree: 'Permitir',
     locationConsentCancel: 'Agora não',
+    regionUnset: 'Escolha sua região',
   },
   fr: {
     useCurrentLocation: 'Utiliser la position actuelle',
@@ -129,6 +136,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Seul le nom de zone. Position privée.',
     locationConsentAgree: 'Autoriser',
     locationConsentCancel: 'Plus tard',
+    regionUnset: 'Choisissez votre zone',
   },
   de: {
     useCurrentLocation: 'Aktuellen Standort nutzen',
@@ -145,6 +153,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Nur der Regionsname. Standort privat.',
     locationConsentAgree: 'Erlauben',
     locationConsentCancel: 'Später',
+    regionUnset: 'Region wählen',
   },
   id: {
     useCurrentLocation: 'Gunakan lokasi saat ini',
@@ -161,6 +170,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Hanya nama wilayah. Lokasi tetap pribadi.',
     locationConsentAgree: 'Izinkan',
     locationConsentCancel: 'Nanti saja',
+    regionUnset: 'Pilih area Anda',
   },
   vi: {
     useCurrentLocation: 'Dùng vị trí hiện tại',
@@ -177,6 +187,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Chỉ lưu tên khu vực. Vị trí giữ riêng tư.',
     locationConsentAgree: 'Cho phép',
     locationConsentCancel: 'Để sau',
+    regionUnset: 'Chọn khu vực của bạn',
   },
   th: {
     useCurrentLocation: 'ใช้ตำแหน่งปัจจุบัน',
@@ -193,6 +204,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'บันทึกเฉพาะชื่อพื้นที่ ตำแหน่งเป็นส่วนตัว',
     locationConsentAgree: 'อนุญาต',
     locationConsentCancel: 'ไว้ทีหลัง',
+    regionUnset: 'เลือกพื้นที่ของคุณ',
   },
   hi: {
     useCurrentLocation: 'वर्तमान स्थान उपयोग करें',
@@ -209,6 +221,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'केवल क्षेत्र का नाम। स्थान निजी रहता है।',
     locationConsentAgree: 'अनुमति दें',
     locationConsentCancel: 'बाद में',
+    regionUnset: 'अपना क्षेत्र चुनें',
   },
   ar: {
     useCurrentLocation: 'استخدام الموقع الحالي',
@@ -225,6 +238,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'يُحفظ اسم المنطقة فقط. الموقع يبقى خاصًا.',
     locationConsentAgree: 'السماح',
     locationConsentCancel: 'لاحقًا',
+    regionUnset: 'اختر منطقتك',
   },
   ru: {
     useCurrentLocation: 'Использовать текущее местоположение',
@@ -241,6 +255,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Только название района. Место скрыто.',
     locationConsentAgree: 'Разрешить',
     locationConsentCancel: 'Позже',
+    regionUnset: 'Выберите район',
   },
   tr: {
     useCurrentLocation: 'Mevcut konumu kullan',
@@ -257,6 +272,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Yalnızca bölge adı. Konum gizli kalır.',
     locationConsentAgree: 'İzin ver',
     locationConsentCancel: 'Şimdi değil',
+    regionUnset: 'Bölgenizi seçin',
   },
   it: {
     useCurrentLocation: 'Usa posizione attuale',
@@ -273,6 +289,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Solo il nome della zona. Posizione privata.',
     locationConsentAgree: 'Consenti',
     locationConsentCancel: 'Non ora',
+    regionUnset: 'Scegli la tua zona',
   },
   pl: {
     useCurrentLocation: 'Użyj bieżącej lokalizacji',
@@ -289,6 +306,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Tylko nazwa obszaru. Lokalizacja prywatna.',
     locationConsentAgree: 'Zezwól',
     locationConsentCancel: 'Nie teraz',
+    regionUnset: 'Wybierz okolicę',
   },
   nl: {
     useCurrentLocation: 'Huidige locatie gebruiken',
@@ -305,6 +323,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Alleen de regio-naam. Locatie blijft privé.',
     locationConsentAgree: 'Toestaan',
     locationConsentCancel: 'Niet nu',
+    regionUnset: 'Kies je regio',
   },
   fil: {
     useCurrentLocation: 'Gamitin ang kasalukuyang lokasyon',
@@ -321,6 +340,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Pangalan lang ng lugar. Lokasyon ay pribado.',
     locationConsentAgree: 'Payagan',
     locationConsentCancel: 'Sa ibang oras',
+    regionUnset: 'Piliin ang iyong lugar',
   },
   uk: {
     useCurrentLocation: 'Використати поточне місцезнаходження',
@@ -337,6 +357,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Лише назва району. Місце приватне.',
     locationConsentAgree: 'Дозволити',
     locationConsentCancel: 'Пізніше',
+    regionUnset: 'Оберіть свій район',
   },
   bn: {
     useCurrentLocation: 'বর্তমান অবস্থান ব্যবহার করুন',
@@ -353,6 +374,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'শুধু এলাকার নাম। অবস্থান গোপন থাকে।',
     locationConsentAgree: 'অনুমতি দিন',
     locationConsentCancel: 'পরে',
+    regionUnset: 'আপনার এলাকা বেছে নিন',
   },
   ms: {
     useCurrentLocation: 'Gunakan lokasi semasa',
@@ -369,6 +391,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Hanya nama kawasan. Lokasi kekal peribadi.',
     locationConsentAgree: 'Benarkan',
     locationConsentCancel: 'Nanti',
+    regionUnset: 'Pilih kawasan anda',
   },
   sw: {
     useCurrentLocation: 'Tumia eneo la sasa',
@@ -385,6 +408,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'Jina la eneo pekee. Eneo linabaki faragha.',
     locationConsentAgree: 'Ruhusu',
     locationConsentCancel: 'Baadaye',
+    regionUnset: 'Chagua eneo lako',
   },
   fa: {
     useCurrentLocation: 'استفاده از موقعیت فعلی',
@@ -401,6 +425,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'فقط نام منطقه. موقعیت خصوصی می‌ماند.',
     locationConsentAgree: 'اجازه',
     locationConsentCancel: 'بعداً',
+    regionUnset: 'منطقه خود را انتخاب کنید',
   },
   ur: {
     useCurrentLocation: 'موجودہ مقام استعمال کریں',
@@ -417,6 +442,7 @@ const REGION_MESSAGES: Record<AppLanguage, Record<RegionMessageKey, string>> = {
     locationConsentNote: 'صرف علاقے کا نام۔ مقام نجی رہتا ہے۔',
     locationConsentAgree: 'اجازت دیں',
     locationConsentCancel: 'بعد میں',
+    regionUnset: 'اپنا علاقہ منتخب کریں',
   },
 };
 

@@ -66,6 +66,7 @@ const REGION_KEYS = new Set<string>([
   'locationConsentNote',
   'locationConsentAgree',
   'locationConsentCancel',
+  'regionUnset',
 ]);
 
 const COMMON_KEYS = new Set<string>([
