@@ -173,7 +173,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       const userId = getCurrentUserId() || undefined;
       if (userId && !userId.startsWith('guest_') && !isTestLoginEnabled()) {
         const profileStatus = await checkMyProfileInDB(userId);
-        if (profileStatus === 'incomplete') {
+        if (profileStatus === 'incomplete' && !isOnboardingExemptPath(window.location.pathname)) {
           resetLocalCacheForIncompleteProfile(userId);
           navigate('/signup', { replace: true });
         }

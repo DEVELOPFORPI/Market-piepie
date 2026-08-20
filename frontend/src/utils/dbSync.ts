@@ -8,6 +8,7 @@ import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE
 import { setItem, getItem } from '@/utils/heavyStorage';
 import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
+import { isOnboardingExemptPath } from '@/utils/onboardingStorage';
 import { seedPostViewCounts } from '@/utils/postViewStorage';
 import { seedPostCommentCounts, syncPostCommentCountFromDB } from '@/utils/postCommentCountStorage';
 
@@ -1778,8 +1779,8 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
         }
         window.dispatchEvent(new Event('profileSaved'));
         if (dbRegion) window.dispatchEvent(new Event('regionChanged'));
-      } else if (existing) {
-        // DB에 실제 프로필이 없으면 로컬 잔여 데이터를 쓰지 않는다
+      } else if (existing && !isOnboardingExemptPath(window.location.pathname)) {
+        // 가입/지역 선택 중에는 지우지 않는다
         resetLocalCacheForIncompleteProfile(userId);
       }
     }
