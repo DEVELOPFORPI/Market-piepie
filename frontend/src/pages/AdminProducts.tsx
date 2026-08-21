@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 import { broadcastProductChange } from '@/utils/chatSocket';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface Product {
   id: string;
@@ -39,6 +40,7 @@ export const AdminProducts: React.FC = () => {
   const [hiddenOnly, setHiddenOnly] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
+  const paged = useAdminPage(products, `${search}|${statusFilter}|${freeOnly}|${hiddenOnly}|${products.length}`);
 
   const load = async () => {
     setLoading(true);
@@ -164,7 +166,7 @@ export const AdminProducts: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => (
+              {paged.items.map((p) => (
                 <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
                   onClick={() => setSelected(p)}>
                   <td className="px-4 py-3">
@@ -220,6 +222,16 @@ export const AdminProducts: React.FC = () => {
               ))}
             </tbody>
           </table>
+          <div className="px-4 pb-3">
+            <AdminPagination
+              page={paged.page}
+              totalPages={paged.totalPages}
+              total={paged.total}
+              from={paged.from}
+              to={paged.to}
+              onPageChange={paged.setPage}
+            />
+          </div>
         </div>
       )}
 

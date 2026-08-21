@@ -1,4 +1,11 @@
-import { isGuestUser, getCurrentUserId, markExplicitLogout } from '@/utils/authStorage';
+import {
+  isGuestUser,
+  getCurrentUserId,
+  markExplicitLogout,
+  isSuspendedAccount,
+  getSuspensionReason,
+  enterSuspendedGuestSession,
+} from '@/utils/authStorage';
 
 export type GuestGuardReason =
   | 'chat'
@@ -18,10 +25,16 @@ export type GuestGuardReason =
   | 'default';
 
 export function isGuest(): boolean {
-  return isGuestUser(getCurrentUserId());
+  return isGuestUser(getCurrentUserId()) || isSuspendedAccount();
 }
 
-export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): void {
+function showGateOverlay(opts: {
+  title: string;
+  body?: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+}): void {
   const existing = document.getElementById('guest-gate-overlay');
   if (existing) existing.remove();
 
@@ -38,21 +51,28 @@ export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): voi
     'transform:translateY(18px) scale(0.96);opacity:0;' +
     'transition:transform 280ms cubic-bezier(0.22, 1, 0.36, 1),opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)';
 
+  const iconBg = isSuspendedAccount() ? '#FEF2F2' : '#F0FDFA';
+  const iconColor = isSuspendedAccount() ? '#DC2626' : '#00A8A3';
+  const icon = isSuspendedAccount()
+    ? `<path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>`
+    : `<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>`;
+
   modal.innerHTML = `
-    <div style="width:56px;height:56px;border-radius:50%;background:#F0FDFA;margin:0 auto 16px;display:flex;align-items:center;justify-content:center">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00A8A3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    <div style="width:56px;height:56px;border-radius:50%;background:${iconBg};margin:0 auto 16px;display:flex;align-items:center;justify-content:center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        ${icon}
       </svg>
     </div>
-    <div style="font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:24px">Sign in to continue</div>
+    <div style="font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:${opts.body ? '10px' : '24px'}">${opts.title}</div>
+    ${opts.body ? `<div style="font-size:13px;line-height:1.5;color:#6b7280;margin-bottom:24px">${opts.body}</div>` : ''}
     <button id="guest-gate-login" style="
       width:100%;padding:14px 0;border:none;border-radius:28px;font-size:15px;font-weight:700;
       color:#fff;background:#00A8A3;cursor:pointer;margin-bottom:6px
-    ">Log in with Pi</button>
-    <button id="guest-gate-close" style="
+    ">${opts.confirmLabel}</button>
+    ${opts.cancelLabel ? `<button id="guest-gate-close" style="
       width:100%;padding:12px 0;border:none;border-radius:28px;font-size:14px;font-weight:500;
       color:#888;background:transparent;cursor:pointer
-    ">Not now</button>
+    ">${opts.cancelLabel}</button>` : ''}
   `;
 
   overlay.appendChild(modal);
@@ -72,13 +92,54 @@ export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): voi
     setTimeout(() => overlay.remove(), 280);
   };
 
-  document.getElementById('guest-gate-close')!.onclick = close;
+  const closeBtn = document.getElementById('guest-gate-close');
+  if (closeBtn) closeBtn.onclick = close;
   document.getElementById('guest-gate-login')!.onclick = () => {
     close();
-    markExplicitLogout();
-    window.location.href = '/welcome';
+    opts.onConfirm();
   };
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): void {
+  if (isSuspendedAccount()) {
+    const reason = getSuspensionReason();
+    showGateOverlay({
+      title: '정지 중인 계정입니다',
+      body: reason
+        ? `사유: ${escapeHtml(reason)}<br/>지금은 둘러보기만 가능합니다.`
+        : '이 계정은 관리자에 의해 정지되어 지금은 둘러보기만 가능합니다.',
+      confirmLabel: '확인',
+      onConfirm: () => undefined,
+    });
+    return;
+  }
+
+  showGateOverlay({
+    title: 'Sign in to continue',
+    confirmLabel: 'Log in with Pi',
+    cancelLabel: 'Not now',
+    onConfirm: () => {
+      markExplicitLogout();
+      window.location.href = '/welcome';
+    },
+  });
+}
+
+export async function applySuspendedAccess(
+  reason?: string | null,
+  options?: { prompt?: boolean },
+): Promise<void> {
+  await enterSuspendedGuestSession(reason);
+  if (options?.prompt !== false) showGuestLoginPrompt();
 }
 
 export function guestGuard(reason: GuestGuardReason = 'default'): boolean {

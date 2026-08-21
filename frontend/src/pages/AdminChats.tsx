@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface ChatRoomRow {
   id: string;
@@ -147,6 +148,7 @@ export const AdminChats: React.FC = () => {
     load();
   };
 
+  const paged = useAdminPage(rooms, `${search}|${filter}|${rooms.length}`);
   const disputeRooms = useMemo(
     () => rooms.filter((r) => num(r.dispute_count) > 0).length,
     [rooms],
@@ -199,7 +201,7 @@ export const AdminChats: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {rooms.map((r) => (
+          {paged.items.map((r) => (
             <div key={r.id} onClick={() => openRoom(r)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-3">
@@ -253,6 +255,14 @@ export const AdminChats: React.FC = () => {
               </div>
             </div>
           ))}
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </div>
       )}
 

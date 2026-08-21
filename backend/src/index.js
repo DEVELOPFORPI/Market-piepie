@@ -239,6 +239,27 @@ async function createSession(userId) {
   return token;
 }
 
+async function getAccountStatus(userId) {
+  if (!pool || !userId) return { accountStatus: "active", suspensionReason: null };
+  try {
+    const { rows } = await pool.query(
+      "SELECT account_status, suspension_reason FROM users WHERE id = $1 LIMIT 1",
+      [userId],
+    );
+    const accountStatus = rows[0]?.account_status || "active";
+    return {
+      accountStatus,
+      suspensionReason:
+        accountStatus === "suspended" ? rows[0]?.suspension_reason || null : null,
+    };
+  } catch (e) {
+    if (/account_status|Unknown column/i.test(String(e.message))) {
+      return { accountStatus: "active", suspensionReason: null };
+    }
+    return { accountStatus: "active", suspensionReason: null };
+  }
+}
+
 /** Pi @username — admin/DB only; users row is created on verification payment */
 function isGuestId(id) {
   return typeof id === "string" && id.startsWith("guest_");
@@ -926,6 +947,17 @@ if (process.env.NODE_ENV !== "production") {
         }
       }
     }
+    const account = await getAccountStatus(userId);
+    if (account.accountStatus === "suspended") {
+      console.log(`[dev-login] suspended userId=${userId}`);
+      return res.json({
+        uid: userId,
+        username: nickname,
+        piVerified: true,
+        sessionToken: null,
+        ...account,
+      });
+    }
     const sessionToken = await createSession(userId);
     console.log(`[dev-login] userId=${userId} nickname=${nickname}`);
     res.json({
@@ -933,6 +965,7 @@ if (process.env.NODE_ENV !== "production") {
       username: nickname,
       piVerified: true,
       sessionToken,
+      ...account,
     });
   });
 }
@@ -1527,12 +1560,23 @@ app.post("/api/auth/pi/verify", async (req, res) => {
     if (!piVerified && isGuestId(guestId)) {
       await linkGuestToPi(guestId, piRes.uid, piRes.username);
     }
+    const account = await getAccountStatus(piRes.uid);
+    if (account.accountStatus === "suspended") {
+      return res.json({
+        uid: piRes.uid,
+        username: piRes.username,
+        piVerified,
+        sessionToken: null,
+        ...account,
+      });
+    }
     const sessionToken = await createSession(piRes.uid);
     res.json({
       uid: piRes.uid,
       username: piRes.username,
       piVerified,
       sessionToken,
+      ...account,
     });
   } catch (e) {
     res
@@ -3014,6 +3058,12 @@ app.get("/api/posts", requireDb, async (req, res) => {
       params.push(author_id);
       query += ` AND p.author_id=$${params.length}`;
     }
+    if (req.authUserId) {
+      params.push(req.authUserId);
+      query += ` AND (COALESCE(p.admin_hidden, 0) = 0 OR p.author_id = $${params.length})`;
+    } else {
+      query += ` AND COALESCE(p.admin_hidden, 0) = 0`;
+    }
     params.push(limit, offset);
     query += ` ORDER BY p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
     const { rows } = await pool.query(query, params);
@@ -3035,6 +3085,9 @@ app.get("/api/posts/:id", requireDb, async (req, res) => {
       [req.params.id],
     );
     if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+    if (rows[0].admin_hidden && rows[0].author_id !== req.authUserId) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3125,8 +3178,10 @@ app.get("/api/posts/:id/comments", requireDb, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.*, ${jsonObjectSql("u", "users")} AS author FROM comments c
        LEFT JOIN users u ON c.author_id = u.id
-       WHERE c.post_id=$1 ORDER BY c.created_at ASC`,
-      [req.params.id],
+       WHERE c.post_id=$1
+         AND (COALESCE(c.admin_hidden, 0) = 0${req.authUserId ? " OR c.author_id = $2" : ""})
+       ORDER BY c.created_at ASC`,
+      req.authUserId ? [req.params.id, req.authUserId] : [req.params.id],
     );
     res.json(rows);
   } catch (e) {
@@ -4599,6 +4654,85 @@ app.delete(
   },
 );
 
+app.patch(
+  "/api/admin/posts/:id/visibility",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const hidden = Boolean(req.body.hidden);
+    const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
+    try {
+      const { rows } = await queryReturning(
+        `UPDATE community_posts
+            SET admin_hidden = $1,
+                admin_hidden_reason = $2,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hidden, reason, req.params.id],
+        "community_posts",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/comments/:id/visibility",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const hidden = Boolean(req.body.hidden);
+    const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
+    try {
+      const { rows } = await queryReturning(
+        `UPDATE comments
+            SET admin_hidden = $1,
+                admin_hidden_reason = $2,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hidden, reason, req.params.id],
+        "comments",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/admin/comments/:id",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { rows: existing } = await pool.query(
+        "SELECT post_id FROM comments WHERE id=$1",
+        [req.params.id],
+      );
+      if (!existing.length) return res.status(404).json({ error: "Not found" });
+      await pool.query("DELETE FROM comments WHERE id=$1", [req.params.id]);
+      if (existing[0].post_id) {
+        await pool.query(
+          `UPDATE community_posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id=$1`,
+          [existing[0].post_id],
+        );
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
 // ─── Reports (신고) ─────────────────────────────────────────
 const VALID_REPORT_TARGETS = new Set([
   "product",
@@ -4672,10 +4806,75 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
   try {
     let query = `SELECT r.*,
                         rep.nickname AS reporter_nickname,
-                        rsv.nickname AS resolved_by_nickname
+                        rep.kyc_status AS reporter_kyc_status,
+                        rep.account_status AS reporter_account_status,
+                        rep.pi_username AS reporter_pi_username,
+                        rep.activity_region AS reporter_activity_region,
+                        rsv.nickname AS resolved_by_nickname,
+                        owner.id AS owner_id,
+                        owner.nickname AS owner_nickname,
+                        owner.kyc_status AS owner_kyc_status,
+                        owner.account_status AS owner_account_status,
+                        owner.pi_username AS owner_pi_username,
+                        owner.activity_region AS owner_activity_region,
+                        c.post_id AS comment_post_id,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.title
+                          WHEN 'post' THEN cp.title
+                          WHEN 'comment' THEN LEFT(c.content, 80)
+                          WHEN 'review' THEN COALESCE(rv.product_title, LEFT(rv.comment, 80))
+                          WHEN 'user' THEN owner.nickname
+                          ELSE NULL
+                        END AS target_title,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.description
+                          WHEN 'post' THEN cp.content
+                          WHEN 'comment' THEN c.content
+                          WHEN 'review' THEN rv.comment
+                          ELSE NULL
+                        END AS target_body,
+                        CASE r.target_type WHEN 'product' THEN p.price ELSE NULL END AS target_price,
+                        CASE r.target_type WHEN 'product' THEN p.is_free_share ELSE NULL END AS target_is_free_share,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.images
+                          WHEN 'post' THEN cp.images
+                          ELSE NULL
+                        END AS target_images,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.id
+                          WHEN 'post' THEN cp.id
+                          WHEN 'comment' THEN c.id
+                          WHEN 'review' THEN rv.id
+                          WHEN 'user' THEN owner.id
+                          ELSE NULL
+                        END AS target_row_id,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.admin_hidden
+                          WHEN 'post' THEN cp.admin_hidden
+                          WHEN 'comment' THEN c.admin_hidden
+                          ELSE 0
+                        END AS target_hidden,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.admin_hidden_reason
+                          WHEN 'post' THEN cp.admin_hidden_reason
+                          WHEN 'comment' THEN c.admin_hidden_reason
+                          ELSE NULL
+                        END AS target_hidden_reason
                  FROM reports r
                  LEFT JOIN users rep ON r.reporter_id = rep.id
                  LEFT JOIN users rsv ON r.resolved_by = rsv.id
+                 LEFT JOIN products p ON r.target_type = 'product' AND r.target_id = p.id
+                 LEFT JOIN community_posts cp ON r.target_type = 'post' AND r.target_id = cp.id
+                 LEFT JOIN comments c ON r.target_type = 'comment' AND r.target_id = c.id
+                 LEFT JOIN reviews rv ON r.target_type = 'review' AND r.target_id = rv.id
+                 LEFT JOIN users owner ON owner.id = CASE r.target_type
+                   WHEN 'product' THEN p.seller_id
+                   WHEN 'post' THEN cp.author_id
+                   WHEN 'comment' THEN c.author_id
+                   WHEN 'review' THEN rv.reviewer_id
+                   WHEN 'user' THEN r.target_id
+                   ELSE NULL
+                 END
                  WHERE 1=1`;
     const params = [];
     if (status) {

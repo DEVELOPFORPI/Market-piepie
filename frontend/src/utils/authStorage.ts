@@ -15,14 +15,65 @@ const GUEST_USER_STORAGE_KEY = 'marketpiepie_guest_user_id';
 /** Pi-verified user: persisted across sessions in localStorage */
 const PI_USER_KEY = 'marketpiepie_pi_user_id';
 const PI_SESSION_TOKEN_KEY = 'marketpiepie_pi_session_token';
+const SUSPENDED_ACCOUNT_KEY = 'marketpiepie_account_suspended';
 
 /** Current logged-in user id */
 export const getCurrentUserId = (): string | null => {
   return sessionStorage.getItem(AUTH_KEY);
 };
 
+export function isSuspendedAccount(): boolean {
+  try {
+    return sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY) != null;
+  } catch {
+    return false;
+  }
+}
+
+export function getSuspensionReason(): string | null {
+  try {
+    const raw = sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { reason?: string | null };
+    return parsed.reason?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSuspendedAccount(reason?: string | null): void {
+  try {
+    sessionStorage.setItem(SUSPENDED_ACCOUNT_KEY, JSON.stringify({ reason: reason || null }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSuspendedAccount(): void {
+  try {
+    sessionStorage.removeItem(SUSPENDED_ACCOUNT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 정지 계정을 게스트 세션으로 내린다. */
+export async function enterSuspendedGuestSession(reason?: string | null): Promise<void> {
+  setSuspendedAccount(reason);
+  if (isGuestUser(getCurrentUserId())) {
+    if (!getSessionToken()) {
+      await ensureImplicitSession({ allowAutoGuest: true });
+    }
+    return;
+  }
+  logout();
+  clearImplicitSessionSkip();
+  await ensureImplicitSession({ allowAutoGuest: true });
+}
+
 /** Log in */
 export const login = (userId: string, isPiUser = false) => {
+  if (!userId.startsWith('guest_')) clearSuspendedAccount();
   sessionStorage.setItem(AUTH_KEY, userId);
   // Each successful login starts a new popup-viewing session.
   sessionStorage.removeItem(HOME_PROMO_SHOWN_SESSION_KEY);
@@ -135,7 +186,10 @@ export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptio
   await requestDevSessionToken(finalId);
 };
 
-async function requestDevSessionToken(userId: string): Promise<void> {
+export async function requestDevSessionToken(userId: string): Promise<{
+  accountStatus?: string;
+  suspensionReason?: string | null;
+}> {
   try {
     const isGuest = userId.startsWith('guest_');
     const preset = USER_PRESETS[userId];
@@ -153,8 +207,13 @@ async function requestDevSessionToken(userId: string): Promise<void> {
       setSessionToken(data.sessionToken);
       console.log('[auth] session token acquired for', userId);
     }
+    return {
+      accountStatus: data.accountStatus,
+      suspensionReason: data.suspensionReason ?? null,
+    };
   } catch {
     console.warn('[auth] session request failed');
+    return {};
   }
 }
 

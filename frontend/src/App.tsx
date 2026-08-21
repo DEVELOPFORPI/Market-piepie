@@ -58,6 +58,7 @@ import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
+import { applySuspendedAccess } from './utils/guestGate';
 import { checkMyProfileInDB, initDBSync, resetLocalCacheForIncompleteProfile, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
 import { isApiRateLimited } from './utils/api';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
@@ -172,6 +173,15 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     const kick = async () => {
       await ensureImplicitSession();
       const userId = getCurrentUserId() || undefined;
+      if (userId && !userId.startsWith('guest_')) {
+        const accountRes = await api.get<{ account_status?: string; suspension_reason?: string | null }>(`/api/users/${userId}`);
+        if (accountRes.ok && accountRes.data?.account_status === 'suspended') {
+          await applySuspendedAccess(accountRes.data.suspension_reason);
+          initDBSync(undefined);
+          connectChatSocket();
+          return;
+        }
+      }
       if (userId && !userId.startsWith('guest_') && !isTestLoginEnabled()) {
         const profileStatus = await checkMyProfileInDB(userId);
         if (profileStatus === 'incomplete' && !isOnboardingExemptPath(window.location.pathname)) {

@@ -25,6 +25,9 @@ export const Search: React.FC = () => {
   const [listingType, setListingType] = useState<FilterListingType>('all');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [draftListingType, setDraftListingType] = useState<FilterListingType>('all');
+  const [draftMinPrice, setDraftMinPrice] = useState('');
+  const [draftMaxPrice, setDraftMaxPrice] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
@@ -78,7 +81,12 @@ export const Search: React.FC = () => {
             </svg>
           </div>
           <button
-            onClick={() => setShowFilter(true)}
+            onClick={() => {
+              setDraftListingType(listingType);
+              setDraftMinPrice(minPrice);
+              setDraftMaxPrice(maxPrice);
+              setShowFilter(true);
+            }}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             {t('filter')}
@@ -157,16 +165,16 @@ export const Search: React.FC = () => {
                   key={value}
                   type="button"
                   onClick={() => {
-                    setListingType(value);
+                    setDraftListingType(value);
                     if (value === 'free') {
-                      setMinPrice('');
-                      setMaxPrice('');
+                      setDraftMinPrice('');
+                      setDraftMaxPrice('');
                     }
                   }}
                   className={`rounded-full px-4 py-2 text-sm font-medium ${
-                    listingType === value ? 'text-white' : 'bg-gray-100 text-gray-700'
+                    draftListingType === value ? 'text-white' : 'bg-gray-100 text-gray-700'
                   }`}
-                  style={listingType === value ? { backgroundColor: '#00A8A3' } : undefined}
+                  style={draftListingType === value ? { backgroundColor: '#00A8A3' } : undefined}
                 >
                   {t(labelKey)}
                 </button>
@@ -174,24 +182,24 @@ export const Search: React.FC = () => {
             </div>
           </div>
 
-          <div className={listingType === 'free' ? 'opacity-50' : undefined}>
+          <div className={draftListingType === 'free' ? 'opacity-50' : undefined}>
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('priceRange')}</h3>
             <div className="flex items-center gap-1">
               <input
                 type="number"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
+                value={draftMinPrice}
+                onChange={(e) => setDraftMinPrice(e.target.value)}
                 placeholder={t('min')}
-                disabled={listingType === 'free'}
+                disabled={draftListingType === 'free'}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-gray-500 shrink-0">~</span>
               <input
                 type="number"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
+                value={draftMaxPrice}
+                onChange={(e) => setDraftMaxPrice(e.target.value)}
                 placeholder={t('max')}
-                disabled={listingType === 'free'}
+                disabled={draftListingType === 'free'}
                 className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-gray-500 shrink-0">Pi</span>
@@ -201,16 +209,21 @@ export const Search: React.FC = () => {
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => {
-                setListingType('all');
-                setMinPrice('');
-                setMaxPrice('');
+                setDraftListingType('all');
+                setDraftMinPrice('');
+                setDraftMaxPrice('');
               }}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium"
             >
               {t('reset')}
             </button>
             <button
-              onClick={() => setShowFilter(false)}
+              onClick={() => {
+                setListingType(draftListingType);
+                setMinPrice(draftListingType === 'free' ? '' : draftMinPrice);
+                setMaxPrice(draftListingType === 'free' ? '' : draftMaxPrice);
+                setShowFilter(false);
+              }}
               className="flex-1 px-4 py-3 text-white rounded-lg font-medium"
               style={{ backgroundColor: '#00A8A3' }}
             >

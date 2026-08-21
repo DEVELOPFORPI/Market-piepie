@@ -63,6 +63,12 @@ async function request<T>(
 
     const data = await res.json().catch(() => null);
 
+    if (data?.error === 'Account suspended') {
+      void import('@/utils/guestGate').then(({ applySuspendedAccess }) => {
+        void applySuspendedAccess(undefined, { prompt: false });
+      });
+    }
+
     return {
       ok: res.ok,
       data: res.ok ? (data as T) : undefined,

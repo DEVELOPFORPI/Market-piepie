@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface Post {
   id: string;
@@ -63,6 +64,7 @@ export const AdminPosts: React.FC = () => {
     load();
   };
 
+  const paged = useAdminPage(posts, `${search}|${categoryFilter}|${posts.length}`);
   const disputeCount = posts.filter((p) => p.category === '분쟁').length;
 
   return (
@@ -109,7 +111,7 @@ export const AdminPosts: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {posts.map((p) => (
+          {paged.items.map((p) => (
             <div key={p.id} onClick={() => setSelected(p)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-3">
@@ -138,6 +140,14 @@ export const AdminPosts: React.FC = () => {
               </div>
             </div>
           ))}
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </div>
       )}
 

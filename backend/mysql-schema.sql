@@ -157,6 +157,9 @@ CREATE TABLE IF NOT EXISTS community_posts (
   longitude DECIMAL(11,8),
   order_id VARCHAR(191),
   attached_product_id VARCHAR(191),
+  admin_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_community_posts_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -187,6 +190,9 @@ CREATE TABLE IF NOT EXISTS comments (
   author_id VARCHAR(191),
   content TEXT NOT NULL,
   parent_id VARCHAR(191),
+  admin_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE,
   CONSTRAINT fk_comments_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL,
