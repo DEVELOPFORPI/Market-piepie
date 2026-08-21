@@ -114,6 +114,11 @@ export function isDisputeOpenedTimeline(description: string): boolean {
   );
 }
 
+export function isAdminResolvedTimeline(description: string): boolean {
+  const t = (description ?? '').trim().replace(/\s+/g, ' ');
+  return t === 'Dispute resolved by admin' || t === '관리자 분쟁 해결';
+}
+
 export function isDisputeResolvedTimeline(description: string): boolean {
   const t = (description ?? '').trim().replace(/\s+/g, ' ');
   return (
@@ -164,6 +169,7 @@ export function mergeResolvedDisputeTimeline<T extends { id: string; timestamp: 
   disputes: PartyDisputeRef[],
 ): T[] {
   const events = [...timeline];
+  const hasAdminResolve = events.some((e) => isAdminResolvedTimeline(e.description));
   const existingResolve = events
     .map((e, i) => ({ i, t: new Date(e.timestamp).getTime(), match: isDisputeResolvedTimeline(e.description) }))
     .filter((e) => e.match && !Number.isNaN(e.t));
@@ -171,6 +177,7 @@ export function mergeResolvedDisputeTimeline<T extends { id: string; timestamp: 
 
   for (const d of disputes) {
     if (d.status !== 'RESOLVED' || !d.resolvedAt) continue;
+    if (hasAdminResolve) continue;
     const t = new Date(d.resolvedAt).getTime();
     if (Number.isNaN(t)) continue;
     const claimed = existingResolve.find((e) => !used.has(e.i) && Math.abs(e.t - t) < 180_000);
@@ -211,6 +218,7 @@ export function labelDisputeTimelineByParty<T extends { id: string; timestamp: s
       if (!d) return event;
       return { ...event, description: disputeOpenedTimelineText(disputePartyRole(d)) };
     }
+    if (isAdminResolvedTimeline(event.description)) return event;
     if (isDisputeResolvedTimeline(event.description)) {
       const d = claimNearest(
         resolvedDisputes,
