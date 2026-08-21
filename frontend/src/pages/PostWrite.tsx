@@ -86,11 +86,13 @@ export const PostWrite: React.FC = () => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
-    if (images.length + files.length > 5) {
+    const room = 5 - images.length;
+    if (room <= 0) {
       showToast(t('upTo5ImagesAlert'));
       return;
     }
-    const previews = createLocalPreviewUrls(files);
+    if (files.length > room) showToast(t('upTo5ImagesAlert'));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
     if (previews.length === 0) {
       showToast(t('couldNotUpload'));
       return;

@@ -23,6 +23,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import { showToast } from '@/utils/toast';
+import { getDisplayImageUrl } from '@/utils/imageUrl';
 
 const fallbackProduct: Product = {
   id: '0',
@@ -96,6 +97,10 @@ export const ProductDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const isMine = product.seller?.id === getCurrentUserId();
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [id]);
 
   useEffect(() => {
     if (!id) { setLoading(false); setNotFound(true); return; }
@@ -466,11 +471,25 @@ export const ProductDetail: React.FC = () => {
 
       {/* Gallery + like count */}
       <div className="relative w-full aspect-square bg-gray-200">
-        <img
-          src={product.images[currentImageIndex] || '/placeholder.jpg'}
-          alt={product.title}
-          className="w-full h-full object-cover"
-        />
+        <div
+          className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            if (!el.clientWidth) return;
+            const next = Math.round(el.scrollLeft / el.clientWidth);
+            if (next !== currentImageIndex) setCurrentImageIndex(next);
+          }}
+        >
+          {(product.images.length > 0 ? product.images : ['/placeholder.jpg']).map((img, idx) => (
+            <img
+              key={`${img}-${idx}`}
+              src={getDisplayImageUrl(img)}
+              alt={product.title}
+              draggable={false}
+              className="h-full w-full flex-shrink-0 snap-center snap-always object-cover"
+            />
+          ))}
+        </div>
         <button
           type="button"
           onClick={(e) => {
@@ -485,43 +504,18 @@ export const ProductDetail: React.FC = () => {
           </svg>
           <span className="text-sm font-medium text-gray-700">{likeCount}</span>
         </button>
-        {product.images.length > 1 && (
-          <>
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-1.5 bg-black/50 rounded-full px-3 py-1">
-              {product.images.map((_, idx) => (
-                <div
-                  key={idx}
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    idx === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                  }`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() =>
-                setCurrentImageIndex(
-                  (prev) => (prev - 1 + product.images.length) % product.images.length
-                )
-              }
-              className="absolute left-4 top-1/2 transform -translate-y-1/2 p-2 bg-black/50 rounded-full text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={() =>
-                setCurrentImageIndex((prev) => (prev + 1) % product.images.length)
-              }
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 p-2 bg-black/50 rounded-full text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </>
-        )}
       </div>
+      {product.images.length > 1 && (
+        <div className="flex justify-center gap-1.5 pt-2">
+          {product.images.map((_, idx) => (
+            <div
+              key={idx}
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: idx === currentImageIndex ? '#00A8A3' : '#d1d5db' }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Seller row */}
       <div className="px-4 pt-4">

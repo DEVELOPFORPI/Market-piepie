@@ -150,11 +150,13 @@ export const Register: React.FC = () => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
-    if (images.length + files.length > MAX_IMAGES) {
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
       showToast(t('upToPhotos', { n: MAX_IMAGES }));
       return;
     }
-    const previews = createLocalPreviewUrls(files);
+    if (files.length > room) showToast(t('upToPhotos', { n: MAX_IMAGES }));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
     if (previews.length === 0) {
       showToast(t('couldNotUpload'));
       return;
