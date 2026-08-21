@@ -198,6 +198,7 @@ export const PostDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
   const [publicDispute, setPublicDispute] = useState<Dispute | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const isMine = post?.author.id === getCurrentUserId();
   const currentUserId = getCurrentUserId();
@@ -303,6 +304,10 @@ export const PostDetail: React.FC = () => {
     linkedDisputeStatus !== 'RESOLVED' &&
     linkedDispute?.sellerId === getCurrentUserId();
   const canEditOrDeletePost = isMine && !isSellerBlockedFromEdit && !isAutoCreatedDisputePost;
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [id]);
 
   useEffect(() => {
     if (id && !isDisputePost) {
@@ -675,15 +680,11 @@ export const PostDetail: React.FC = () => {
           </div>
         )}
 
-        {isAutoCreatedDisputePost && (
+        {isAutoCreatedDisputePost && (linkedDisputeStatus === 'RESOLVED' || (isDisputeParty && disputePath)) && (
           <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
-            {linkedDisputeStatus === 'RESOLVED' ? (
+            {linkedDisputeStatus === 'RESOLVED' && (
               <p className={`text-sm font-medium ${isDisputeParty ? 'mb-2' : ''} text-green-800`}>
                 {t('disputePostResolved')}
-              </p>
-            ) : (
-              <p className={`text-sm text-gray-700 ${isDisputeParty ? 'mb-2' : ''}`}>
-                {t('disputeShareView')}
               </p>
             )}
             {isDisputeParty && disputePath && (
@@ -702,14 +703,40 @@ export const PostDetail: React.FC = () => {
           </div>
         )}
 
-        {/* Images */}
         {post.images && post.images.length > 0 && (
-          <div className="space-y-2">
-            {post.images.map((img, idx) => (
-              <div key={idx} className="w-full rounded-lg overflow-hidden bg-gray-200">
-                <img src={getDisplayImageUrl(img)} alt={`Post image ${idx + 1}`} className="w-full h-auto object-cover" />
+          <div>
+            <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
+              <div
+                className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.clientWidth) return;
+                  const next = Math.round(el.scrollLeft / el.clientWidth);
+                  if (next !== currentImageIndex) setCurrentImageIndex(next);
+                }}
+              >
+                {post.images.map((img, idx) => (
+                  <img
+                    key={`${img}-${idx}`}
+                    src={getDisplayImageUrl(img)}
+                    alt={`Post image ${idx + 1}`}
+                    draggable={false}
+                    className="h-full w-full flex-shrink-0 snap-center snap-always object-cover"
+                  />
+                ))}
               </div>
-            ))}
+            </div>
+            {post.images.length > 1 && (
+              <div className="flex justify-center gap-1.5 pt-2">
+                {post.images.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: idx === currentImageIndex ? '#00A8A3' : '#d1d5db' }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
