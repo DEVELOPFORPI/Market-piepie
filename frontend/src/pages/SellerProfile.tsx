@@ -359,18 +359,22 @@ export const SellerProfile: React.FC = () => {
               shareCount={id ? getShareCountByUserId(id) : 0}
               disputeCount={disputes.length}
               showDisputes
-              ratingAccessory={<KYCBadge status={seller.kycStatus} userId={seller.id} />}
+              ratingAccessory={
+                <>
+                  <KYCBadge status={seller.kycStatus} userId={seller.id} />
+                  {seller.activityRegion && (
+                    <span className="min-w-0 truncate text-xs text-gray-500">
+                      {seller.activityRegion}
+                    </span>
+                  )}
+                </>
+              }
             />
           </div>
         </div>
-        {(seller.bio || seller.activityRegion) && (
-          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
-            {seller.bio && (
-              <p className="text-sm text-gray-600 leading-relaxed">{seller.bio}</p>
-            )}
-            {seller.activityRegion && (
-              <p className="text-xs text-gray-500">{seller.activityRegion}</p>
-            )}
+        {seller.bio && (
+          <div className="mt-3 border-t border-gray-100 pt-3">
+            <p className="text-sm leading-relaxed text-gray-600">{seller.bio}</p>
           </div>
         )}
       </div>

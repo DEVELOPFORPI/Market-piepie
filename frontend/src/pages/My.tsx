@@ -194,8 +194,17 @@ export const My: React.FC = () => {
               disputeCount={getCurrentUserId() ? getDisputeCountByUserId(getCurrentUserId()!) : 0}
               showDisputes
               ratingAccessory={
-                !isGuestUser() ? (
-                  <KYCBadge status={user.kycStatus} userId={getCurrentUserId() ?? undefined} />
+                !isGuestUser() || user.activityRegion ? (
+                  <>
+                    {!isGuestUser() && (
+                      <KYCBadge status={user.kycStatus} userId={getCurrentUserId() ?? undefined} />
+                    )}
+                    {user.activityRegion && (
+                      <span className="min-w-0 truncate text-xs text-gray-500">
+                        {user.activityRegion}
+                      </span>
+                    )}
+                  </>
                 ) : undefined
               }
             />
