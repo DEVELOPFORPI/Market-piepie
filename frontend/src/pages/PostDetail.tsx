@@ -680,30 +680,7 @@ export const PostDetail: React.FC = () => {
           </div>
         )}
 
-        {isAutoCreatedDisputePost && (linkedDisputeStatus === 'RESOLVED' || (isDisputeParty && disputePath)) && (
-          <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
-            {linkedDisputeStatus === 'RESOLVED' && (
-              <p className={`text-sm font-medium ${isDisputeParty ? 'mb-2' : ''} text-green-800`}>
-                {t('disputePostResolved')}
-              </p>
-            )}
-            {isDisputeParty && disputePath && (
-              <button
-                type="button"
-                onClick={() => navigate(disputePath)}
-                className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${
-                  linkedDisputeStatus === 'RESOLVED'
-                    ? 'border border-green-300 text-green-700 hover:bg-green-50'
-                    : 'border border-red-300 text-red-700 hover:bg-red-50'
-                }`}
-              >
-                {t('disputeView')}
-              </button>
-            )}
-          </div>
-        )}
-
-        {post.images && post.images.length > 0 && (
+        {!isAutoCreatedDisputePost && post.images && post.images.length > 0 && (
           <div>
             <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
               <div
@@ -764,6 +741,67 @@ export const PostDetail: React.FC = () => {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {isAutoCreatedDisputePost && post.images && post.images.length > 0 && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2">{t('evidence')}</p>
+            <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
+              <div
+                className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.clientWidth) return;
+                  const next = Math.round(el.scrollLeft / el.clientWidth);
+                  if (next !== currentImageIndex) setCurrentImageIndex(next);
+                }}
+              >
+                {post.images.map((img, idx) => (
+                  <img
+                    key={`${img}-${idx}`}
+                    src={getDisplayImageUrl(img)}
+                    alt={t('evidenceAlt', { n: idx + 1 })}
+                    draggable={false}
+                    className="h-full w-full flex-shrink-0 snap-center snap-always object-cover"
+                  />
+                ))}
+              </div>
+            </div>
+            {post.images.length > 1 && (
+              <div className="flex justify-center gap-1.5 pt-2">
+                {post.images.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: idx === currentImageIndex ? '#00A8A3' : '#d1d5db' }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isAutoCreatedDisputePost && (linkedDisputeStatus === 'RESOLVED' || (isDisputeParty && disputePath)) && (
+          <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+            {linkedDisputeStatus === 'RESOLVED' && (
+              <p className={`text-sm font-medium ${isDisputeParty ? 'mb-2' : ''} text-green-800`}>
+                {t('disputePostResolved')}
+              </p>
+            )}
+            {isDisputeParty && disputePath && (
+              <button
+                type="button"
+                onClick={() => navigate(disputePath)}
+                className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${
+                  linkedDisputeStatus === 'RESOLVED'
+                    ? 'border border-green-300 text-green-700 hover:bg-green-50'
+                    : 'border border-red-300 text-red-700 hover:bg-red-50'
+                }`}
+              >
+                {t('disputeView')}
+              </button>
+            )}
           </div>
         )}
 
