@@ -3746,7 +3746,7 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
         reason,
         action,
         description,
-        evidence || [],
+        Array.isArray(evidence) ? evidence.slice(0, 5) : [],
       ],
       "disputes",
       "order_id=$1 AND opened_by_user_id=$2",

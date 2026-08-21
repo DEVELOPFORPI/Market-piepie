@@ -33,6 +33,8 @@ import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { scrollAppToTop } from '@/utils/appScroll';
 import { showToast } from '@/utils/toast';
 
+const MAX_EVIDENCE_IMAGES = 5;
+
 const buyerDisputeReasons = [
   'Listing mismatch',
   'Not received',
@@ -228,7 +230,13 @@ export const Dispute: React.FC = () => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
-    const previews = createLocalPreviewUrls(files);
+    const room = MAX_EVIDENCE_IMAGES - evidence.length;
+    if (room <= 0) {
+      showToast(t('upTo5ImagesAlert'));
+      return;
+    }
+    if (files.length > room) showToast(t('upTo5ImagesAlert'));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
     if (previews.length === 0) {
       showToast(t('couldNotUpload'));
       return;
@@ -600,7 +608,9 @@ export const Dispute: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('evidence')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t('evidence')} {evidence.length}/{MAX_EVIDENCE_IMAGES}
+              </label>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 {evidence.map((img, idx) => (
                   <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
@@ -618,18 +628,20 @@ export const Dispute: React.FC = () => {
                     </button>
                   </div>
                 ))}
-                <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </label>
+                {evidence.length < MAX_EVIDENCE_IMAGES && (
+                  <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </label>
+                )}
               </div>
             </div>
           </>
