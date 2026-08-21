@@ -19,7 +19,7 @@ import { addUserPost } from '@/utils/communityStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { addNotification } from '@/utils/notificationStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { syncDisputesFromDB, syncOrdersFromDB } from '@/utils/dbSync';
 import { labelTradeMethod, NOTIFY_DISPUTE_FILED } from '@/locale/enUI';
@@ -224,25 +224,23 @@ export const Dispute: React.FC = () => {
     }
   }, [order, orderId, navigate, t]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    e.target.value = '';
     if (files.length === 0) return;
-    setUploadingEvidence(true);
-    try {
-      const urls = await uploadImagesToR2(files, { folder: 'disputes' });
-      setEvidence((prev) => [...prev, ...urls]);
-    } catch {
+    const previews = createLocalPreviewUrls(files);
+    if (previews.length === 0) {
       showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingEvidence(false);
-      e.target.value = '';
+      return;
     }
+    setEvidence((prev) => [...prev, ...previews]);
   };
 
   const handleSubmit = async () => {
     if (!orderId || !order) return;
 
     let evidenceToSave: string[] = [];
+    setUploadingEvidence(true);
     try {
       evidenceToSave = evidence.length > 0
         ? await uploadImageReferencesToR2(evidence, { folder: 'disputes' })
@@ -250,6 +248,8 @@ export const Dispute: React.FC = () => {
     } catch {
       showToast(t('couldNotUpload'));
       return;
+    } finally {
+      setUploadingEvidence(false);
     }
     const currentUserId = getCurrentUserId();
     const isSellerOpener = currentUserId === order.seller.id;
@@ -313,6 +313,7 @@ export const Dispute: React.FC = () => {
       showToast(t('disputeFiledButPostFailed'));
     }
 
+    evidence.forEach(revokeLocalPreviewUrl);
     setDispute(newDispute);
   };
 
@@ -605,7 +606,10 @@ export const Dispute: React.FC = () => {
                   <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
                     <img src={getDisplayImageUrl(img)} alt={t('evidenceAlt', { n: idx + 1 })} className="w-full h-full object-cover" />
                     <button
-                      onClick={() => setEvidence(evidence.filter((_, i) => i !== idx))}
+                      onClick={() => {
+                        revokeLocalPreviewUrl(evidence[idx]);
+                        setEvidence(evidence.filter((_, i) => i !== idx));
+                      }}
                       className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

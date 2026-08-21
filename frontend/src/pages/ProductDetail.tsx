@@ -537,9 +537,11 @@ export const ProductDetail: React.FC = () => {
           <h1 className="text-xl font-bold text-gray-900 flex-1">{product.title}</h1>
           {!isMine && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
-                {labelProductAvailability(product)}
-              </Badge>
+              {!(isFreeShareListing(product) && product.status === PRODUCT_STATUS_VALUE.FOR_SALE) && (
+                <Badge variant={product.status === PRODUCT_STATUS_VALUE.FOR_SALE ? 'success' : 'default'} size="sm">
+                  {labelProductAvailability(product)}
+                </Badge>
+              )}
               {publicDisputeOpen && (
                 <Badge variant="danger" size="sm">{t('inDispute')}</Badge>
               )}
@@ -550,11 +552,6 @@ export const ProductDetail: React.FC = () => {
           <span>{localizedRegion} · {relativeTimeShort(product.createdAt)}</span>
           {chatCount > 0 && <span>· {t('chatsCount', { n: chatCount })}</span>}
         </div>
-        {(product.isFreeShare || product.price === 0) && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            <Badge variant="success" size="sm">🎁 {t('freeShare')}</Badge>
-          </div>
-        )}
         {product.todayTradeAvailable && (
           <div className="flex flex-wrap gap-2 mt-2">
             <Badge variant="success" size="sm">{t('sameDayOk')}</Badge>
@@ -589,11 +586,13 @@ export const ProductDetail: React.FC = () => {
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 pt-3 pb-3 safe-area-bottom">
         <div className="flex justify-end items-baseline gap-1 mb-3">
-          <span className="text-sm text-gray-500">{t('priceLabel')}</span>
           {product.isFreeShare || product.price === 0 ? (
             <span className="text-lg font-bold text-green-600">{t('free')}</span>
           ) : (
-            <span className="text-lg font-bold text-gray-900">{product.price.toLocaleString()} PI</span>
+            <>
+              <span className="text-sm text-gray-500">{t('priceLabel')}</span>
+              <span className="text-lg font-bold text-gray-900">{product.price.toLocaleString()} PI</span>
+            </>
           )}
         </div>
         {product.adminHidden ? (

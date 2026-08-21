@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { TopBar } from '@/components/common/TopBar';
 import { getCurrentUserId } from '@/utils/authStorage';
-import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -37,43 +37,57 @@ export const InquiryWrite: React.FC = () => {
 
   const uid = getCurrentUserId();
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = (files: FileList | null) => {
     if (!files || !files.length) return;
     const room = MAX_IMAGES - images.length;
     if (room <= 0) return;
     const picks = Array.from(files).slice(0, room);
-    setUploadingImages(true);
-    try {
-      const urls = await uploadImagesToR2(picks, { folder: 'inquiries' });
-      setImages((prev) => [...prev, ...urls]);
-    } catch {
+    const previews = createLocalPreviewUrls(picks);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (previews.length === 0) {
       showToast(t('uploadImageFailed'));
-    } finally {
-      setUploadingImages(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
+    setImages((prev) => [...prev, ...previews]);
   };
 
   const removeImage = (idx: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== idx));
+    setImages((prev) => {
+      revokeLocalPreviewUrl(prev[idx]);
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   const handleSubmit = async () => {
     if (!title.trim() || !content.trim() || sending) return;
     setSending(true);
+    let imagesToSave: string[] = [];
+    try {
+      if (images.length > 0) {
+        setUploadingImages(true);
+        imagesToSave = await uploadImageReferencesToR2(images, { folder: 'inquiries' });
+      }
+    } catch {
+      setUploadingImages(false);
+      setSending(false);
+      showToast(t('uploadImageFailed'));
+      return;
+    }
+    setUploadingImages(false);
     const res = await api.post('/api/inquiries', {
       user_id: uid,
       email: email.trim() || null,
       category: category.toLowerCase().replace(/ /g, '_'),
       title: title.trim(),
       content: content.trim(),
-      images,
+      images: imagesToSave,
     });
     setSending(false);
     if (!res.ok) {
       showToast(res.error || t('submitInquiryFailed'));
       return;
     }
+    images.forEach(revokeLocalPreviewUrl);
     setDone(true);
   };
 
