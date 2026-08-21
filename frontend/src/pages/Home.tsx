@@ -249,10 +249,10 @@ export const Home: React.FC = () => {
     void refreshHomePromo();
   }, [refreshHomePromo]);
 
-  const { pull, refreshing } = usePullToRefresh(handlePullRefresh);
+  const { pull, refreshing, contentStyle } = usePullToRefresh(handlePullRefresh);
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="relative min-h-screen bg-white pb-20" style={contentStyle}>
       <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       {location.pathname === '/' && homePromoReady && homePromo.show && homePromo.popup ? (
         <HomePromoPopup popup={homePromo.popup} onClose={closeHomePromo} />
