@@ -54,6 +54,7 @@ const TEXT_LIMIT = {
   postBody: 2000,
   inquiryTitle: 40,
   inquiryContent: 1000,
+  inquiryEmail: 255,
   meetupPlace: 50,
   comment: 300,
   receiptNotes: 200,
@@ -3902,7 +3903,7 @@ app.post("/api/inquiries", requireDb, async (req, res) => {
       [
         id,
         req.authUserId,
-        email || null,
+        email ? clipText(String(email).trim(), TEXT_LIMIT.inquiryEmail) : null,
         cat,
         clipText(String(title).trim(), TEXT_LIMIT.inquiryTitle),
         clipText(String(content).trim(), TEXT_LIMIT.inquiryContent),

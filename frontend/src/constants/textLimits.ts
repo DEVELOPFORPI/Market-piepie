@@ -5,6 +5,7 @@ export const TEXT_LIMIT = {
   postBody: 2000,
   inquiryTitle: 40,
   inquiryContent: 1000,
+  inquiryEmail: 255,
   meetupPlace: 50,
   comment: 300,
   receiptNotes: 200,

@@ -9,6 +9,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { ExpandableText } from '@/components/common/ExpandableText';
 
 type TabType = 'received' | 'written';
 
@@ -142,7 +143,7 @@ export const MyReviews: React.FC = () => {
       )}
 
       {review.comment && (
-        <p className="text-sm text-gray-700 leading-relaxed">{review.comment}</p>
+        <ExpandableText text={review.comment} className="text-sm text-gray-700" />
       )}
     </div>
   );

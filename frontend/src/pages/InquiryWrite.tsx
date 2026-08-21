@@ -209,7 +209,7 @@ export const InquiryWrite: React.FC = () => {
 
         <div>
           <label className="text-sm font-medium text-gray-700 mb-1 block">{t('emailOptional')}</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <input type="email" value={email} maxLength={TEXT_LIMIT.inquiryEmail} onChange={(e) => setEmail(e.target.value)}
             placeholder={t('emailPlaceholder')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>

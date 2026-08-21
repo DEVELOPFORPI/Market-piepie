@@ -28,6 +28,7 @@ import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import { labelDisputeStoredValue, localizeDisputePostTitle } from '@/utils/disputeLabels';
 import { TEXT_LIMIT } from '@/constants/textLimits';
+import { ExpandableText } from '@/components/common/ExpandableText';
 
 const CAT_KEY: Record<string, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -143,9 +144,12 @@ const CommentTree: React.FC<{
                 </svg>
               </button>
             </div>
-            <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words">
-              {maskSensitiveContent(c.content)}
-            </p>
+            <div className="mt-2">
+              <ExpandableText
+                text={maskSensitiveContent(c.content)}
+                className="text-sm text-gray-700 break-words"
+              />
+            </div>
             <button
               type="button"
               onClick={() => onReply(c.id, c.author.nickname)}
@@ -669,15 +673,25 @@ export const PostDetail: React.FC = () => {
             {disputeBodySummary?.details && (
               <div className="text-sm text-gray-700">
                 <p className="font-medium text-gray-900 mb-1">{t('disputeDetails')}</p>
-                <p className="whitespace-pre-line text-gray-600">{maskSensitiveContent(disputeBodySummary.details)}</p>
+                <ExpandableText
+                  text={maskSensitiveContent(disputeBodySummary.details)}
+                  className="text-sm text-gray-600"
+                />
               </div>
             )}
           </div>
         ) : (
           <div className="max-w-none">
-            <p className={`whitespace-pre-line leading-relaxed ${isGeneralPost ? 'text-base text-gray-600' : 'text-sm text-gray-700'}`}>
-              {maskSensitiveContent(post.content)}
-            </p>
+            {isDisputePost ? (
+              <ExpandableText
+                text={maskSensitiveContent(post.content)}
+                className="text-sm text-gray-700"
+              />
+            ) : (
+              <p className="whitespace-pre-line leading-relaxed text-base text-gray-600">
+                {maskSensitiveContent(post.content)}
+              </p>
+            )}
           </div>
         )}
 

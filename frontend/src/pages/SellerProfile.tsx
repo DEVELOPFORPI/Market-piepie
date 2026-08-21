@@ -23,6 +23,7 @@ import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { ExpandableText } from '@/components/common/ExpandableText';
 
 interface ReviewFromDB {
   id: string;
@@ -534,7 +535,7 @@ export const SellerProfile: React.FC = () => {
                       </div>
                     )}
                     {review.comment && (
-                      <p className="text-sm text-gray-700">{review.comment}</p>
+                      <ExpandableText text={review.comment} className="text-sm text-gray-700" />
                     )}
                   </div>
                 ))}

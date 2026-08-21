@@ -33,6 +33,7 @@ import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { scrollAppToTop } from '@/utils/appScroll';
 import { showToast } from '@/utils/toast';
 import { TEXT_LIMIT } from '@/constants/textLimits';
+import { ExpandableText } from '@/components/common/ExpandableText';
 
 const MAX_EVIDENCE_IMAGES = 5;
 
@@ -465,7 +466,9 @@ export const Dispute: React.FC = () => {
                         </div>
                       )}
                       {d.description && (
-                        <p className="text-gray-700 leading-relaxed pt-1">{d.description}</p>
+                        <div className="pt-1">
+                          <ExpandableText text={d.description} />
+                        </div>
                       )}
                     </div>
                   )}
@@ -670,7 +673,7 @@ export const Dispute: React.FC = () => {
                   </div>
                   {dispute.description && (
                     <div className="pt-3 border-t border-gray-100">
-                      <p className="text-sm text-gray-700 leading-relaxed">{dispute.description}</p>
+                      <ExpandableText text={dispute.description} />
                     </div>
                   )}
                 </div>
