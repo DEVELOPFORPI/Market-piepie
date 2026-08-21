@@ -10,8 +10,8 @@ export const PullToRefreshIndicator: React.FC<PullToRefreshIndicatorProps> = ({ 
   const opacity = refreshing ? 1 : Math.min(pull / 70, 1);
   return (
     <div
-      className="fixed left-0 right-0 z-[15] flex justify-center pointer-events-none"
-      style={{ top: '3.5rem', opacity }}
+      className="pointer-events-none absolute left-0 right-0 z-[15] flex justify-center"
+      style={{ top: -36, opacity }}
     >
       <div className="flex items-center gap-2 bg-white/95 rounded-full px-3 py-1.5 shadow-sm border border-gray-100 text-xs text-gray-600">
         {refreshing ? (

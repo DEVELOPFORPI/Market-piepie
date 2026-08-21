@@ -11,7 +11,7 @@ import { getMyProducts } from '@/utils/productStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getCurrentCoordinates } from '@/utils/geoLocation';
 import { hasSensitiveContent } from '@/utils/contentFilter';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -82,23 +82,29 @@ export const PostWrite: React.FC = () => {
     return () => { cancelled = true; };
   }, [postId, navigate, t]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    e.target.value = '';
     if (files.length === 0) return;
-    if (images.length + files.length > 5) {
+    const room = 5 - images.length;
+    if (room <= 0) {
       showToast(t('upTo5ImagesAlert'));
       return;
     }
-    setUploadingImages(true);
-    try {
-      const urls = await uploadImagesToR2(files, { folder: 'posts' });
-      setImages((prev) => [...prev, ...urls]);
-    } catch {
+    if (files.length > room) showToast(t('upTo5ImagesAlert'));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
+    if (previews.length === 0) {
       showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImages(false);
-      e.target.value = '';
+      return;
     }
+    setImages((prev) => [...prev, ...previews]);
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => {
+      revokeLocalPreviewUrl(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSubmit = async () => {
@@ -124,9 +130,15 @@ export const PostWrite: React.FC = () => {
       const region = isEdit && existingForEdit?.region ? existingForEdit.region : (getRegion() || '');
       // Save coordinates; keep existing on edit
       const coords = await getCurrentCoordinates();
-      const imagesToSave = images.length > 0
-        ? await uploadImageReferencesToR2(images, { folder: 'posts' })
-        : [];
+      let imagesToSave: string[] = [];
+      if (images.length > 0) {
+        setUploadingImages(true);
+        try {
+          imagesToSave = await uploadImageReferencesToR2(images, { folder: 'posts' });
+        } finally {
+          setUploadingImages(false);
+        }
+      }
 
       const post: Post = {
         id: isEdit ? postId! : `post_${Date.now()}`,
@@ -165,6 +177,7 @@ export const PostWrite: React.FC = () => {
         await syncPostsFromDB();
         showToast(t('postPublished'));
       }
+      images.forEach(revokeLocalPreviewUrl);
       navigate('/community', { replace: true });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -250,7 +263,7 @@ export const PostWrite: React.FC = () => {
               <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
                 <img src={getDisplayImageUrl(img)} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
                 <button
-                  onClick={() => setImages(images.filter((_, i) => i !== idx))}
+                  onClick={() => removeImage(idx)}
                   className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

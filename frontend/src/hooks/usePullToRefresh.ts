@@ -1,11 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { getAppScrollTop } from '@/utils/appScroll';
 
-const THRESHOLD = 70;
-const MAX_PULL = 88;
+const THRESHOLD = 72;
+const MAX_PULL = 128;
+const REFRESH_REST = 52;
+
+function rubberBand(overscroll: number): number {
+  if (overscroll <= 0) return 0;
+  return MAX_PULL * (1 - Math.exp(-overscroll / (MAX_PULL * 1.15)));
+}
 
 export function usePullToRefresh(onRefresh: () => Promise<void>, enabled = true) {
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const startY = useRef(0);
   const pullRef = useRef(0);
   const pullingRef = useRef(false);
@@ -21,18 +29,22 @@ export function usePullToRefresh(onRefresh: () => Promise<void>, enabled = true)
     const resetPull = () => {
       pullingRef.current = false;
       pullRef.current = 0;
+      setDragging(false);
       setPull(0);
     };
 
+    const atTop = () => getAppScrollTop() <= 1;
+
     const onStart = (e: TouchEvent) => {
-      if (refreshingRef.current || window.scrollY > 1) return;
+      if (refreshingRef.current || !atTop()) return;
       startY.current = e.touches[0].clientY;
       pullingRef.current = true;
+      setDragging(true);
     };
 
     const onMove = (e: TouchEvent) => {
       if (!pullingRef.current || refreshingRef.current) return;
-      if (window.scrollY > 1) {
+      if (!atTop()) {
         resetPull();
         return;
       }
@@ -42,19 +54,20 @@ export function usePullToRefresh(onRefresh: () => Promise<void>, enabled = true)
         setPull(0);
         return;
       }
-      const dist = Math.min(dy * 0.45, MAX_PULL);
+      const dist = rubberBand(dy);
       pullRef.current = dist;
       setPull(dist);
-      if (dy > 10) e.preventDefault();
+      if (dy > 8) e.preventDefault();
     };
 
     const onEnd = async () => {
       if (!pullingRef.current || refreshingRef.current) return;
       pullingRef.current = false;
+      setDragging(false);
       const dist = pullRef.current;
       if (dist >= THRESHOLD) {
         setRefreshing(true);
-        setPull(36);
+        setPull(REFRESH_REST);
         try {
           await onRefreshRef.current();
         } finally {
@@ -78,5 +91,10 @@ export function usePullToRefresh(onRefresh: () => Promise<void>, enabled = true)
     };
   }, [enabled]);
 
-  return { pull, refreshing };
+  const contentStyle: CSSProperties = {
+    transform: pull > 0 ? `translateY(${pull}px)` : undefined,
+    transition: dragging ? 'none' : 'transform 0.22s ease-out',
+  };
+
+  return { pull, refreshing, contentStyle };
 }

@@ -5,7 +5,7 @@ import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { saveProduct, getAllProducts } from '@/utils/productStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { uploadImagesToR2, uploadImageReferencesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { getMyUser } from '@/utils/profileStorage';
 import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
@@ -146,27 +146,29 @@ export const Register: React.FC = () => {
     navigate('/region/select');
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    e.target.value = '';
     if (files.length === 0) return;
-    if (images.length + files.length > MAX_IMAGES) {
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
       showToast(t('upToPhotos', { n: MAX_IMAGES }));
       return;
     }
-    setUploadingImages(true);
-    try {
-      const urls = await uploadImagesToR2(files, { folder: 'products' });
-      setImages((prev) => [...prev, ...urls]);
-    } catch {
+    if (files.length > room) showToast(t('upToPhotos', { n: MAX_IMAGES }));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
+    if (previews.length === 0) {
       showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImages(false);
-      e.target.value = '';
+      return;
     }
+    setImages((prev) => [...prev, ...previews]);
   };
 
   const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+    setImages((prev) => {
+      revokeLocalPreviewUrl(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSubmit = async () => {
@@ -176,11 +178,14 @@ export const Register: React.FC = () => {
     }
 
     let imagesToSave: string[] = [];
+    setUploadingImages(true);
     try {
       imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
     } catch {
       showToast(t('couldNotUpload'));
       return;
+    } finally {
+      setUploadingImages(false);
     }
     if (imagesToSave.length === 0) {
       showToast(t('addOnePhoto'));
@@ -211,6 +216,7 @@ export const Register: React.FC = () => {
         showToast(t('couldNotSaveListing'));
         return;
       }
+      images.forEach(revokeLocalPreviewUrl);
     } catch (e) {
       const message = e instanceof Error ? e.message : t('couldNotSaveListing');
       showToast(message);

@@ -43,6 +43,78 @@ async function blobUrlToFile(blobUrl: string): Promise<File> {
   return new File([blob], fileNameForMime(blob.type), { type: blob.type || 'image/jpeg' });
 }
 
+const MAX_IMAGE_EDGE = 1920;
+const JPEG_QUALITY = 0.82;
+
+function scaledSize(width: number, height: number): { width: number; height: number } {
+  const edge = Math.max(width, height);
+  if (edge <= MAX_IMAGE_EDGE) return { width, height };
+  const scale = MAX_IMAGE_EDGE / edge;
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  };
+}
+
+function canvasToJpegBlob(source: CanvasImageSource, width: number, height: number): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return Promise.reject(new Error('Could not process image'));
+  ctx.drawImage(source, 0, 0, width, height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode image'))),
+      'image/jpeg',
+      JPEG_QUALITY,
+    );
+  });
+}
+
+function loadHtmlImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read image'));
+    };
+    img.src = url;
+  });
+}
+
+async function prepareImageForUpload(file: File): Promise<File> {
+  if (file.type === 'image/gif') return file;
+
+  let width = 0;
+  let height = 0;
+  let blob: Blob | null = null;
+
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      ({ width, height } = scaledSize(bitmap.width, bitmap.height));
+      blob = await canvasToJpegBlob(bitmap, width, height);
+      bitmap.close();
+    } catch {
+      blob = null;
+    }
+  }
+
+  if (!blob) {
+    const img = await loadHtmlImage(file);
+    ({ width, height } = scaledSize(img.naturalWidth || img.width, img.naturalHeight || img.height));
+    blob = await canvasToJpegBlob(img, width, height);
+  }
+
+  return new File([blob], fileNameForMime('image/jpeg'), { type: 'image/jpeg' });
+}
+
 async function authHeaders(options?: UploadImageOptions): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
 
@@ -62,12 +134,14 @@ export async function uploadImageToR2(
   file: File,
   options?: UploadImageOptions,
 ): Promise<string> {
-  if (!file.type.startsWith('image/')) {
+  if (file.type && !file.type.startsWith('image/')) {
     throw new Error('Only image files can be uploaded');
   }
 
+  const prepared = await prepareImageForUpload(file);
+
   const formData = new FormData();
-  formData.append('image', file);
+  formData.append('image', prepared);
   if (options?.folder) formData.append('folder', options.folder);
 
   const res = await fetch(`${API_BASE}/api/uploads/image`, {
@@ -82,6 +156,16 @@ export async function uploadImageToR2(
   }
 
   return data.url;
+}
+
+export function createLocalPreviewUrls(files: File[]): string[] {
+  return files
+    .filter((file) => !file.type || file.type.startsWith('image/'))
+    .map((file) => URL.createObjectURL(file));
+}
+
+export function revokeLocalPreviewUrl(url: string | undefined): void {
+  if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
 }
 
 export async function uploadImagesToR2(
