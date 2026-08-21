@@ -11,6 +11,7 @@ import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { useLanguage } from '@/hooks/useLanguage';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const MAX_IMAGES = 5;
 const REGISTER_DRAFT_KEY_PREFIX = 'pipi_register_draft_v1_';
@@ -312,12 +313,14 @@ export const Register: React.FC = () => {
         </section>
 
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">
-            {t('listingTitle')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-base font-semibold text-gray-900 mb-2">
+            <span>{t('listingTitle')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.listingTitle}</span>
           </label>
           <input
             type="text"
             value={title}
+            maxLength={TEXT_LIMIT.listingTitle}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t('listingTitlePlaceholder')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
@@ -364,11 +367,13 @@ export const Register: React.FC = () => {
         )}
 
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">
-            {t('description')} <span className="text-sm text-gray-500">{t('optional')}</span>
+          <label className="flex items-center justify-between text-base font-semibold text-gray-900 mb-2">
+            <span>{t('description')} <span className="text-sm font-normal text-gray-500">{t('optional')}</span></span>
+            <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.listingDescription}</span>
           </label>
           <textarea
             value={description}
+            maxLength={TEXT_LIMIT.listingDescription}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={t('describeItem')}
             rows={4}

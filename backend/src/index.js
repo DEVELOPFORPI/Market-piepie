@@ -47,6 +47,34 @@ function sanitize(val) {
   return val;
 }
 
+const TEXT_LIMIT = {
+  listingTitle: 40,
+  listingDescription: 2000,
+  postTitle: 40,
+  postBody: 2000,
+  inquiryTitle: 40,
+  inquiryContent: 1000,
+  meetupPlace: 50,
+  comment: 300,
+  receiptNotes: 200,
+  reviewComment: 500,
+  reportDetails: 500,
+  chatMessage: 1000,
+  disputeDetails: 1000,
+};
+
+function clipText(value, max) {
+  if (value == null) return value;
+  const s = String(value);
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+function clipUserChatContent(content, type) {
+  const kind = type || "text";
+  if (kind !== "text" && kind !== "user") return content;
+  return clipText(content, TEXT_LIMIT.chatMessage);
+}
+
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 // Browser -> Vercel rewrite -> Nginx -> Express.
@@ -2076,8 +2104,8 @@ app.post("/api/products", requireDb, requireAuth, async (req, res) => {
          is_free_share=VALUES(is_free_share), allow_offer=VALUES(allow_offer)`,
       [
         id,
-        title,
-        description,
+        clipText(title, TEXT_LIMIT.listingTitle),
+        clipText(description, TEXT_LIMIT.listingDescription),
         price,
         category,
         region,
@@ -2131,8 +2159,8 @@ app.put("/api/products/:id", requireDb, requireAuth, async (req, res) => {
        is_free_share=$11, allow_offer=$12 WHERE id=$1`,
       [
         req.params.id,
-        title,
-        description,
+        clipText(title, TEXT_LIMIT.listingTitle),
+        clipText(description, TEXT_LIMIT.listingDescription),
         price,
         category,
         region,
@@ -2460,11 +2488,11 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
         status || "PENDING_OFFER",
         proposed_price || 0,
         trade_method,
-        meetupLocation,
+        clipText(meetupLocation, TEXT_LIMIT.meetupPlace),
         meetupDateTime,
         memo,
         receipt_condition || null,
-        receipt_notes || null,
+        clipText(receipt_notes, TEXT_LIMIT.receiptNotes) || null,
         buyer_completed || false,
         seller_completed || false,
         meetup_accepted || false,
@@ -2538,7 +2566,10 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
     const vals = [req.params.id];
     const fields = {
       status: req.body.status,
-      meetup_location: meetupLocation,
+      meetup_location:
+        meetupLocation !== undefined
+          ? clipText(meetupLocation, TEXT_LIMIT.meetupPlace)
+          : undefined,
       meetup_time: meetupTimeCombined,
       tracking_number: req.body.tracking_number,
       shipping_company: req.body.shipping_company,
@@ -2553,7 +2584,10 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       shipping_proof_images: req.body.shipping_proof_images,
       memo: req.body.memo,
       receipt_condition: req.body.receipt_condition,
-      receipt_notes: req.body.receipt_notes,
+      receipt_notes:
+        req.body.receipt_notes !== undefined
+          ? clipText(req.body.receipt_notes, TEXT_LIMIT.receiptNotes)
+          : undefined,
     };
     for (const [col, val] of Object.entries(fields)) {
       if (val !== undefined) {
@@ -2907,14 +2941,14 @@ app.post(
           id,
           req.params.id,
           effectiveSenderId,
-          content,
+          clipUserChatContent(content, type),
           type || "text",
           images || [],
           order_id,
           original_price,
           proposed_price,
           offer_result,
-          meetupLocation,
+          clipText(meetupLocation, TEXT_LIMIT.meetupPlace),
           meetupTimeCombined,
         ],
         "chat_messages",
@@ -3045,8 +3079,8 @@ app.post("/api/posts", requireDb, requireAuth, async (req, res) => {
          images=VALUES(images), tags=VALUES(tags), region=VALUES(region)`,
       [
         id,
-        title,
-        content,
+        clipText(title, TEXT_LIMIT.postTitle),
+        clipText(content, TEXT_LIMIT.postBody),
         category,
         effectiveAuthorId,
         images || [],
@@ -3112,7 +3146,7 @@ app.post(
         `INSERT INTO comments (id, post_id, author_id, content, parent_id)
        VALUES ($1,$2,$3,$4,$5)
        ON DUPLICATE KEY UPDATE id=id`,
-        [id, req.params.id, author_id, content, parent_id],
+        [id, req.params.id, author_id, clipText(content, TEXT_LIMIT.comment), parent_id],
         "comments",
         "id=$1",
         [id],
@@ -3519,7 +3553,7 @@ app.post("/api/reviews", requireDb, requireAuth, async (req, res) => {
         order_id,
         rating,
         tags || [],
-        comment,
+        clipText(comment, TEXT_LIMIT.reviewComment),
         product_title,
         product_image,
       ],
@@ -3745,7 +3779,7 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
         req.authUserId,
         reason,
         action,
-        description,
+        clipText(description, TEXT_LIMIT.disputeDetails),
         Array.isArray(evidence) ? evidence.slice(0, 5) : [],
       ],
       "disputes",
@@ -3870,8 +3904,8 @@ app.post("/api/inquiries", requireDb, async (req, res) => {
         req.authUserId,
         email || null,
         cat,
-        String(title).trim(),
-        String(content).trim(),
+        clipText(String(title).trim(), TEXT_LIMIT.inquiryTitle),
+        clipText(String(content).trim(), TEXT_LIMIT.inquiryContent),
         imgs,
       ],
       "inquiries",
@@ -4606,7 +4640,9 @@ app.post("/api/reports", requireDb, requireAuth, async (req, res) => {
         target_type,
         target_id,
         String(reason).trim(),
-        description ? String(description).trim() : null,
+        description
+          ? clipText(String(description).trim(), TEXT_LIMIT.reportDetails)
+          : null,
       ],
       "reports",
     );
@@ -5314,14 +5350,17 @@ io.on("connection", async (socket) => {
             message.id,
             roomId,
             claimedSender === "system" ? "system" : userId,
-            message.content,
+            clipUserChatContent(message.content, message.type),
             message.type || "text",
             message.images || [],
             message.orderId || null,
             message.originalPrice ?? null,
             message.proposedPrice ?? null,
             message.offerResult || null,
-            message.meetupPlace || message.meetupLocation || null,
+            clipText(
+              message.meetupPlace || message.meetupLocation || null,
+              TEXT_LIMIT.meetupPlace,
+            ),
             message.meetupDate && message.meetupTime
               ? `${message.meetupDate} ${message.meetupTime}`
               : message.meetupTime || null,

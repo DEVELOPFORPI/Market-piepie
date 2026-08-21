@@ -28,6 +28,7 @@ import { syncDisputesFromDB } from '@/utils/dbSync';
 import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -1374,10 +1375,6 @@ export const ChatRoom: React.FC = () => {
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
               <p className="text-sm font-medium text-teal-800 flex-1 truncate">
                 {t('msgProductReserved')}
-                {' · '}
-                {meetupBannerInfo.place}
-                {' · '}
-                {[meetupBannerInfo.date, meetupBannerInfo.time].filter(Boolean).join(' ')}
               </p>
               <button
                 type="button"
@@ -1938,6 +1935,7 @@ export const ChatRoom: React.FC = () => {
             <input
               type="text"
               value={input}
+              maxLength={TEXT_LIMIT.chatMessage}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && !uploadingImages && handleSend()}
               placeholder={t('typeMessage')}

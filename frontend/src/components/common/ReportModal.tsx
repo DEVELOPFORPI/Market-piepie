@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { showToast } from '@/utils/toast';
 import { ModalShell } from '@/components/common/ModalShell';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment';
 
@@ -217,11 +218,13 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
             </div>
 
             <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Details <span className="text-gray-400 font-normal">(optional)</span>
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+                <span>Details <span className="text-gray-400 font-normal">(optional)</span></span>
+                <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.reportDetails}</span>
               </label>
               <textarea
                 value={description}
+                maxLength={TEXT_LIMIT.reportDetails}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Add any context that helps us review faster"

@@ -10,6 +10,7 @@ import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** 24h H:MM or HH:MM (built from English AM/PM selects) */
@@ -253,12 +254,14 @@ export const MeetupSchedule: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            {t('meetupPlace')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+            <span>{t('meetupPlace')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{place.length}/{TEXT_LIMIT.meetupPlace}</span>
           </label>
           <input
             type="text"
             value={place}
+            maxLength={TEXT_LIMIT.meetupPlace}
             onChange={(e) => setPlace(e.target.value)}
             placeholder={t('meetupPlacePh')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"

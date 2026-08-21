@@ -32,6 +32,7 @@ import { localeForAppLanguage } from '@/utils/languageStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { scrollAppToTop } from '@/utils/appScroll';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const MAX_EVIDENCE_IMAGES = 5;
 
@@ -595,11 +596,13 @@ export const Dispute: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('detailsLabel')} <span className="text-red-500">*</span>
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+                <span>{t('detailsLabel')} <span className="text-red-500">*</span></span>
+                <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.disputeDetails}</span>
               </label>
               <textarea
                 value={description}
+                maxLength={TEXT_LIMIT.disputeDetails}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t('detailsPlaceholder')}
                 rows={5}

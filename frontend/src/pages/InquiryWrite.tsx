@@ -8,6 +8,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
@@ -157,15 +158,21 @@ export const InquiryWrite: React.FC = () => {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelTitle')}</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+            <span>{t('labelTitle')}</span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.inquiryTitle}</span>
+          </label>
+          <input type="text" value={title} maxLength={TEXT_LIMIT.inquiryTitle} onChange={(e) => setTitle(e.target.value)}
             placeholder={t('inquiryTitlePh')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelContent')}</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)}
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+            <span>{t('labelContent')}</span>
+            <span className="text-xs font-normal text-gray-400">{content.length}/{TEXT_LIMIT.inquiryContent}</span>
+          </label>
+          <textarea value={content} maxLength={TEXT_LIMIT.inquiryContent} onChange={(e) => setContent(e.target.value)}
             placeholder={t('inquiryContentPh')}
             rows={6}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />

@@ -27,6 +27,7 @@ import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import { labelDisputeStoredValue, localizeDisputePostTitle } from '@/utils/disputeLabels';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const CAT_KEY: Record<string, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -884,6 +885,7 @@ export const PostDetail: React.FC = () => {
           <input
             type="text"
             value={commentText}
+            maxLength={TEXT_LIMIT.comment}
             onFocus={() => { guestGuard('comment'); }}
             onChange={(e) => setCommentText(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSubmitComment()}

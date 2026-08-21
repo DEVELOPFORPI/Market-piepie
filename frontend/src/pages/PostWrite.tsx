@@ -17,6 +17,7 @@ import { hasSensitiveContent } from '@/utils/contentFilter';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -229,12 +230,14 @@ export const PostWrite: React.FC = () => {
 
         {/* Title */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            {t('titleLabel')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+            <span>{t('titleLabel')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.postTitle}</span>
           </label>
           <input
             type="text"
             value={title}
+            maxLength={TEXT_LIMIT.postTitle}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t('titlePlaceholder')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
@@ -243,11 +246,13 @@ export const PostWrite: React.FC = () => {
 
         {/* Content */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            {t('bodyLabel')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+            <span>{t('bodyLabel')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{content.length}/{TEXT_LIMIT.postBody}</span>
           </label>
           <textarea
             value={content}
+            maxLength={TEXT_LIMIT.postBody}
             onChange={(e) => setContent(e.target.value)}
             placeholder={t('bodyPlaceholder')}
             rows={8}
