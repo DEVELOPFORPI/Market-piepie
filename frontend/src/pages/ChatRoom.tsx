@@ -302,8 +302,9 @@ export const ChatRoom: React.FC = () => {
 
   const checkProductDeleted = () => {
     if (room?.product?.id) {
+      // 관리자가 숨긴 상품은 로컬 목록에서도 빠지지만 삭제된 것은 아니다.
       const exists = getProductById(room.product.id);
-      setIsProductDeleted(!exists);
+      setIsProductDeleted(!exists && !room.productAdminHidden);
     }
   };
 
@@ -653,6 +654,8 @@ export const ChatRoom: React.FC = () => {
   const isListingSold = listingProduct?.status === PRODUCT_STATUS_VALUE.SOLD;
   const isSoldToOtherParty = !!(isListingSold && !isTradeCompleteForThisChat);
   const roomEnded = isChatRoomEnded(room);
+  /** 관리자가 숨긴 상품: 대화는 그대로 두고 새 거래만 막는다 */
+  const productAdminHidden = !!room?.productAdminHidden;
 
   const completedTradeReviewChips = (orderId: string): ChatChipAction[] => {
     if (getMyReviewForOrder(orderId)) {
@@ -726,6 +729,7 @@ export const ChatRoom: React.FC = () => {
   const productForOffer = room?.product ? getProductById(room.product.id) || room.product : null;
   const canOfferPrice = !!(
     !isSoldToOtherParty
+    && !productAdminHidden
     && !isTradeCompleteForThisChat
     && !hasOpenDisputeOnOrder
     && productForOffer
@@ -847,7 +851,8 @@ export const ChatRoom: React.FC = () => {
     }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       const chips: ChatChipAction[] = [];
-      if (!hasOpenDisputeOnOrder) {
+      // 숨긴 상품은 새 주문을 시작할 수 없다 — 진행 중인 주문은 그대로 이어간다.
+      if (!hasOpenDisputeOnOrder && !(productAdminHidden && !currentOrder)) {
         chips.push({
           key: 'meetup',
           label: t('scheduleMeetup'),
@@ -1365,6 +1370,12 @@ export const ChatRoom: React.FC = () => {
           </div>
         )}
 
+        {productAdminHidden && !roomEnded && (
+          <div className="bg-amber-50 border-t border-amber-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-amber-800">{t('bannerListingAdminHidden')}</p>
+          </div>
+        )}
+
         {meetupBannerInfo
           && !isTradeCompleteForThisChat
           && !isSoldToOtherParty
@@ -1632,6 +1643,7 @@ export const ChatRoom: React.FC = () => {
               && msg.id === actionablePriceOfferMessageId
               && !meetupBannerInfo
               && !listingHeldByOtherDispute
+              && !productAdminHidden
               && !(
                 currentOrder
                 && currentOrder.status !== ORDER_STATUS_VALUE.PENDING_OFFER

@@ -210,6 +210,8 @@ export interface ChatRoom {
   lastReadAt?: Record<string, string>;
   leftUserIds?: string[];
   adminHidden?: boolean;
+  /** 상품이 관리자에 의해 숨겨진 방 — 대화는 유지하고 새 거래만 막는다 */
+  productAdminHidden?: boolean;
 }
 
 export interface Review {

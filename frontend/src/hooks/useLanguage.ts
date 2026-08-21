@@ -254,6 +254,7 @@ const CHAT_ROOM_KEYS = new Set<string>([
   'unreadFromHere',
   'bannerTradeComplete',
   'bannerListingSold',
+  'bannerListingAdminHidden',
   'bannerListingOtherDispute',
   'bannerYourDispute',
   'bannerTheirDispute',

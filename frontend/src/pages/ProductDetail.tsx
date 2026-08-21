@@ -141,7 +141,8 @@ export const ProductDetail: React.FC = () => {
           liked: false,
           isFreeShare: d.is_free_share ?? false,
           allowOffer: d.allow_offer ?? true,
-          adminHidden: Boolean(d.admin_hidden),
+          // 정지된 판매자의 상품도 내려간 것으로 다룬다 — 기존 거래만 채팅방에서 이어간다.
+          adminHidden: Boolean(d.admin_hidden) || d.seller_account_status === 'suspended',
           adminHiddenReason: d.admin_hidden_reason || undefined,
         };
         setProduct(mapped);

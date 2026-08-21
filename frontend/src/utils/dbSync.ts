@@ -980,13 +980,22 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
         mergedMap.set(id, merged);
       });
       // 생성 직후라 DB에 아직 없는 방만 잠시 유지 — DB에서 삭제된 방은 로컬에서도 제거
+      const pendingIds: string[] = [];
       existing.forEach((room) => {
         if (mergedMap.has(room.id)) return;
         const createdTs = timestampFromGeneratedId(room.id);
         if (isWithinGraceWindow(createdTs) || isWithinGraceWindow(room.lastMessageTime)) {
           mergedMap.set(room.id, room);
+          pendingIds.push(room.id);
         }
       });
+      // 유예로 남긴 방 중 서버가 이미 아는 방은 숨김·삭제된 것이므로 로컬에서도 뺀다.
+      if (pendingIds.length > 0) {
+        const known = await api.post<{ ids?: string[] }>('/api/chat-rooms/known', { ids: pendingIds });
+        if (known.ok && Array.isArray(known.data?.ids)) {
+          known.data.ids.forEach((id) => mergedMap.delete(String(id)));
+        }
+      }
       setItem('all_chatrooms', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('chatRoomsChanged'));
       window.dispatchEvent(new Event('userProfilesChanged'));
@@ -1172,6 +1181,7 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
     leftUserIds,
     adminHidden: !!row.admin_hidden,
+    productAdminHidden: !!row.product_admin_hidden,
 
     product,
 

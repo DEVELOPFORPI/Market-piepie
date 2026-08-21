@@ -2023,11 +2023,15 @@ app.get("/api/products", requireDb, async (req, res) => {
       params.push(seller_id);
       query += ` AND p.seller_id=$${params.length}`;
     }
+    // 정지된 판매자의 상품은 목록에서 내린다 — 정지 해제되면 다시 보인다.
     if (req.authUserId) {
       params.push(req.authUserId);
-      query += ` AND (p.admin_hidden = false OR p.seller_id = $${params.length})`;
+      const me = `$${params.length}`;
+      query += ` AND (p.admin_hidden = false OR p.seller_id = ${me})`;
+      query += ` AND (COALESCE(u.account_status, 'active') <> 'suspended' OR p.seller_id = ${me})`;
     } else {
       query += ` AND p.admin_hidden = false`;
+      query += ` AND COALESCE(u.account_status, 'active') <> 'suspended'`;
     }
     params.push(limit, offset);
     query += ` ORDER BY p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
@@ -2069,13 +2073,17 @@ app.get("/api/products/:id/open-buyer-dispute", requireDb, async (req, res) => {
 app.get("/api/products/:id", requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, ${jsonObjectSql("u", "users")} AS seller FROM products p
+      `SELECT p.*, u.account_status AS seller_account_status,
+              ${jsonObjectSql("u", "users")} AS seller FROM products p
        LEFT JOIN users u ON p.seller_id = u.id WHERE p.id=$1`,
       [req.params.id],
     );
     if (!rows.length)
       return res.status(404).json({ error: "Product not found" });
-    if (rows[0].admin_hidden && rows[0].seller_id !== req.authUserId) {
+    // 정지된 판매자의 상품도 숨긴 상품과 같게 다룬다 — 기존 거래 당사자만 볼 수 있다.
+    const listingBlocked =
+      rows[0].admin_hidden || rows[0].seller_account_status === "suspended";
+    if (listingBlocked && rows[0].seller_id !== req.authUserId) {
       if (!req.authUserId) {
         return res.status(404).json({ error: "Product not found" });
       }
@@ -2504,10 +2512,15 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
     );
     if (!existingOrder.rows.length && product_id) {
       const product = await pool.query(
-        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        `SELECT p.admin_hidden, u.account_status AS seller_account_status
+           FROM products p LEFT JOIN users u ON p.seller_id = u.id
+          WHERE p.id = $1 LIMIT 1`,
         [product_id],
       );
-      if (product.rows[0]?.admin_hidden) {
+      if (
+        product.rows[0]?.admin_hidden ||
+        product.rows[0]?.seller_account_status === "suspended"
+      ) {
         return res.status(409).json({ error: "This listing is hidden by admin" });
       }
     }
@@ -2728,6 +2741,9 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
   const user_id = req.query.user_id || req.authUserId;
   try {
     let query = `SELECT cr.*,
+      CASE WHEN COALESCE(p.admin_hidden, 0) = 1
+                OR su.account_status = 'suspended'
+           THEN 1 ELSE 0 END AS product_admin_hidden,
       ${jsonObjectSql("bu", "users")} AS buyer_user,
       ${jsonObjectSql("su", "users")} AS seller_user,
       ${jsonObjectSql("p", "products")} AS product_data
@@ -2756,6 +2772,30 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
       };
     });
     res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * 로컬에만 남은 채팅방이 "아직 저장 전"인지 "서버에서 사라진(숨김·삭제) 방"인지 구분한다.
+ * 서버가 아는 방 id만 돌려주므로, 목록에 없는데 여기 들어오면 로컬에서 지우면 된다.
+ */
+app.post("/api/chat-rooms/known", requireDb, requireAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.slice(0, 200).map(String).filter(Boolean)
+    : [];
+  if (!ids.length) return res.json({ ids: [] });
+  try {
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const userParam = `$${ids.length + 1}`;
+    const { rows } = await pool.query(
+      `SELECT id FROM chat_rooms
+        WHERE id IN (${placeholders})
+          AND (buyer_id = ${userParam} OR seller_id = ${userParam})`,
+      [...ids, req.authUserId],
+    );
+    res.json({ ids: rows.map((r) => String(r.id)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2842,10 +2882,15 @@ app.post("/api/chat-rooms", requireDb, requireAuth, async (req, res) => {
     );
     if (!existingRoom.rows.length && product_id) {
       const product = await pool.query(
-        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        `SELECT p.admin_hidden, u.account_status AS seller_account_status
+           FROM products p LEFT JOIN users u ON p.seller_id = u.id
+          WHERE p.id = $1 LIMIT 1`,
         [product_id],
       );
-      if (product.rows[0]?.admin_hidden) {
+      if (
+        product.rows[0]?.admin_hidden ||
+        product.rows[0]?.seller_account_status === "suspended"
+      ) {
         return res.status(409).json({ error: "This listing is hidden by admin" });
       }
     }
@@ -2957,7 +3002,7 @@ app.post(
     }
     try {
       const { rows: roomCheck } = await pool.query(
-        "SELECT buyer_id, seller_id, admin_hidden FROM chat_rooms WHERE id=$1",
+        "SELECT buyer_id, seller_id, admin_hidden, product_id FROM chat_rooms WHERE id=$1",
         [req.params.id],
       );
       if (!roomCheck.length)
@@ -2970,6 +3015,21 @@ app.post(
       }
       if (roomCheck[0].admin_hidden) {
         return res.status(409).json({ error: "This chat was hidden by an admin" });
+      }
+      // 숨긴 상품·정지된 판매자는 대화만 남기고 새 거래(가격 제안)는 막는다.
+      if (type === "price_offer" && roomCheck[0].product_id) {
+        const { rows: productRows } = await pool.query(
+          `SELECT p.admin_hidden, u.account_status AS seller_account_status
+             FROM products p LEFT JOIN users u ON p.seller_id = u.id
+            WHERE p.id = $1 LIMIT 1`,
+          [roomCheck[0].product_id],
+        );
+        if (
+          productRows[0]?.admin_hidden ||
+          productRows[0]?.seller_account_status === "suspended"
+        ) {
+          return res.status(409).json({ error: "This listing is hidden by admin" });
+        }
       }
       const effectiveSenderId =
         sender_id === "system" ? "system" : req.authUserId;
