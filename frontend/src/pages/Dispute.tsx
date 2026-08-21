@@ -376,6 +376,11 @@ export const Dispute: React.FC = () => {
   const iHaveFiled = Boolean(
     currentUserId && orderDisputes.some((d) => d.openedByUserId === currentUserId),
   );
+  const visibleDisputes = orderDisputes.filter((d) => {
+    if (!currentUserId) return true;
+    const mine = d.openedByUserId === currentUserId;
+    return viewOtherParty ? !mine : mine;
+  });
   const showRequestedActionSummary = Boolean(dispute?.action?.trim());
   const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
   const showSubmitBar = Boolean(order && !viewOtherParty && !iHaveFiled);
@@ -414,15 +419,10 @@ export const Dispute: React.FC = () => {
       />
 
       <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
-        {orderDisputes.length > 0 && (
+        {visibleDisputes.length > 0 && (
           <div className="space-y-3">
-            {[...orderDisputes]
-              .sort((a, b) => {
-                const aMine = Boolean(currentUserId && a.openedByUserId === currentUserId);
-                const bMine = Boolean(currentUserId && b.openedByUserId === currentUserId);
-                if (aMine !== bMine) return viewingOtherDispute ? (aMine ? 1 : -1) : (aMine ? -1 : 1);
-                return a.createdAt.localeCompare(b.createdAt);
-              })
+            {[...visibleDisputes]
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
               .map((d) => {
               const mine = Boolean(currentUserId && d.openedByUserId === currentUserId);
               return (
@@ -649,7 +649,7 @@ export const Dispute: React.FC = () => {
 
         {dispute && (
           <>
-            {orderDisputes.length === 0 && (
+            {visibleDisputes.length === 0 && (
               <>
                 <div className="p-4 border border-gray-200 rounded-lg space-y-3">
                   <h3 className="text-sm font-medium text-gray-700">{t('disputeSummary')}</h3>
