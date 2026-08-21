@@ -4,8 +4,16 @@ import {
   markExplicitLogout,
   isSuspendedAccount,
   getSuspensionReason,
+  getSuspendedUserId,
+  setSuspendedAccount,
+  clearSuspendedAccount,
   enterSuspendedGuestSession,
 } from '@/utils/authStorage';
+import { api } from '@/utils/api';
+import { getAppLanguage } from '@/utils/languageStorage';
+import { legalUi } from '@/i18n/legalUiMessages';
+import { commonT } from '@/i18n/commonMessages';
+import { guestGateT } from '@/i18n/guestGateMessages';
 
 export type GuestGuardReason =
   | 'chat'
@@ -28,12 +36,30 @@ export function isGuest(): boolean {
   return isGuestUser(getCurrentUserId()) || isSuspendedAccount();
 }
 
+export async function refreshSuspendedAccountStatus(): Promise<boolean> {
+  if (!isSuspendedAccount()) return false;
+  const userId = getSuspendedUserId();
+  if (!userId) return true;
+
+  const res = await api.get<{ account_status?: string; suspension_reason?: string | null }>(
+    `/api/users/${userId}`,
+  );
+  if (!res.ok) return true;
+  if (res.data?.account_status === 'suspended') {
+    setSuspendedAccount(res.data.suspension_reason, userId);
+    return true;
+  }
+  clearSuspendedAccount();
+  return false;
+}
+
 function showGateOverlay(opts: {
   title: string;
   body?: string;
   confirmLabel: string;
   cancelLabel?: string;
   onConfirm: () => void;
+  onCancel?: () => void;
 }): void {
   const existing = document.getElementById('guest-gate-overlay');
   if (existing) existing.remove();
@@ -93,7 +119,12 @@ function showGateOverlay(opts: {
   };
 
   const closeBtn = document.getElementById('guest-gate-close');
-  if (closeBtn) closeBtn.onclick = close;
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      close();
+      opts.onCancel?.();
+    };
+  }
   document.getElementById('guest-gate-login')!.onclick = () => {
     close();
     opts.onConfirm();
@@ -110,28 +141,44 @@ function escapeHtml(value: string): string {
 }
 
 export function showGuestLoginPrompt(_reason: GuestGuardReason = 'default'): void {
-  if (isSuspendedAccount()) {
+  const lang = getAppLanguage();
+
+  const showSignIn = () => {
+    showGateOverlay({
+      title: guestGateT(lang, 'signInToContinue'),
+      confirmLabel: legalUi(lang, 'signInWithPi'),
+      cancelLabel: guestGateT(lang, 'notNow'),
+      onConfirm: () => {
+        markExplicitLogout();
+        window.location.href = '/welcome';
+      },
+    });
+  };
+
+  const showSuspended = () => {
     const reason = getSuspensionReason();
     showGateOverlay({
-      title: '정지 중인 계정입니다',
+      title: guestGateT(lang, 'suspendedTitle'),
       body: reason
-        ? `사유: ${escapeHtml(reason)}<br/>지금은 둘러보기만 가능합니다.`
-        : '이 계정은 관리자에 의해 정지되어 지금은 둘러보기만 가능합니다.',
-      confirmLabel: '확인',
+        ? `${guestGateT(lang, 'suspendedReason', { reason: escapeHtml(reason) })}<br/>${guestGateT(lang, 'suspendedBrowseOnly')}`
+        : guestGateT(lang, 'suspendedBody'),
+      confirmLabel: commonT(lang, 'ok'),
       onConfirm: () => undefined,
+    });
+  };
+
+  if (isSuspendedAccount()) {
+    void refreshSuspendedAccountStatus().then((stillSuspended) => {
+      if (stillSuspended) {
+        showSuspended();
+        return;
+      }
+      showSignIn();
     });
     return;
   }
 
-  showGateOverlay({
-    title: 'Sign in to continue',
-    confirmLabel: 'Log in with Pi',
-    cancelLabel: 'Not now',
-    onConfirm: () => {
-      markExplicitLogout();
-      window.location.href = '/welcome';
-    },
-  });
+  showSignIn();
 }
 
 export async function applySuspendedAccess(

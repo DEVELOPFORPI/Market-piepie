@@ -16,6 +16,12 @@ const GUEST_USER_STORAGE_KEY = 'marketpiepie_guest_user_id';
 const PI_USER_KEY = 'marketpiepie_pi_user_id';
 const PI_SESSION_TOKEN_KEY = 'marketpiepie_pi_session_token';
 const SUSPENDED_ACCOUNT_KEY = 'marketpiepie_account_suspended';
+const SUSPENDED_USER_ID_KEY = 'marketpiepie_suspended_user_id';
+
+type SuspendedAccountState = {
+  reason?: string | null;
+  userId?: string | null;
+};
 
 /** Current logged-in user id */
 export const getCurrentUserId = (): string | null => {
@@ -34,18 +40,43 @@ export function getSuspensionReason(): string | null {
   try {
     const raw = sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { reason?: string | null };
+    const parsed = JSON.parse(raw) as SuspendedAccountState;
     return parsed.reason?.trim() || null;
   } catch {
     return null;
   }
 }
 
-export function setSuspendedAccount(reason?: string | null): void {
+export function getSuspendedUserId(): string | null {
   try {
-    sessionStorage.setItem(SUSPENDED_ACCOUNT_KEY, JSON.stringify({ reason: reason || null }));
+    const raw = sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as SuspendedAccountState;
+      if (parsed.userId && !parsed.userId.startsWith('guest_')) return parsed.userId;
+    }
   } catch {
     /* ignore */
+  }
+  try {
+    const stored = localStorage.getItem(SUSPENDED_USER_ID_KEY);
+    return stored && !stored.startsWith('guest_') ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSuspendedAccount(reason?: string | null, userId?: string | null): void {
+  const resolvedId = userId || getSuspendedUserId();
+  try {
+    sessionStorage.setItem(
+      SUSPENDED_ACCOUNT_KEY,
+      JSON.stringify({ reason: reason || null, userId: resolvedId || null }),
+    );
+  } catch {
+    /* ignore */
+  }
+  if (resolvedId) {
+    try { localStorage.setItem(SUSPENDED_USER_ID_KEY, resolvedId); } catch { /* ignore */ }
   }
 }
 
@@ -55,11 +86,19 @@ export function clearSuspendedAccount(): void {
   } catch {
     /* ignore */
   }
+  try {
+    localStorage.removeItem(SUSPENDED_USER_ID_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 정지 계정을 게스트 세션으로 내린다. */
 export async function enterSuspendedGuestSession(reason?: string | null): Promise<void> {
-  setSuspendedAccount(reason);
+  const currentId = getCurrentUserId();
+  const originalId =
+    (currentId && !currentId.startsWith('guest_') ? currentId : null) || getSuspendedUserId();
+  setSuspendedAccount(reason, originalId);
   if (isGuestUser(getCurrentUserId())) {
     if (!getSessionToken()) {
       await ensureImplicitSession({ allowAutoGuest: true });

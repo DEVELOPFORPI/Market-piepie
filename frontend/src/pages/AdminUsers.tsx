@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { toggleUserSuspension } from '@/utils/adminSuspension';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
@@ -197,27 +198,10 @@ export const AdminUsers: React.FC = () => {
   };
 
   const handleSuspension = async (user: UserSummary) => {
-    const isSuspended = user.account_status === 'suspended';
-    let reason = '';
-    if (isSuspended) {
-      if (!confirm(`${user.nickname} 사용자의 정지를 해제할까요?`)) return;
-    } else {
-      const entered = window.prompt(`${user.nickname} 사용자를 정지할 사유를 입력하세요. (선택)`);
-      if (entered === null) return;
-      reason = entered.trim();
-    }
-
     setSuspendingId(user.id);
-    const response = await api.patch(
-      `/api/admin/users/${user.id}/suspension`,
-      { suspended: !isSuspended, reason },
-      { headers: adminPasswordHeaders() },
-    );
+    const result = await toggleUserSuspension(user.id, user.nickname, user.account_status);
     setSuspendingId(null);
-    if (!response.ok) {
-      alert(`처리 실패: ${response.error || `HTTP ${response.status}`}`);
-      return;
-    }
+    if (!result.changed && !result.status) return;
     await load();
     if (selected?.id === user.id) await loadDetail(user.id);
   };

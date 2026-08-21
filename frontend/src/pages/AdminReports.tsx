@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { toggleUserSuspension } from '@/utils/adminSuspension';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
 import { broadcastProductChange } from '@/utils/chatSocket';
 import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
@@ -226,31 +227,18 @@ export const AdminReports: React.FC = () => {
     const nickname = role === 'reporter' ? selected.reporter_nickname : selected.owner_nickname;
     const account = role === 'reporter' ? selected.reporter_account_status : selected.owner_account_status;
     if (!userId) return;
-    const isSuspended = account === 'suspended';
-    let reason = '';
-    if (isSuspended) {
-      if (!confirm(`${nickname || '이 사용자'}의 정지를 해제할까요?`)) return;
-    } else {
-      const entered = window.prompt(`${nickname || '이 사용자'}를 정지할 사유를 입력하세요. (선택)`);
-      if (entered === null) return;
-      reason = entered.trim();
-    }
     setActionBusy(role);
-    const res = await api.patch(
-      `/api/admin/users/${userId}/suspension`,
-      { suspended: !isSuspended, reason },
-      { headers: adminPasswordHeaders() },
+    const result = await toggleUserSuspension(
+      userId,
+      nickname,
+      account === 'suspended' ? 'suspended' : 'active',
     );
     setActionBusy(null);
-    if (!res.ok) {
-      alert(`처리 실패: ${res.error || `HTTP ${res.status}`}`);
-      return;
-    }
-    const nextStatus = isSuspended ? 'active' : 'suspended';
+    if (!result.status) return;
     const sameUser = selected.reporter_id && selected.reporter_id === selected.owner_id;
     patchSelected({
-      ...(role === 'reporter' || sameUser ? { reporter_account_status: nextStatus } : {}),
-      ...(role === 'owner' || sameUser ? { owner_account_status: nextStatus } : {}),
+      ...(role === 'reporter' || sameUser ? { reporter_account_status: result.status } : {}),
+      ...(role === 'owner' || sameUser ? { owner_account_status: result.status } : {}),
     });
   };
 

@@ -4301,7 +4301,25 @@ app.patch(
     const reason = suspended
       ? String(req.body.reason || "").trim().slice(0, 500)
       : null;
+    const expectedStatus = req.body.expectedStatus
+      ? String(req.body.expectedStatus)
+      : null;
     try {
+      if (expectedStatus) {
+        const current = await pool.query(
+          "SELECT account_status FROM users WHERE id = $1 LIMIT 1",
+          [req.params.id],
+        );
+        if (!current.rows.length)
+          return res.status(404).json({ error: "Not found" });
+        const currentStatus = current.rows[0].account_status || "active";
+        if (currentStatus !== expectedStatus) {
+          return res.status(409).json({
+            error: "Account status changed",
+            account_status: currentStatus,
+          });
+        }
+      }
       const { rows } = await queryReturning(
         `UPDATE users
             SET account_status = $1,

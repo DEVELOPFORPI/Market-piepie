@@ -58,7 +58,7 @@ import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
-import { applySuspendedAccess } from './utils/guestGate';
+import { applySuspendedAccess, refreshSuspendedAccountStatus } from './utils/guestGate';
 import { checkMyProfileInDB, initDBSync, resetLocalCacheForIncompleteProfile, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
 import { isApiRateLimited } from './utils/api';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
@@ -172,6 +172,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     if (!heavyReady) return;
     const kick = async () => {
       await ensureImplicitSession();
+      await refreshSuspendedAccountStatus();
       const userId = getCurrentUserId() || undefined;
       if (userId && !userId.startsWith('guest_')) {
         const accountRes = await api.get<{ account_status?: string; suspension_reason?: string | null }>(`/api/users/${userId}`);
