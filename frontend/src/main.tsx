@@ -3,8 +3,10 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { bootstrapPiSdk } from './utils/piSdk'
+import { restorePiSessionOnBoot } from './utils/authStorage'
 
 bootstrapPiSdk()
+restorePiSessionOnBoot()
 
 const container = document.getElementById('root')!;
 

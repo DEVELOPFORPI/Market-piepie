@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { Badge } from '@/components/common/Badge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
@@ -635,14 +636,8 @@ export const Dispute: React.FC = () => {
                   </div>
                 ))}
                 {evidence.length < MAX_EVIDENCE_IMAGES && (
-                  <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
+                  <label className="relative aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
+                    <FilePickerInput multiple onChange={handleImageUpload} />
                     <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>

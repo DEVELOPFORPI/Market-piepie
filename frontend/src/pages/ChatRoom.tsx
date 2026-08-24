@@ -27,13 +27,14 @@ import {
 import { syncDisputesFromDB } from '@/utils/dbSync';
 import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { TEXT_LIMIT } from '@/constants/textLimits';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ModalShell } from '@/components/common/ModalShell';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { api } from '@/utils/api';
 import { syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
@@ -63,6 +64,7 @@ const DISPUTE_ELIGIBLE = new Set<OrderStatus>([
 ]);
 
 const NEAR_BOTTOM_PX = 120;
+const MAX_CHAT_IMAGES = 5;
 
 /** Price-offer accept/decline needs order rows in local cache (often missing until DB sync). */
 async function syncChatOfferOrders(roomId: string, extraOrderId?: string | null): Promise<void> {
@@ -280,8 +282,6 @@ export const ChatRoom: React.FC = () => {
   const pinToBottomRef = useRef(false);
   /** True while the viewport is already at/near the latest message */
   const stickToBottomRef = useRef(true);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   /** Message ids for which we already showed the "meetup started" popup */
   const shownMeetupPopupIdsRef = useRef<Set<string>>(new Set());
   /** Message ids already present when room was entered (for delta-only popup checks) */
@@ -1110,24 +1110,32 @@ export const ChatRoom: React.FC = () => {
     return () => { cancelled = true; };
   }, [roomId]);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);
-    setUploadingImages(true);
-    try {
-      const urls = await uploadImagesToR2(fileArray, { folder: 'chat' });
-      setPreviewImages((prev) => [...prev, ...urls]);
-    } catch {
-      showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImages(false);
-      e.target.value = '';
+  /** Photos stay local until send; upload happens in handleSend. */
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    const remaining = MAX_CHAT_IMAGES - previewImages.length;
+    if (remaining <= 0) {
+      showToast(t('upToPhotos', { n: MAX_CHAT_IMAGES }));
+      return;
     }
+    if (files.length > remaining) {
+      showToast(t('upToPhotos', { n: MAX_CHAT_IMAGES }));
+    }
+    const previews = createLocalPreviewUrls(files.slice(0, remaining));
+    if (previews.length === 0) {
+      showToast(t('couldNotUpload'));
+      return;
+    }
+    setPreviewImages((prev) => [...prev, ...previews].slice(0, MAX_CHAT_IMAGES));
   };
 
   const removePreviewImage = (idx: number) => {
-    setPreviewImages((prev) => prev.filter((_, i) => i !== idx));
+    setPreviewImages((prev) => {
+      revokeLocalPreviewUrl(prev[idx]);
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   const handleSend = async () => {
@@ -1152,16 +1160,33 @@ export const ChatRoom: React.FC = () => {
 
     // Image message (random suffix avoids duplicate keys in same ms)
     if (previewImages.length > 0) {
+      const localImages = previewImages.slice(0, MAX_CHAT_IMAGES);
+      let uploaded: string[];
+      setUploadingImages(true);
+      try {
+        uploaded = await uploadImageReferencesToR2(localImages, { folder: 'chat' });
+      } catch {
+        showToast(t('couldNotUpload'));
+        return;
+      } finally {
+        setUploadingImages(false);
+      }
+      if (uploaded.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+
       const imgMessage: ChatMessage = {
         id: `m${Date.now()}_${Math.random().toString(36).slice(2, 9)}_img`,
         senderId: getCurrentUserId() || 'me',
         content: input.trim() || '',
         timestamp: new Date().toISOString(),
         type: 'user',
-        images: [...previewImages],
+        images: uploaded,
       };
       const saved = await addMessage(roomId, imgMessage);
       if (saved) {
+        localImages.forEach(revokeLocalPreviewUrl);
         setPreviewImages([]);
         setInput('');
         scrollAfterSend();
@@ -1904,44 +1929,29 @@ export const ChatRoom: React.FC = () => {
         </div>
       ) : (
         <div className="shrink-0 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)]">
-          <input
-            ref={galleryInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-
           <div className="flex items-center gap-2 px-3 py-2">
             <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg shrink-0">
-              <button
-                onClick={() => galleryInputRef.current?.click()}
-                disabled={uploadingImages}
-                className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
-              >
+              <label className="relative flex p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors cursor-pointer">
+                <FilePickerInput
+                  multiple
+                  disabled={uploadingImages}
+                  onChange={handleImageSelect}
+                />
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-              </button>
-              <button
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={uploadingImages}
-                className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
-              >
+              </label>
+              <label className="relative flex p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors cursor-pointer">
+                <FilePickerInput
+                  capture="environment"
+                  disabled={uploadingImages}
+                  onChange={handleImageSelect}
+                />
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-              </button>
+              </label>
             </div>
 
             <input

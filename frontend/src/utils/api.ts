@@ -5,7 +5,7 @@
  *   (marketpiepie.vercel.app / marketpiepietest.vercel.app).
  */
 
-import { getSessionToken } from '@/utils/authStorage';
+import { getSessionToken, handleExpiredSession } from '@/utils/authStorage';
 import { setAdminVerified } from '@/utils/adminAccessStorage';
 import { API_BASE } from '@/utils/apiConfig';
 
@@ -62,6 +62,15 @@ async function request<T>(
     }
 
     const data = await res.json().catch(() => null);
+
+    // Saved token no longer valid on the server: drop it instead of failing silently.
+    if (
+      res.status === 401
+      && data?.error === 'Invalid or expired session'
+      && !path.startsWith('/api/admin/')
+    ) {
+      handleExpiredSession();
+    }
 
     if (data?.error === 'Account suspended') {
       void import('@/utils/guestGate').then(({ applySuspendedAccess }) => {

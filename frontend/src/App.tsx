@@ -164,7 +164,6 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     if (testModeEnabled) return;
     if (location.pathname.startsWith('/admin') || location.pathname === '/admin-auth') return;
     if (location.pathname === "/app-login" || location.pathname === "/welcome") return;
-    if (typeof window !== "undefined" && /PiBrowser/i.test(navigator.userAgent) && !sessionStorage.getItem("currentUserId")) return;
     ensureImplicitSession();
   }, [testModeEnabled, location.pathname]);
 

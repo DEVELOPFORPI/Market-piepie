@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -278,14 +279,8 @@ export const PostWrite: React.FC = () => {
               </div>
             ))}
             {images.length < 5 && (
-              <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
+              <label className="relative aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
+                <FilePickerInput multiple onChange={handleImageUpload} />
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>

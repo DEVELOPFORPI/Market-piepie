@@ -76,6 +76,12 @@ function clipUserChatContent(content, type) {
   return clipText(content, TEXT_LIMIT.chatMessage);
 }
 
+const MAX_CHAT_IMAGES = 5;
+function clipChatImages(images) {
+  if (!Array.isArray(images)) return [];
+  return images.map(String).filter(Boolean).slice(0, MAX_CHAT_IMAGES);
+}
+
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 // Browser -> Vercel rewrite -> Nginx -> Express.
@@ -216,6 +222,24 @@ function getR2Client() {
 // ????????? ?????? ???????? (DB ???, ????? ???? ?????) ??????????????????????????????????????????
 const sessionCache = new Map();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7?
+/**
+ * 사용 중인 세션은 만료 시각을 뒤로 미뤄 재로그인을 요구하지 않는다.
+ * 매 요청마다 쓰지 않도록 발급/갱신 후 하루가 지난 세션만 갱신한다.
+ */
+const SESSION_TOUCH_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function touchSession(token, session) {
+  if (Date.now() - session.createdAt < SESSION_TOUCH_AFTER_MS) return;
+  session.createdAt = Date.now();
+  if (pool) {
+    pool
+      .query(
+        "UPDATE sessions SET created_at = CURRENT_TIMESTAMP(3) WHERE token = $1",
+        [token],
+      )
+      .catch(() => {});
+  }
+}
 
 function purgeSessionCacheForUser(userId) {
   for (const [token, session] of sessionCache) {
@@ -365,6 +389,7 @@ async function getUserIdFromToken(token) {
           .catch(() => {});
       return null;
     }
+    touchSession(token, cached);
     return cached.userId;
   }
   if (!pool) return null;
@@ -381,11 +406,13 @@ async function getUserIdFromToken(token) {
         .catch(() => {});
       return null;
     }
-    sessionCache.set(token, {
+    const session = {
       userId: rows[0].user_id,
       createdAt: new Date(rows[0].created_at).getTime(),
-    });
-    return rows[0].user_id;
+    };
+    sessionCache.set(token, session);
+    touchSession(token, session);
+    return session.userId;
   } catch {
     return null;
   }
@@ -3048,7 +3075,7 @@ app.post(
           effectiveSenderId,
           clipUserChatContent(content, type),
           type || "text",
-          images || [],
+          clipChatImages(images),
           order_id,
           original_price,
           proposed_price,
@@ -5630,7 +5657,7 @@ io.on("connection", async (socket) => {
             claimedSender === "system" ? "system" : userId,
             clipUserChatContent(message.content, message.type),
             message.type || "text",
-            message.images || [],
+            clipChatImages(message.images),
             message.orderId || null,
             message.originalPrice ?? null,
             message.proposedPrice ?? null,

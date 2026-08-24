@@ -1,5 +1,5 @@
 import { API_BASE } from '@/utils/apiConfig';
-import { ensureImplicitSession, getSessionToken } from '@/utils/authStorage';
+import { ensureImplicitSession, getSessionToken, handleExpiredSession } from '@/utils/authStorage';
 import { getAdminToken } from '@/utils/adminAccessStorage';
 
 type UploadImageOptions = {
@@ -140,16 +140,32 @@ export async function uploadImageToR2(
 
   const prepared = await prepareImageForUpload(file);
 
-  const formData = new FormData();
-  formData.append('image', prepared);
-  if (options?.folder) formData.append('folder', options.folder);
+  const send = async () => {
+    const formData = new FormData();
+    formData.append('image', prepared);
+    if (options?.folder) formData.append('folder', options.folder);
 
-  const res = await fetch(`${API_BASE}/api/uploads/image`, {
-    method: 'POST',
-    headers: await authHeaders(options),
-    body: formData,
-  });
-  const data = await res.json().catch(() => null) as UploadImageResponse | null;
+    const res = await fetch(`${API_BASE}/api/uploads/image`, {
+      method: 'POST',
+      headers: await authHeaders(options),
+      body: formData,
+    });
+    const data = await res.json().catch(() => null) as UploadImageResponse | null;
+    return { res, data };
+  };
+
+  let { res, data } = await send();
+
+  // Uploads need a session token. A token that never got issued (offline / rate
+  // limited at login) is retried once; one the server rejects is dropped.
+  if (res.status === 401) {
+    if (data?.error === 'Invalid or expired session') {
+      handleExpiredSession();
+    } else {
+      await ensureImplicitSession();
+      ({ res, data } = await send());
+    }
+  }
 
   if (!res.ok || !data?.url) {
     throw new Error(data?.error || `Image upload failed (${res.status})`);
