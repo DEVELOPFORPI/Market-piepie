@@ -407,6 +407,15 @@ const entries = {
     bn: 'এই লিস্টিং বিক্রি হয়ে গেছে।', ms: 'Senarai ini telah dijual.', sw: 'Tangazo hili limeshauziwa.', fa: 'این آگهی فروخته شده است.',
     ur: 'یہ لسٹنگ بک چکی ہے۔',
   },
+  bannerListingAdminHidden: {
+    en: 'An admin hid this listing. New offers are blocked.', ko: '관리자가 숨긴 상품입니다. 새 제안은 할 수 없습니다.', zh: '管理员已隐藏该商品，无法再发起新报价。', ja: '管理者がこの商品を非表示にしました。新しい提案はできません。',
+    es: 'Un administrador ocultó este anuncio. No se permiten nuevas ofertas.', pt: 'Um administrador ocultou este anúncio. Novas ofertas estão bloqueadas.', fr: 'Un administrateur a masqué cette annonce. Nouvelles offres bloquées.', de: 'Ein Admin hat diese Anzeige ausgeblendet. Neue Angebote sind gesperrt.',
+    id: 'Admin menyembunyikan listing ini. Penawaran baru diblokir.', vi: 'Quản trị viên đã ẩn tin đăng này. Không thể gửi đề nghị mới.', th: 'ผู้ดูแลซ่อนประกาศนี้แล้ว ไม่สามารถเสนอราคาใหม่ได้', hi: 'एडमिन ने यह लिस्टिंग छिपा दी है। नए ऑफ़र नहीं भेज सकते।',
+    ar: 'أخفى المشرف هذا الإعلان. لا يمكن تقديم عروض جديدة.', ru: 'Администратор скрыл это объявление. Новые предложения недоступны.', tr: 'Bir yönetici bu ilanı gizledi. Yeni teklif gönderilemez.', it: 'Un amministratore ha nascosto questo annuncio. Nuove offerte bloccate.',
+    pl: 'Administrator ukrył to ogłoszenie. Nowe oferty są zablokowane.', nl: 'Een beheerder heeft deze advertentie verborgen. Nieuwe biedingen zijn geblokkeerd.', fil: 'Itinago ng admin ang listing na ito. Hindi na puwedeng mag-offer.', uk: 'Адміністратор приховав це оголошення. Нові пропозиції заблоковано.',
+    bn: 'অ্যাডমিন এই লিস্টিং লুকিয়েছেন। নতুন প্রস্তাব দেওয়া যাবে না।', ms: 'Admin menyembunyikan senarai ini. Tawaran baharu disekat.', sw: 'Msimamizi ameficha tangazo hili. Ofa mpya zimezuiwa.', fa: 'مدیر این آگهی را پنهان کرده است. پیشنهاد جدید ممکن نیست.',
+    ur: 'ایڈمن نے یہ لسٹنگ چھپا دی ہے۔ نئی پیشکش ممکن نہیں۔',
+  },
   bannerYourDispute: {
     en: 'You opened a dispute', ko: '내가 연 분쟁', zh: '你发起了争议', ja: 'あなたが紛争を開始しました',
     es: 'Abriste una disputa', pt: 'Você abriu uma disputa', fr: 'Vous avez ouvert un litige', de: 'Du hast einen Streitfall eröffnet',
@@ -496,6 +505,15 @@ const entries = {
     pl: 'Ta wiadomość została usunięta przez administratora.', nl: 'Dit bericht is verwijderd door een beheerder.', fil: 'Inalis ng admin ang mensaheng ito.', uk: 'Це повідомлення видалив адміністратор.',
     bn: 'এই বার্তাটি অ্যাডমিন সরিয়ে দিয়েছেন।', ms: 'Mesej ini dialih keluar oleh admin.', sw: 'Ujumbe huu umeondolewa na msimamizi.', fa: 'این پیام توسط مدیر حذف شد.',
     ur: 'یہ پیغام ایڈمن نے ہٹا دیا۔',
+  },
+  checkCameraPermission: {
+    en: 'Camera did not open. Check camera permission for this app.', ko: '카메라가 열리지 않았습니다. 앱의 카메라 권한을 확인해 주세요.', zh: '相机未打开。请检查应用的相机权限。', ja: 'カメラが開きませんでした。アプリのカメラ権限を確認してください。',
+    es: 'La cámara no se abrió. Revisa el permiso de cámara de la app.', pt: 'A câmera não abriu. Verifique a permissão de câmera do app.', fr: 'La caméra ne s’est pas ouverte. Vérifiez l’autorisation caméra de l’app.', de: 'Kamera wurde nicht geöffnet. Kamerazugriff der App prüfen.',
+    id: 'Kamera tidak terbuka. Periksa izin kamera aplikasi.', vi: 'Camera không mở. Hãy kiểm tra quyền camera của ứng dụng.', th: 'กล้องไม่เปิด ตรวจสอบสิทธิ์กล้องของแอป', hi: 'कैमरा नहीं खुला। ऐप की कैमरा अनुमति जांचें।',
+    ar: 'لم تُفتح الكاميرا. تحقق من إذن الكاميرا للتطبيق.', ru: 'Камера не открылась. Проверьте доступ к камере для приложения.', tr: 'Kamera açılmadı. Uygulamanın kamera iznini kontrol edin.', it: 'La fotocamera non si è aperta. Controlla il permesso fotocamera dell’app.',
+    pl: 'Kamera się nie otwarła. Sprawdź uprawnienie kamery aplikacji.', nl: 'Camera ging niet open. Controleer de cameratoestemming van de app.', fil: 'Hindi bumukas ang camera. Suriin ang camera permission ng app.', uk: 'Камера не відкрилася. Перевірте доступ до камери для застосунку.',
+    bn: 'ক্যামেরা খোলেনি। অ্যাপের ক্যামেরা অনুমতি দেখুন।', ms: 'Kamera tidak dibuka. Semak kebenaran kamera apl.', sw: 'Kamera haikufunguka. Angalia ruhusa ya kamera ya programu.', fa: 'دوربین باز نشد. دسترسی دوربین برنامه را بررسی کنید.',
+    ur: 'کیمرا نہیں کھلا۔ ایپ کی کیمرا اجازت چیک کریں۔',
   },
 };
 

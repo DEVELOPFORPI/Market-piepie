@@ -54,7 +54,8 @@ export type ChatRoomMessageKey =
   | 'couldNotSendPhotos'
   | 'messageSendFailed'
   | 'listingRemovedAlert'
-  | 'adminDeletedMessage';
+  | 'adminDeletedMessage'
+  | 'checkCameraPermission';
 
 const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>> = {
   en: {
@@ -111,6 +112,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Message could not be sent. Check your connection and try again.',
     listingRemovedAlert: 'This listing was removed.',
     adminDeletedMessage: 'This message was removed by an admin.',
+    checkCameraPermission: 'Camera did not open. Check camera permission for this app.',
   },
   ko: {
     reviewSubmitted: '리뷰 작성 완료',
@@ -166,6 +168,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: '메시지를 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     listingRemovedAlert: '이 상품이 삭제되었습니다.',
     adminDeletedMessage: '관리자가 가린 메시지입니다.',
+    checkCameraPermission: '카메라가 열리지 않았습니다. 앱의 카메라 권한을 확인해 주세요.',
   },
   zh: {
     reviewSubmitted: '已提交评价',
@@ -221,6 +224,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: '消息发送失败，请检查网络后重试。',
     listingRemovedAlert: '该商品已删除。',
     adminDeletedMessage: '该消息已被管理员移除。',
+    checkCameraPermission: '相机未打开。请检查应用的相机权限。',
   },
   ja: {
     reviewSubmitted: 'レビュー投稿済み',
@@ -276,6 +280,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'メッセージを送信できませんでした。接続を確認して再試行してください。',
     listingRemovedAlert: 'この出品は削除されました。',
     adminDeletedMessage: '管理者が削除したメッセージです。',
+    checkCameraPermission: 'カメラが開きませんでした。アプリのカメラ権限を確認してください。',
   },
   es: {
     reviewSubmitted: 'Reseña enviada',
@@ -331,6 +336,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'No se pudo enviar el mensaje. Comprueba la conexión e inténtalo de nuevo.',
     listingRemovedAlert: 'Este anuncio se eliminó.',
     adminDeletedMessage: 'Un administrador eliminó este mensaje.',
+    checkCameraPermission: 'La cámara no se abrió. Revisa el permiso de cámara de la app.',
   },
   pt: {
     reviewSubmitted: 'Avaliação enviada',
@@ -386,6 +392,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.',
     listingRemovedAlert: 'Este anúncio foi removido.',
     adminDeletedMessage: 'Esta mensagem foi removida por um administrador.',
+    checkCameraPermission: 'A câmera não abriu. Verifique a permissão de câmera do app.',
   },
   fr: {
     reviewSubmitted: 'Avis envoyé',
@@ -441,6 +448,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Le message n’a pas pu être envoyé. Vérifiez la connexion et réessayez.',
     listingRemovedAlert: 'Cette annonce a été supprimée.',
     adminDeletedMessage: 'Ce message a été supprimé par un administrateur.',
+    checkCameraPermission: 'La caméra ne s’est pas ouverte. Vérifiez l’autorisation caméra de l’app.',
   },
   de: {
     reviewSubmitted: 'Bewertung gesendet',
@@ -496,6 +504,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Nachricht konnte nicht gesendet werden. Verbindung prüfen.',
     listingRemovedAlert: 'Diese Anzeige wurde entfernt.',
     adminDeletedMessage: 'Diese Nachricht wurde von einem Admin entfernt.',
+    checkCameraPermission: 'Kamera wurde nicht geöffnet. Kamerazugriff der App prüfen.',
   },
   id: {
     reviewSubmitted: 'Ulasan dikirim',
@@ -551,6 +560,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Pesan tidak dapat dikirim. Periksa koneksi dan coba lagi.',
     listingRemovedAlert: 'Listing ini dihapus.',
     adminDeletedMessage: 'Pesan ini dihapus oleh admin.',
+    checkCameraPermission: 'Kamera tidak terbuka. Periksa izin kamera aplikasi.',
   },
   vi: {
     reviewSubmitted: 'Đã gửi đánh giá',
@@ -606,6 +616,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Không gửi được tin nhắn. Kiểm tra kết nối và thử lại.',
     listingRemovedAlert: 'Tin đăng này đã bị xóa.',
     adminDeletedMessage: 'Tin nhắn này đã bị quản trị viên xóa.',
+    checkCameraPermission: 'Camera không mở. Hãy kiểm tra quyền camera của ứng dụng.',
   },
   th: {
     reviewSubmitted: 'ส่งรีวิวแล้ว',
@@ -661,6 +672,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'ส่งข้อความไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่',
     listingRemovedAlert: 'ประกาศนี้ถูกลบแล้ว',
     adminDeletedMessage: 'ข้อความนี้ถูกผู้ดูแลระบบลบแล้ว',
+    checkCameraPermission: 'กล้องไม่เปิด ตรวจสอบสิทธิ์กล้องของแอป',
   },
   hi: {
     reviewSubmitted: 'समीक्षा भेजी गई',
@@ -716,6 +728,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'संदेश नहीं भेजा जा सका। कनेक्शन जांचें।',
     listingRemovedAlert: 'यह लिस्टिंग हटा दी गई।',
     adminDeletedMessage: 'यह संदेश व्यवस्थापक ने हटा दिया।',
+    checkCameraPermission: 'कैमरा नहीं खुला। ऐप की कैमरा अनुमति जांचें।',
   },
   ar: {
     reviewSubmitted: 'تم إرسال التقييم',
@@ -771,6 +784,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى.',
     listingRemovedAlert: 'تم حذف هذا الإعلان.',
     adminDeletedMessage: 'تمت إزالة هذه الرسالة بواسطة المشرف.',
+    checkCameraPermission: 'لم تُفتح الكاميرا. تحقق من إذن الكاميرا للتطبيق.',
   },
   ru: {
     reviewSubmitted: 'Отзыв отправлен',
@@ -826,6 +840,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Не удалось отправить сообщение. Проверьте соединение.',
     listingRemovedAlert: 'Это объявление удалено.',
     adminDeletedMessage: 'Это сообщение удалено администратором.',
+    checkCameraPermission: 'Камера не открылась. Проверьте доступ к камере для приложения.',
   },
   tr: {
     reviewSubmitted: 'Yorum gönderildi',
@@ -881,6 +896,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Mesaj gönderilemedi. Bağlantınızı kontrol edin.',
     listingRemovedAlert: 'Bu ilan kaldırıldı.',
     adminDeletedMessage: 'Bu mesaj yönetici tarafından kaldırıldı.',
+    checkCameraPermission: 'Kamera açılmadı. Uygulamanın kamera iznini kontrol edin.',
   },
   it: {
     reviewSubmitted: 'Recensione inviata',
@@ -936,6 +952,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Messaggio non inviato. Controlla la connessione.',
     listingRemovedAlert: 'Questo annuncio è stato rimosso.',
     adminDeletedMessage: 'Questo messaggio è stato rimosso da un amministratore.',
+    checkCameraPermission: 'La fotocamera non si è aperta. Controlla il permesso fotocamera dell’app.',
   },
   pl: {
     reviewSubmitted: 'Opinia wysłana',
@@ -991,6 +1008,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Nie udało się wysłać wiadomości. Sprawdź połączenie.',
     listingRemovedAlert: 'To ogłoszenie zostało usunięte.',
     adminDeletedMessage: 'Ta wiadomość została usunięta przez administratora.',
+    checkCameraPermission: 'Kamera się nie otwarła. Sprawdź uprawnienie kamery aplikacji.',
   },
   nl: {
     reviewSubmitted: 'Review verzonden',
@@ -1046,6 +1064,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Bericht kon niet worden verzonden. Controleer je verbinding.',
     listingRemovedAlert: 'Deze advertentie is verwijderd.',
     adminDeletedMessage: 'Dit bericht is verwijderd door een beheerder.',
+    checkCameraPermission: 'Camera ging niet open. Controleer de cameratoestemming van de app.',
   },
   fil: {
     reviewSubmitted: 'Naipasa ang review',
@@ -1101,6 +1120,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Hindi maipadala ang mensahe. Suriin ang koneksyon.',
     listingRemovedAlert: 'Inalis ang listing na ito.',
     adminDeletedMessage: 'Inalis ng admin ang mensaheng ito.',
+    checkCameraPermission: 'Hindi bumukas ang camera. Suriin ang camera permission ng app.',
   },
   uk: {
     reviewSubmitted: 'Відгук надіслано',
@@ -1156,6 +1176,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Не вдалося надіслати повідомлення. Перевірте з’єднання.',
     listingRemovedAlert: 'Це оголошення видалено.',
     adminDeletedMessage: 'Це повідомлення видалив адміністратор.',
+    checkCameraPermission: 'Камера не відкрилася. Перевірте доступ до камери для застосунку.',
   },
   bn: {
     reviewSubmitted: 'রিভিউ পাঠানো হয়েছে',
@@ -1211,6 +1232,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'বার্তা পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।',
     listingRemovedAlert: 'এই লিস্টিং সরানো হয়েছে।',
     adminDeletedMessage: 'এই বার্তাটি অ্যাডমিন সরিয়ে দিয়েছেন।',
+    checkCameraPermission: 'ক্যামেরা খোলেনি। অ্যাপের ক্যামেরা অনুমতি দেখুন।',
   },
   ms: {
     reviewSubmitted: 'Ulasan dihantar',
@@ -1266,6 +1288,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Mesej tidak dapat dihantar. Semak sambungan.',
     listingRemovedAlert: 'Senarai ini dialih keluar.',
     adminDeletedMessage: 'Mesej ini dialih keluar oleh admin.',
+    checkCameraPermission: 'Kamera tidak dibuka. Semak kebenaran kamera apl.',
   },
   sw: {
     reviewSubmitted: 'Hakiki imetumwa',
@@ -1321,6 +1344,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'Ujumbe haukuweza kutumwa. Angalia muunganisho.',
     listingRemovedAlert: 'Tangazo hili limeondolewa.',
     adminDeletedMessage: 'Ujumbe huu umeondolewa na msimamizi.',
+    checkCameraPermission: 'Kamera haikufunguka. Angalia ruhusa ya kamera ya programu.',
   },
   fa: {
     reviewSubmitted: 'نظر ارسال شد',
@@ -1376,6 +1400,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'ارسال پیام ممکن نشد. اتصال را بررسی کنید.',
     listingRemovedAlert: 'این آگهی حذف شد.',
     adminDeletedMessage: 'این پیام توسط مدیر حذف شد.',
+    checkCameraPermission: 'دوربین باز نشد. دسترسی دوربین برنامه را بررسی کنید.',
   },
   ur: {
     reviewSubmitted: 'جائزہ بھیج دیا گیا',
@@ -1431,6 +1456,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     messageSendFailed: 'پیغام نہ بھیجا جا سکا۔ کنکشن چیک کریں۔',
     listingRemovedAlert: 'یہ لسٹنگ ہٹا دی گئی۔',
     adminDeletedMessage: 'یہ پیغام ایڈمن نے ہٹا دیا۔',
+    checkCameraPermission: 'کیمرا نہیں کھلا۔ ایپ کی کیمرا اجازت چیک کریں۔',
   },
 };
 

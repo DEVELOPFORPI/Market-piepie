@@ -76,7 +76,7 @@ function clipUserChatContent(content, type) {
   return clipText(content, TEXT_LIMIT.chatMessage);
 }
 
-const MAX_CHAT_IMAGES = 5;
+const MAX_CHAT_IMAGES = 4;
 function clipChatImages(images) {
   if (!Array.isArray(images)) return [];
   return images.map(String).filter(Boolean).slice(0, MAX_CHAT_IMAGES);

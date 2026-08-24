@@ -8,6 +8,8 @@ type FilePickerInputProps = {
   disabled?: boolean;
   id?: string;
   ariaLabel?: string;
+  /** Runs when the picker is triggered, before the OS dialog (may not) appear. */
+  onOpen?: () => void;
 };
 
 /**
@@ -24,6 +26,7 @@ export const FilePickerInput: React.FC<FilePickerInputProps> = ({
   disabled,
   id,
   ariaLabel,
+  onOpen,
 }) => (
   <input
     id={id}
@@ -33,6 +36,7 @@ export const FilePickerInput: React.FC<FilePickerInputProps> = ({
     capture={capture}
     disabled={disabled}
     aria-label={ariaLabel}
+    onClick={onOpen}
     onChange={onChange}
     className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-default"
   />
