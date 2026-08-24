@@ -85,13 +85,19 @@ const CommentTree: React.FC<{
   timeAgo: (createdAt: string) => string;
   replyLabel: string;
   commentOptionsAria: string;
-}> = ({ items, depth = 0, parentAuthorNickname, onReply, onOpenMenu, onAuthorClick, timeAgo, replyLabel, commentOptionsAria }) => (
+  currentUserId?: string;
+  adminHiddenLabel: string;
+  adminHiddenMineLabel: string;
+  adminRemovedLabel: string;
+}> = ({ items, depth = 0, parentAuthorNickname, onReply, onOpenMenu, onAuthorClick, timeAgo, replyLabel, commentOptionsAria, currentUserId, adminHiddenLabel, adminHiddenMineLabel, adminRemovedLabel }) => (
   <>
     {items.map((c) => {
       const displayName = resolveDisplayNickname(c.author.id, c.author.nickname);
       const isReply = depth > 0;
       const indentDeltaRem = depth === 1 ? REPLY_INDENT_REM : 0;
       const showReplyTarget = isReply && depth > MAX_REPLY_INDENT_DEPTH && !!parentAuthorNickname;
+      const isMineComment = !!currentUserId && c.author.id === currentUserId;
+      const hideAsPlaceholder = !!c.adminRemoved || (!!c.adminHidden && !isMineComment);
 
       return (
       <div
@@ -99,6 +105,11 @@ const CommentTree: React.FC<{
         className={isReply ? 'mt-3 min-w-0' : 'py-3 border-b border-gray-50 last:border-b-0 min-w-0'}
         style={isReply && indentDeltaRem > 0 ? { marginLeft: `${indentDeltaRem}rem` } : undefined}
       >
+        {hideAsPlaceholder ? (
+          <p className="text-sm italic text-gray-400">
+            {c.adminRemoved ? adminRemovedLabel : adminHiddenLabel}
+          </p>
+        ) : (
         <div className="flex gap-3 min-w-0">
           <button
             type="button"
@@ -144,21 +155,27 @@ const CommentTree: React.FC<{
                 </svg>
               </button>
             </div>
+            {c.adminHidden && (
+              <p className="mt-2 text-xs text-amber-700">{adminHiddenMineLabel}</p>
+            )}
             <div className="mt-2">
               <ExpandableText
                 text={maskSensitiveContent(c.content)}
                 className="text-sm text-gray-700 break-words"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => onReply(c.id, c.author.nickname)}
-              className="text-xs text-gray-500 hover:text-[#00A8A3] mt-2"
-            >
-              {replyLabel}
-            </button>
+            {!c.adminHidden && (
+              <button
+                type="button"
+                onClick={() => onReply(c.id, c.author.nickname)}
+                className="text-xs text-gray-500 hover:text-[#00A8A3] mt-2"
+              >
+                {replyLabel}
+              </button>
+            )}
           </div>
         </div>
+        )}
         {c.replies && c.replies.length > 0 && (
           <CommentTree
             items={c.replies}
@@ -170,6 +187,10 @@ const CommentTree: React.FC<{
             timeAgo={timeAgo}
             replyLabel={replyLabel}
             commentOptionsAria={commentOptionsAria}
+            currentUserId={currentUserId}
+            adminHiddenLabel={adminHiddenLabel}
+            adminHiddenMineLabel={adminHiddenMineLabel}
+            adminRemovedLabel={adminRemovedLabel}
           />
         )}
       </div>
@@ -529,15 +550,17 @@ export const PostDetail: React.FC = () => {
               <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
                 {canEditOrDeletePost && (
                   <>
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        navigate(`/community/edit/${post.id}`);
-                      }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
-                    >
-                      {t('edit')}
-                    </button>
+                    {!post.adminHidden && (
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          navigate(`/community/edit/${post.id}`);
+                        }}
+                        className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
+                      >
+                        {t('edit')}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setShowMenu(false);
@@ -568,6 +591,16 @@ export const PostDetail: React.FC = () => {
       />
 
       <div className="px-4 py-6 space-y-6">
+        {post.adminHidden && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-sm font-medium text-amber-800">{t('postAdminHidden')}</p>
+            {post.adminHiddenReason && (
+              <p className="mt-0.5 text-xs text-amber-700">
+                {t('postAdminHiddenReason', { reason: post.adminHiddenReason })}
+              </p>
+            )}
+          </div>
+        )}
         {isDisputePost ? (
           <h1 className="text-xl font-bold text-gray-900">
             {localizeDisputePostTitle(lang, post.title, t('catDispute'))}
@@ -876,6 +909,10 @@ export const PostDetail: React.FC = () => {
               timeAgo={(createdAt) => relativeTimeLabel(createdAt, t)}
               replyLabel={t('reply')}
               commentOptionsAria={t('commentOptions')}
+              currentUserId={currentUserId || undefined}
+              adminHiddenLabel={t('commentAdminHidden')}
+              adminHiddenMineLabel={t('commentAdminHiddenMine')}
+              adminRemovedLabel={t('commentAdminRemoved')}
             />
           )}
         </div>

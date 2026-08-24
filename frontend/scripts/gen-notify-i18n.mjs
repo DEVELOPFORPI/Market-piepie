@@ -804,6 +804,147 @@ const table = {
   ],
 };
 
+keys.push('titleListingSuspended', 'bodyListingSuspended', 'bodyListingSuspendedReason');
+const LISTING_SUSPENDED = {
+  en: [
+    'Listing suspended',
+    'Your listing "{title}" was suspended by an admin.',
+    'Your listing "{title}" was suspended by an admin. Reason: {reason}',
+  ],
+  ko: [
+    '상품이 관리자에 의해 정지되었습니다',
+    '"{title}" 상품이 관리자에 의해 정지되었습니다.',
+    '"{title}" 상품이 관리자에 의해 정지되었습니다. 사유: {reason}',
+  ],
+  zh: [
+    '商品已被管理员停用',
+    '你的商品“{title}”已被管理员停用。',
+    '你的商品“{title}”已被管理员停用。原因：{reason}',
+  ],
+  ja: [
+    '出品が管理者により停止されました',
+    '「{title}」は管理者により停止されました。',
+    '「{title}」は管理者により停止されました。理由：{reason}',
+  ],
+};
+for (const lang of Object.keys(table)) {
+  table[lang].push(...(LISTING_SUSPENDED[lang] || LISTING_SUSPENDED.en));
+}
+
+keys.push(
+  'titleListingRemoved',
+  'bodyListingRemoved',
+  'bodyListingRemovedReason',
+  'titlePostHidden',
+  'bodyPostHidden',
+  'bodyPostHiddenReason',
+  'titlePostRemoved',
+  'bodyPostRemoved',
+  'bodyPostRemovedReason',
+  'titleCommentHidden',
+  'bodyCommentHidden',
+  'bodyCommentHiddenReason',
+  'titleCommentRemoved',
+  'bodyCommentRemoved',
+  'bodyCommentRemovedReason',
+);
+const MODERATION = {
+  en: [
+    'Listing removed',
+    'Your listing "{title}" was removed by an admin.',
+    'Your listing "{title}" was removed by an admin. Reason: {reason}',
+    'Post hidden',
+    'Your post "{title}" was hidden by an admin.',
+    'Your post "{title}" was hidden by an admin. Reason: {reason}',
+    'Post removed',
+    'Your post "{title}" was removed by an admin.',
+    'Your post "{title}" was removed by an admin. Reason: {reason}',
+    'Comment hidden',
+    'Your comment on "{title}" was hidden by an admin.',
+    'Your comment on "{title}" was hidden by an admin. Reason: {reason}',
+    'Comment removed',
+    'Your comment on "{title}" was removed by an admin.',
+    'Your comment on "{title}" was removed by an admin. Reason: {reason}',
+  ],
+  ko: [
+    '상품이 관리자에 의해 삭제되었습니다',
+    '"{title}" 상품이 관리자에 의해 삭제되었습니다.',
+    '"{title}" 상품이 관리자에 의해 삭제되었습니다. 사유: {reason}',
+    '게시글이 관리자에 의해 숨겨졌습니다',
+    '"{title}" 게시글이 관리자에 의해 숨겨졌습니다.',
+    '"{title}" 게시글이 관리자에 의해 숨겨졌습니다. 사유: {reason}',
+    '게시글이 관리자에 의해 삭제되었습니다',
+    '"{title}" 게시글이 관리자에 의해 삭제되었습니다.',
+    '"{title}" 게시글이 관리자에 의해 삭제되었습니다. 사유: {reason}',
+    '댓글이 관리자에 의해 숨겨졌습니다',
+    '"{title}" 게시글에 남긴 댓글이 관리자에 의해 숨겨졌습니다.',
+    '"{title}" 게시글에 남긴 댓글이 관리자에 의해 숨겨졌습니다. 사유: {reason}',
+    '댓글이 관리자에 의해 삭제되었습니다',
+    '"{title}" 게시글에 남긴 댓글이 관리자에 의해 삭제되었습니다.',
+    '"{title}" 게시글에 남긴 댓글이 관리자에 의해 삭제되었습니다. 사유: {reason}',
+  ],
+  zh: [
+    '商品已被管理员删除',
+    '你的商品“{title}”已被管理员删除。',
+    '你的商品“{title}”已被管理员删除。原因：{reason}',
+    '帖子已被管理员隐藏',
+    '你的帖子“{title}”已被管理员隐藏。',
+    '你的帖子“{title}”已被管理员隐藏。原因：{reason}',
+    '帖子已被管理员删除',
+    '你的帖子“{title}”已被管理员删除。',
+    '你的帖子“{title}”已被管理员删除。原因：{reason}',
+    '评论已被管理员隐藏',
+    '你在“{title}”的评论已被管理员隐藏。',
+    '你在“{title}”的评论已被管理员隐藏。原因：{reason}',
+    '评论已被管理员删除',
+    '你在“{title}”的评论已被管理员删除。',
+    '你在“{title}”的评论已被管理员删除。原因：{reason}',
+  ],
+  ja: [
+    '出品が管理者により削除されました',
+    '「{title}」は管理者により削除されました。',
+    '「{title}」は管理者により削除されました。理由：{reason}',
+    '投稿が管理者により非表示になりました',
+    '「{title}」は管理者により非表示になりました。',
+    '「{title}」は管理者により非表示になりました。理由：{reason}',
+    '投稿が管理者により削除されました',
+    '「{title}」は管理者により削除されました。',
+    '「{title}」は管理者により削除されました。理由：{reason}',
+    'コメントが管理者により非表示になりました',
+    '「{title}」へのコメントが管理者により非表示になりました。',
+    '「{title}」へのコメントが管理者により非表示になりました。理由：{reason}',
+    'コメントが管理者により削除されました',
+    '「{title}」へのコメントが管理者により削除されました。',
+    '「{title}」へのコメントが管理者により削除されました。理由：{reason}',
+  ],
+};
+for (const lang of Object.keys(table)) {
+  table[lang].push(...(MODERATION[lang] || MODERATION.en));
+}
+
+keys.push('titlePostReply', 'bodyPostReply');
+const POST_REPLY = {
+  en: [
+    'New reply',
+    '{name} replied to your comment on "{title}".',
+  ],
+  ko: [
+    '답글이 달렸습니다',
+    '{name}님이 "{title}"에 남긴 내 댓글에 답글을 달았습니다.',
+  ],
+  zh: [
+    '有新回复',
+    '{name} 回复了你在“{title}”的评论。',
+  ],
+  ja: [
+    '返信が届きました',
+    '{name}さんが「{title}」へのコメントに返信しました。',
+  ],
+};
+for (const lang of Object.keys(table)) {
+  table[lang].push(...(POST_REPLY[lang] || POST_REPLY.en));
+}
+
 for (const [lang, arr] of Object.entries(table)) {
   if (arr.length !== keys.length) throw new Error(`${lang}: ${arr.length} != ${keys.length}`);
 }

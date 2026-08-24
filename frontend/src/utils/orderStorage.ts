@@ -183,6 +183,7 @@ export const hasProductReservedOrder = (productId: string): boolean => {
       || o.status === ORDER_STATUS_VALUE.COMPLETE
       || o.status === ORDER_STATUS_VALUE.RECEIVED
       || o.status === ORDER_STATUS_VALUE.DISPUTE
+      || o.status === ORDER_STATUS_VALUE.TRADE_FAILED
     ) {
       return false;
     }
@@ -191,6 +192,30 @@ export const hasProductReservedOrder = (productId: string): boolean => {
     return false;
   });
 };
+
+export const isOrderMeetupReserved = (order: Order): boolean => {
+  if (
+    order.status === ORDER_STATUS_VALUE.COMPLETE
+    || order.status === ORDER_STATUS_VALUE.RECEIVED
+    || order.status === ORDER_STATUS_VALUE.DISPUTE
+    || order.status === ORDER_STATUS_VALUE.TRADE_FAILED
+  ) {
+    return false;
+  }
+  if (order.status === ORDER_STATUS_VALUE.MEETUP_SET) return true;
+  return !!(order.meetupPlace && order.meetupDate && order.meetupTime);
+};
+
+const LEAVE_NO_FAIL_STATUSES = new Set<OrderStatus>([
+  ORDER_STATUS_VALUE.COMPLETE,
+  ORDER_STATUS_VALUE.RECEIVED,
+  ORDER_STATUS_VALUE.TRADE_FAILED,
+  ORDER_STATUS_VALUE.OFFER_DECLINED,
+  ORDER_STATUS_VALUE.ADMIN_RESOLVED,
+]);
+
+export const shouldFailOrderOnChatLeave = (order: Order): boolean =>
+  !LEAVE_NO_FAIL_STATUSES.has(order.status);
 
 /** Whether an open dispute exists for this product */
 export const hasProductDisputeOrder = (productId: string): boolean => {
@@ -657,7 +682,7 @@ const isShareOrder = (price: number, product?: Product) =>
 
 const CHAT_STARTED_TIMELINE = 'Chat started';
 
-/** Same listing + same pair, not finished — reuse instead of opening a second order. */
+/** Same listing + same pair, still open — closed/failed trades must not be reused. */
 function findOpenOrderForTrade(productId: string, buyerId: string, sellerId: string): Order | undefined {
   return getAllOrders()
     .filter(
@@ -666,6 +691,8 @@ function findOpenOrderForTrade(productId: string, buyerId: string, sellerId: str
         o.buyer?.id === buyerId &&
         o.seller?.id === sellerId &&
         o.status !== ORDER_STATUS_VALUE.COMPLETE &&
+        o.status !== ORDER_STATUS_VALUE.TRADE_FAILED &&
+        o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED &&
         !(o.buyerCompleted && o.sellerCompleted),
     )
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];

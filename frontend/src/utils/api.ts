@@ -30,7 +30,11 @@ async function request<T>(
   options: RequestInit = {},
   baseUrl = API_BASE,
 ): Promise<ApiResponse<T>> {
-  if (Date.now() < rateLimitedUntil) {
+  // The cooldown exists to stop background polling from piling onto a limited
+  // server. Writes are things the user just tapped, so they must still be sent
+  // — otherwise one throttled poll blocks sending offers and chat messages.
+  const isRead = (options.method ?? 'GET').toUpperCase() === 'GET';
+  if (isRead && Date.now() < rateLimitedUntil) {
     return { ok: false, error: 'Rate limited (cooldown)', status: 429 };
   }
 

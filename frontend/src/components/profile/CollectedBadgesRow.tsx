@@ -65,7 +65,7 @@ export const CollectedBadgesRow: React.FC<Props> = ({ selectedId = null, onSelec
               {inner}
               {selected ? (
                 <span
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center shadow"
+                  className="absolute top-0 right-0 w-5 h-5 rounded-full flex items-center justify-center shadow pointer-events-none"
                   style={{ backgroundColor: TEAL }}
                   aria-hidden
                 >

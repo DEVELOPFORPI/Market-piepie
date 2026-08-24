@@ -27,6 +27,7 @@ export const ORDER_STATUS_VALUE = {
   DISPUTE: '분쟁',
   /** 관리자가 분쟁을 해결해 거래를 채팅 시작 시점으로 되돌린 상태 (진행 중 거래 없음) */
   ADMIN_RESOLVED: '관리자해결',
+  TRADE_FAILED: '거래불발',
 } as const;
 export type OrderStatus = (typeof ORDER_STATUS_VALUE)[keyof typeof ORDER_STATUS_VALUE];
 
@@ -212,6 +213,8 @@ export interface ChatRoom {
   adminHidden?: boolean;
   /** 상품이 관리자에 의해 숨겨진 방 — 대화는 유지하고 새 거래만 막는다 */
   productAdminHidden?: boolean;
+  /** 상품이 삭제된 방 — 마지막으로 알던 상품 정보만 남는다 */
+  productDeleted?: boolean;
 }
 
 export interface Review {
@@ -233,6 +236,9 @@ export interface Comment {
   createdAt: string;
   parentId?: string;
   replies?: Comment[];
+  adminHidden?: boolean;
+  /** Admin-removed but kept as a placeholder because replies hang off it. */
+  adminRemoved?: boolean;
 }
 
 export interface Post {
@@ -251,4 +257,6 @@ export interface Post {
   latitude?: number;
   longitude?: number;
   orderId?: string;
+  adminHidden?: boolean;
+  adminHiddenReason?: string;
 }

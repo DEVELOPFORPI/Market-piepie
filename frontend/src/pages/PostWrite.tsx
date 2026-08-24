@@ -71,6 +71,11 @@ export const PostWrite: React.FC = () => {
           navigate('/community', { replace: true });
           return;
         }
+        if (existing.adminHidden) {
+          showToast(t('postAdminHiddenCannotEdit'));
+          navigate('/my/posts', { replace: true });
+          return;
+        }
         setCategory(existing.category);
         setTitle(existing.title);
         setContent(existing.content);

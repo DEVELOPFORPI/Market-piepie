@@ -291,9 +291,15 @@ export const AdminReports: React.FC = () => {
   const handleDeleteTarget = async () => {
     if (!selected || !canModerateTarget || !selected.target_row_id) return;
     const label = TARGET_LABEL[selected.target_type] || '대상';
-    if (!confirm(`이 ${label}을(를) 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    const entered = window.prompt(
+      `이 ${label}을(를) 삭제합니다. 되돌릴 수 없습니다.\n삭제 사유를 입력하세요. (선택 — 작성자 알림에 표시됩니다)`,
+      '',
+    );
+    if (entered === null) return;
+    const reason = entered.trim();
+    const query = reason ? `?reason=${encodeURIComponent(reason)}` : '';
     setActionBusy('delete');
-    const res = await api.delete(deletePath(selected.target_type, selected.target_id), {
+    const res = await api.delete(`${deletePath(selected.target_type, selected.target_id)}${query}`, {
       headers: adminPasswordHeaders(),
     });
     setActionBusy(null);

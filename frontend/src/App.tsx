@@ -28,6 +28,7 @@ import { MyOrders } from './pages/MyOrders';
 import { MyDisputes } from './pages/MyDisputes';
 import { MyReviews } from './pages/MyReviews';
 import { MyPosts } from './pages/MyPosts';
+import { MyComments } from './pages/MyComments';
 import { MyInquiries } from './pages/MyInquiries';
 import { Settings } from './pages/Settings';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -109,6 +110,7 @@ const HIDE_NAV_PREFIXES = [
   '/my/disputes',
   '/my/reviews',
   '/my/posts',
+  '/my/comments',
   '/my/inquiries',
   '/review/',
   '/region/',
@@ -486,6 +488,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/my/disputes" element={<MyDisputes />} />
           <Route path="/my/reviews" element={<MyReviews />} />
           <Route path="/my/posts" element={<MyPosts />} />
+          <Route path="/my/comments" element={<MyComments />} />
           <Route path="/my/inquiries" element={<MyInquiries />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/inquiry" element={<InquiryWrite />} />

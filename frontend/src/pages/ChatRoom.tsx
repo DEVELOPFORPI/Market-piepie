@@ -9,7 +9,7 @@ import {
   PRODUCT_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta, getChatLeaveBlock } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isMyAcceptedTradeOnProduct, isOfferAwaitingSellerResponse, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -37,7 +37,7 @@ import { ImageLightbox } from '@/components/common/ImageLightbox';
 import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { api } from '@/utils/api';
-import { syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
+import { syncChatRoomsFromDB, syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
 import {
   displayChatMessageContent,
   isMeetupCanceledMessage,
@@ -303,21 +303,23 @@ export const ChatRoom: React.FC = () => {
     lastReadAt: '',
     enteredAt: '',
   });
-  /** Show deleted-listing alert once, then leave */
-  const deletedProductPopupShownRef = useRef(false);
-
   // Whether listing was deleted
   const [isProductDeleted, setIsProductDeleted] = useState(false);
 
   const checkProductDeleted = () => {
-    if (room?.product?.id) {
+    if (!room) return;
+    if (room.productDeleted) {
+      setIsProductDeleted(true);
+      return;
+    }
+    if (room.product?.id) {
       // 관리자가 숨긴 상품은 로컬 목록에서도 빠지지만 삭제된 것은 아니다.
       const exists = getProductById(room.product.id);
       setIsProductDeleted(!exists && !room.productAdminHidden);
     }
   };
 
-  // Sync room when roomId changes; reset deleted-listing ref
+  // Sync room when roomId changes
   useEffect(() => {
     initialScrollDoneRef.current = false;
     prevMessageCountRef.current = 0;
@@ -325,7 +327,6 @@ export const ChatRoom: React.FC = () => {
     stickToBottomRef.current = true;
     setNewMessageCount(0);
     setRoom(roomId ? getChatRoom(roomId) : null);
-    deletedProductPopupShownRef.current = false;
     shownMeetupPopupIdsRef.current = new Set();
     knownMessageIdsRef.current = new Set();
     initialMessageSeedDoneRef.current = false;
@@ -361,15 +362,6 @@ export const ChatRoom: React.FC = () => {
       unsubRead();
     };
   }, [roomId]);
-
-  // Partner deleted listing: alert once and leave
-  useEffect(() => {
-    if (!roomId || !isProductDeleted) return;
-    if (deletedProductPopupShownRef.current) return;
-    deletedProductPopupShownRef.current = true;
-    showToast(t('listingRemovedAlert'));
-    navigate('/chat', { replace: true });
-  }, [isProductDeleted, roomId, navigate]);
 
   // On enter / room updates: load messages; ended rooms stay read-only (no rejoin)
   useEffect(() => {
@@ -606,7 +598,11 @@ export const ChatRoom: React.FC = () => {
     const isCompleteOrder = (o: import('@/types').Order) =>
       o.status === ORDER_STATUS_VALUE.COMPLETE ||
       !!(o.buyerCompleted && o.sellerCompleted);
-    const isActiveOrder = (o: import('@/types').Order) => !isCompleteOrder(o);
+    const isActiveOrder = (o: import('@/types').Order) =>
+      !isCompleteOrder(o)
+      && o.status !== ORDER_STATUS_VALUE.TRADE_FAILED
+      && o.status !== ORDER_STATUS_VALUE.OFFER_DECLINED
+      && o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED;
     const newest = (list: import('@/types').Order[]) =>
       [...list].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -739,6 +735,7 @@ export const ChatRoom: React.FC = () => {
   const canOfferPrice = !!(
     !isSoldToOtherParty
     && !productAdminHidden
+    && !isProductDeleted
     && !isTradeCompleteForThisChat
     && !hasOpenDisputeOnOrder
     && productForOffer
@@ -793,7 +790,7 @@ export const ChatRoom: React.FC = () => {
   };
 
   const buyerChips: ChatChipAction[] = (() => {
-    if (!isBuyer || !room?.product || isProductDeleted || roomEnded) return [];
+    if (!isBuyer || !room?.product || isProductDeleted || roomEnded || productAdminHidden) return [];
     if (isSoldToOtherParty) return [];
     if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
@@ -852,7 +849,7 @@ export const ChatRoom: React.FC = () => {
   })();
 
   const sellerChips: ChatChipAction[] = (() => {
-    if (!isSeller || !room?.product || isProductDeleted || roomEnded) return [];
+    if (!isSeller || !room?.product || isProductDeleted || roomEnded || productAdminHidden) return [];
     if (isSoldToOtherParty) return [];
     if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
@@ -1105,6 +1102,9 @@ export const ChatRoom: React.FC = () => {
     let cancelled = false;
     (async () => {
       const uid = getCurrentUserId();
+      // 방 정보(상품 숨김·삭제 여부 등)는 목록 응답에만 담겨 온다.
+      if (uid) await syncChatRoomsFromDB(uid);
+      if (cancelled) return;
       await syncRoomMessagesFromDB(roomId, uid || undefined);
       if (cancelled) return;
       const r = getChatRoom(roomId);
@@ -1340,6 +1340,10 @@ export const ChatRoom: React.FC = () => {
                   onClick={() => {
                     setShowMenu(false);
                     if (!roomId) return;
+                    if (getChatLeaveBlock(room, currentOrder)) {
+                      showToast(t('cannotLeaveChatReservedOrDispute'));
+                      return;
+                    }
                     void askConfirm({
                       message: t('leaveChatConfirm'),
                       confirmLabel: t('leaveChat'),
@@ -1463,6 +1467,12 @@ export const ChatRoom: React.FC = () => {
           </div>
         )}
 
+        {isProductDeleted && !roomEnded && (
+          <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-gray-600">{t('bannerListingDeleted')}</p>
+          </div>
+        )}
+
         {meetupBannerInfo
           && !isTradeCompleteForThisChat
           && !isSoldToOtherParty
@@ -1526,7 +1536,10 @@ export const ChatRoom: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </div>
-              <p className="text-sm text-gray-400">{t('listingRemoved')}</p>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-400 line-through truncate">{room.product.title}</p>
+                <p className="text-xs text-gray-400">{t('listingRemoved')}</p>
+              </div>
             </div>
           ) : (
             <>
@@ -1726,6 +1739,7 @@ export const ChatRoom: React.FC = () => {
               && !meetupBannerInfo
               && !listingHeldByOtherDispute
               && !productAdminHidden
+              && !isProductDeleted
               && !(
                 currentOrder
                 && currentOrder.status !== ORDER_STATUS_VALUE.PENDING_OFFER

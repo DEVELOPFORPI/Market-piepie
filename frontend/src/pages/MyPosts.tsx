@@ -138,11 +138,11 @@ export const MyPosts: React.FC = () => {
             {filteredPosts.map((post) => (
               <div
                 key={post.id}
-                className="p-4 border border-gray-200 rounded-lg"
+                className="overflow-hidden rounded-lg border border-gray-200"
               >
                 <div
                   onClick={() => navigate(`/community/post/${post.id}`)}
-                  className="cursor-pointer"
+                  className="cursor-pointer p-4"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span
@@ -187,14 +187,25 @@ export const MyPosts: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={() => navigate(`/community/edit/${post.id}`)}
-                    className="px-4 py-1.5 text-xs font-medium rounded-lg border"
-                    style={{ borderColor: '#00A8A3', color: '#00A8A3' }}
-                  >
-                    {t('edit')}
-                  </button>
+                {post.adminHidden ? (
+                  <div className="border-t border-gray-200 bg-gray-100 px-4 py-2 text-xs text-gray-600">
+                    {t('postAdminHidden')}
+                    {post.adminHiddenReason
+                      ? ` ${t('postAdminHiddenReason', { reason: post.adminHiddenReason })}`
+                      : ''}
+                  </div>
+                ) : null}
+
+                <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100">
+                  {!post.adminHidden && (
+                    <button
+                      onClick={() => navigate(`/community/edit/${post.id}`)}
+                      className="px-4 py-1.5 text-xs font-medium rounded-lg border"
+                      style={{ borderColor: '#00A8A3', color: '#00A8A3' }}
+                    >
+                      {t('edit')}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(post)}
                     className="px-4 py-1.5 text-xs font-medium text-red-500 border border-red-300 rounded-lg"

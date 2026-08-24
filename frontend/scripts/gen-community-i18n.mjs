@@ -514,6 +514,57 @@ for (const lang of Object.keys(table)) {
   table[lang].push(...detail[lang]);
 }
 
+keys.push(
+  'postAdminHidden',
+  'postAdminHiddenReason',
+  'postAdminHiddenCannotEdit',
+  'badgeAdminHidden',
+  'commentAdminHidden',
+  'commentAdminHiddenMine',
+  'commentAdminRemoved',
+);
+const MODERATION = {
+  en: [
+    'This post was hidden by an admin. Only you can see it.',
+    'Reason: {reason}',
+    'Hidden posts cannot be edited.',
+    'Hidden',
+    'This comment was hidden by an admin.',
+    'Your comment was hidden by an admin. Only you can see it.',
+    'This comment was removed by an admin.',
+  ],
+  ko: [
+    '관리자에 의해 숨겨진 게시글입니다. 나만 볼 수 있습니다.',
+    '사유: {reason}',
+    '숨겨진 게시글은 수정할 수 없습니다.',
+    '숨김',
+    '관리자에 의해 숨겨진 댓글입니다.',
+    '관리자에 의해 숨겨진 댓글입니다. 나만 볼 수 있습니다.',
+    '관리자에 의해 삭제된 댓글입니다.',
+  ],
+  zh: [
+    '该帖子已被管理员隐藏，仅你可见。',
+    '原因：{reason}',
+    '被隐藏的帖子无法编辑。',
+    '已隐藏',
+    '该评论已被管理员隐藏。',
+    '你的评论已被管理员隐藏，仅你可见。',
+    '该评论已被管理员删除。',
+  ],
+  ja: [
+    'この投稿は管理者により非表示です。あなただけに表示されます。',
+    '理由：{reason}',
+    '非表示の投稿は編集できません。',
+    '非表示',
+    'このコメントは管理者により非表示です。',
+    'あなたのコメントは管理者により非表示です。あなただけに表示されます。',
+    'このコメントは管理者により削除されました。',
+  ],
+};
+for (const lang of Object.keys(table)) {
+  table[lang].push(...(MODERATION[lang] || MODERATION.en));
+}
+
 for (const [lang, arr] of Object.entries(table)) {
   if (arr.length !== keys.length) throw new Error(`${lang}: ${arr.length} != ${keys.length}`);
 }

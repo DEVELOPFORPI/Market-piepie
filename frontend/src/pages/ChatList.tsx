@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getChatRooms, getOtherUser, leaveChatRoom, addRemoteMessage, addRemoteRoom, updateRoomFromRemote, isChatRoomEnded } from '@/utils/chatStorage';
+import { getChatRooms, getChatRoom, getOtherUser, leaveChatRoom, addRemoteMessage, addRemoteRoom, updateRoomFromRemote, isChatRoomEnded, getChatLeaveBlock } from '@/utils/chatStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { getProductById } from '@/utils/productStorage';
 import { ChatRoom } from '@/types';
@@ -14,6 +14,7 @@ import { syncChatRoomsFromDB, syncDisputesFromDB, syncNotificationsFromDB } from
 import { chatRoomHasOpenDispute } from '@/utils/disputeStorage';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage } from '@/hooks/useLanguage';
+import { showToast } from '@/utils/toast';
 import { LocalizedRegionText } from '@/hooks/useLocalizedRegion';
 
 export const ChatList: React.FC = () => {
@@ -134,10 +135,16 @@ export const ChatList: React.FC = () => {
       });
       if (!ok) return;
       const ids = Array.from(selectedIds);
-      setRooms((prev) => prev.filter((r) => !ids.includes(r.id)));
+      const blocked = ids.filter((id) => getChatLeaveBlock(getChatRoom(id)));
+      const allowed = ids.filter((id) => !getChatLeaveBlock(getChatRoom(id)));
+      if (blocked.length) {
+        showToast(t('cannotLeaveChatReservedOrDispute'));
+      }
+      if (!allowed.length) return;
+      setRooms((prev) => prev.filter((r) => !allowed.includes(r.id)));
       setSelectedIds(new Set());
       setDeleteMode(false);
-      void Promise.all(ids.map((id) => leaveChatRoom(id))).then(() => loadRooms());
+      void Promise.all(allowed.map((id) => leaveChatRoom(id))).then(() => loadRooms());
     })();
   };
 
@@ -177,6 +184,10 @@ export const ChatList: React.FC = () => {
 
   const handleLeaveRoom = (roomId: string) => {
     setContextMenu(null);
+    if (getChatLeaveBlock(getChatRoom(roomId))) {
+      showToast(t('cannotLeaveChatReservedOrDispute'));
+      return;
+    }
     void (async () => {
       const ok = await askConfirm({
         message: t('leaveChatConfirm'),

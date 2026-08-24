@@ -434,6 +434,42 @@ const entries = {
     bn: 'বিক্রেতার বিবাদ সমাধান', ms: 'Pertikaian penjual diselesaikan', sw: 'Mzozo wa muuzaji umetatuliwa', fa: 'اختلاف فروشنده حل شد',
     ur: 'فروخت کنندہ کا تنازعہ حل ہوا',
   },
+  statusTradeFailed: {
+    en: 'Trade failed', ko: '거래불발', zh: '交易未成', ja: '取引不成立',
+    es: 'Operación fallida', pt: 'Negociação falhou', fr: 'Échange non abouti', de: 'Handel gescheitert',
+    id: 'Transaksi gagal', vi: 'Giao dịch thất bại', th: 'การซื้อขายไม่สำเร็จ', hi: 'सौदा विफल',
+    ar: 'فشلت الصفقة', ru: 'Сделка не состоялась', tr: 'İşlem gerçekleşmedi', it: 'Scambio non riuscito',
+    pl: 'Transakcja nieudana', nl: 'Deal niet doorgegaan', fil: 'Hindi natuloy ang trade', uk: 'Угода не відбулась',
+    bn: 'লেনদেন ব্যর্থ', ms: 'Urus niaga gagal', sw: 'Biashara imeshindwa', fa: 'معامله انجام نشد',
+    ur: 'سودا ناکام',
+  },
+  tlTradeFailed: {
+    en: 'Trade fell through', ko: '거래 불발', zh: '交易未成', ja: '取引不成立',
+    es: 'La operación no se concretó', pt: 'A negociação não se concretizou', fr: 'L’échange n’a pas abouti', de: 'Der Handel kam nicht zustande',
+    id: 'Transaksi batal', vi: 'Giao dịch không thành', th: 'การซื้อขายไม่สำเร็จ', hi: 'सौदा नहीं हुआ',
+    ar: 'لم تتم الصفقة', ru: 'Сделка сорвалась', tr: 'İşlem gerçekleşmedi', it: 'Lo scambio non è andato a buon fine',
+    pl: 'Transakcja nie doszła do skutku', nl: 'De deal ging niet door', fil: 'Hindi natuloy ang trade', uk: 'Угода зірвалася',
+    bn: 'লেনদেন হয়নি', ms: 'Urus niaga tidak jadi', sw: 'Biashara haikufanikiwa', fa: 'معامله سر نگرفت',
+    ur: 'سودا نہیں ہوا',
+  },
+  tlBuyerLeftChat: {
+    en: 'Buyer left the chat', ko: '구매자가 채팅을 나갔습니다', zh: '买家已离开聊天', ja: '購入者がチャットを退出しました',
+    es: 'El comprador salió del chat', pt: 'O comprador saiu do chat', fr: 'L’acheteur a quitté le chat', de: 'Der Käufer hat den Chat verlassen',
+    id: 'Pembeli meninggalkan chat', vi: 'Người mua đã rời chat', th: 'ผู้ซื้อออกจากแชท', hi: 'खरीदार ने चैट छोड़ दी',
+    ar: 'غادر المشتري الدردشة', ru: 'Покупатель покинул чат', tr: 'Alıcı sohbetten ayrıldı', it: 'L’acquirente ha lasciato la chat',
+    pl: 'Kupujący opuścił czat', nl: 'De koper heeft de chat verlaten', fil: 'Umalis ang buyer sa chat', uk: 'Покупець покинув чат',
+    bn: 'ক্রেতা চ্যাট ছেড়েছেন', ms: 'Pembeli meninggalkan sembang', sw: 'Mnunuzi ametoka kwenye gumzo', fa: 'خریدار گفتگو را ترک کرد',
+    ur: 'خریدار نے چیٹ چھوڑ دی',
+  },
+  tlSellerLeftChat: {
+    en: 'Seller left the chat', ko: '판매자가 채팅을 나갔습니다', zh: '卖家已离开聊天', ja: '出品者がチャットを退出しました',
+    es: 'El vendedor salió del chat', pt: 'O vendedor saiu do chat', fr: 'Le vendeur a quitté le chat', de: 'Der Verkäufer hat den Chat verlassen',
+    id: 'Penjual meninggalkan chat', vi: 'Người bán đã rời chat', th: 'ผู้ขายออกจากแชท', hi: 'विक्रेता ने चैट छोड़ दी',
+    ar: 'غادر البائع الدردشة', ru: 'Продавец покинул чат', tr: 'Satıcı sohbetten ayrıldı', it: 'Il venditore ha lasciato la chat',
+    pl: 'Sprzedawca opuścił czat', nl: 'De verkoper heeft de chat verlaten', fil: 'Umalis ang seller sa chat', uk: 'Продавець покинув чат',
+    bn: 'বিক্রেতা চ্যাট ছেড়েছেন', ms: 'Penjual meninggalkan sembang', sw: 'Muuzaji ametoka kwenye gumzo', fa: 'فروشنده گفتگو را ترک کرد',
+    ur: 'فروخت کنندہ نے چیٹ چھوڑ دی',
+  },
 };
 
 const keys = Object.keys(entries);

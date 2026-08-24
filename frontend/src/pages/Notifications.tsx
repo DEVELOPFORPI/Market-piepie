@@ -32,6 +32,15 @@ import {
   NOTIFY_TRADE_COMPLETED,
   NOTIFY_DISPUTE_FILED,
   NOTIFY_DISPUTE_RESOLVED,
+  NOTIFY_POST_COMMENT,
+  NOTIFY_POST_REPLY,
+  NOTIFY_INQUIRY_REPLY,
+  NOTIFY_LISTING_SUSPENDED,
+  NOTIFY_LISTING_REMOVED,
+  NOTIFY_POST_HIDDEN,
+  NOTIFY_POST_REMOVED,
+  NOTIFY_COMMENT_HIDDEN,
+  NOTIFY_COMMENT_REMOVED,
 } from '@/locale/enUI';
 import { useLanguage } from '@/hooks/useLanguage';
 import { notifyT } from '@/i18n/notifyMessages';
@@ -50,13 +59,39 @@ const OFFER_ARRIVED_TITLES = new Set([
   '새 구매 제안이 도착했습니다',
   '새 나눔 요청이 도착했습니다',
 ]);
+const COMMENT_TITLES = new Set([
+  NOTIFY_POST_COMMENT,
+  NOTIFY_POST_REPLY,
+  '새 댓글이 달렸습니다',
+  '답글이 달렸습니다',
+]);
+const DISPUTE_RESOLVED_TITLES = new Set([
+  NOTIFY_DISPUTE_RESOLVED,
+  '분쟁이 해결되었습니다',
+]);
 const DISPUTE_TITLES = new Set([
   NOTIFY_DISPUTE_FILED,
-  NOTIFY_DISPUTE_RESOLVED,
   'Dispute post published',
   '분쟁이 제기되었습니다',
-  '분쟁이 해결되었습니다',
   '분쟁 게시글이 등록되었습니다',
+]);
+const INQUIRY_TITLES = new Set([
+  NOTIFY_INQUIRY_REPLY,
+  '문의 답변이 도착했습니다',
+]);
+const MODERATION_TITLES = new Set([
+  NOTIFY_LISTING_SUSPENDED,
+  NOTIFY_LISTING_REMOVED,
+  NOTIFY_POST_HIDDEN,
+  NOTIFY_POST_REMOVED,
+  NOTIFY_COMMENT_HIDDEN,
+  NOTIFY_COMMENT_REMOVED,
+  '상품이 관리자에 의해 정지되었습니다',
+  '상품이 관리자에 의해 삭제되었습니다',
+  '게시글이 관리자에 의해 숨겨졌습니다',
+  '게시글이 관리자에 의해 삭제되었습니다',
+  '댓글이 관리자에 의해 숨겨졌습니다',
+  '댓글이 관리자에 의해 삭제되었습니다',
 ]);
 
 const CHAT_DEST_TITLES = new Set([
@@ -373,7 +408,7 @@ export const Notifications: React.FC = () => {
               <div className="text-2xl flex-shrink-0 w-6 h-6 flex items-center justify-center">
                 {notification.type === 'badge' ? (
                   <img src="/Batch/icon.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : notification.type === 'comment' ? (
+                ) : notification.type === 'comment' || notification.type === 'reply' || COMMENT_TITLES.has(title) ? (
                   <img src="/post/comment.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : isMeetupNotificationTitle(title) ? (
                   <img src="/post/time.svg" alt="" className="w-5 h-5 object-contain" />
@@ -385,12 +420,18 @@ export const Notifications: React.FC = () => {
                   <img src="/post/smile.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : OFFER_ARRIVED_TITLES.has(title) ? (
                   <img src="/post/offer.png" alt="" className="w-5 h-5 object-contain" />
+                ) : DISPUTE_RESOLVED_TITLES.has(title) ? (
+                  <img src="/post/dispute-resolved.png" alt="" className="w-5 h-5 object-contain" />
                 ) : DISPUTE_TITLES.has(title) ? (
                   <img src="/post/dispute.png" alt="" className="w-5 h-5 object-contain" />
                 ) : DECLINE_TITLES.has(title) ? (
                   <img src="/post/offer-declined.png" alt="" className="w-5 h-5 object-contain" />
                 ) : ACCEPT_TITLES.has(title) ? (
                   <img src="/3 ICON/4.svg" alt="" className="w-5 h-5 object-contain" />
+                ) : notification.type === 'inquiry' || INQUIRY_TITLES.has(title) ? (
+                  <img src="/post/inquiry.png" alt="" className="w-5 h-5 object-contain" />
+                ) : MODERATION_TITLES.has(title) ? (
+                  <img src="/post/listing-suspended.png" alt="" className="w-5 h-5 object-contain" />
                 ) : notification.type === 'chat' ? (
                   <img src="/post/chat.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : (

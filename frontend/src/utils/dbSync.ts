@@ -427,6 +427,10 @@ export function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<st
     latitude: row.latitude as number | undefined,
     longitude: row.longitude as number | undefined,
     orderId: row.order_id as string | undefined,
+    adminHidden: Boolean(row.admin_hidden),
+    adminHiddenReason: row.admin_hidden_reason
+      ? String(row.admin_hidden_reason)
+      : undefined,
     attachedProduct,
     author: applyProfileCacheToUser({
       id: String(author.id || ''),
@@ -845,8 +849,15 @@ export async function syncRoomReadStateFromDB(roomId: string): Promise<boolean> 
   }
 }
 
-/** 메시지를 DB에 저장 — 성공 여부 반환 (DB-first) */
-export async function syncMessageToDB(roomId: string, message: ChatMessage): Promise<boolean> {
+/**
+ * 메시지를 DB에 저장 — 성공 여부 반환 (DB-first).
+ * 서버가 모르는 방이면 404가 오는데, 호출측이 방을 다시 올려 되살릴 수 있게
+ * 그 경우를 따로 알려준다.
+ */
+export async function syncMessageToDB(
+  roomId: string,
+  message: ChatMessage,
+): Promise<{ ok: boolean; roomMissing: boolean }> {
   try {
     if (message.senderId && message.senderId !== 'system') {
       const myUser = getMyUser();
@@ -868,9 +879,9 @@ export async function syncMessageToDB(roomId: string, message: ChatMessage): Pro
       meetup_date: message.meetupDate,
       meetup_time: message.meetupTime,
     });
-    return res.ok;
+    return { ok: res.ok, roomMissing: res.status === 404 };
   } catch {
-    return false;
+    return { ok: false, roomMissing: false };
   }
 }
 
@@ -915,6 +926,9 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
       ...(local.leftUserIds || []),
     ])),
     order: dbRoom.order ?? local.order,
+    // Deleted listings drop out of the DB join; keep the last known copy so the
+    // chat can still say which listing it was.
+    product: dbRoom.product ?? local.product,
     otherUser: freshOther?.nickname
       ? applyProfileCacheToUser(freshOther)
       : applyProfileCacheToUser(local.otherUser ?? dbRoom.otherUser),
@@ -1182,6 +1196,7 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
     leftUserIds,
     adminHidden: !!row.admin_hidden,
     productAdminHidden: !!row.product_admin_hidden,
+    productDeleted: !!row.product_deleted,
 
     product,
 
@@ -1221,6 +1236,18 @@ export async function syncCommentToDB(
     return { ok: res.ok, count: res.ok ? res.data?.count : undefined };
   } catch {
     return { ok: false };
+  }
+}
+
+export async function syncCommentUpdateToDB(
+  commentId: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const res = await api.patch(`/api/comments/${commentId}`, { content });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -1264,6 +1291,8 @@ export async function syncCommentsFromDB(postId: string): Promise<void> {
         content: String(row.content || ''),
         parentId: (row.parent_id as string | undefined) || undefined,
         createdAt: String(row.created_at || new Date().toISOString()),
+        adminHidden: Boolean(row.admin_hidden),
+        adminRemoved: Boolean(row.admin_removed),
       }));
       const raw = getItem('community_comments');
       const all: Record<string, unknown[]> = raw ? JSON.parse(raw) : {};

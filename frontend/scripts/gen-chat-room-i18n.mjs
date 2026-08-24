@@ -497,6 +497,15 @@ const entries = {
     bn: 'এই লিস্টিং সরানো হয়েছে।', ms: 'Senarai ini dialih keluar.', sw: 'Tangazo hili limeondolewa.', fa: 'این آگهی حذف شد.',
     ur: 'یہ لسٹنگ ہٹا دی گئی۔',
   },
+  bannerListingDeleted: {
+    en: 'This listing was deleted. The chat remains as a record.', ko: '삭제된 상품입니다. 채팅은 기록으로만 남습니다.', zh: '该商品已删除。聊天仅作为记录保留。', ja: 'この出品は削除されました。チャットは記録として残ります。',
+    es: 'Este anuncio fue eliminado. El chat queda como registro.', pt: 'Este anúncio foi excluído. O chat fica como registro.', fr: 'Cette annonce a été supprimée. La discussion reste en archive.', de: 'Diese Anzeige wurde gelöscht. Der Chat bleibt als Verlauf.',
+    id: 'Listing ini dihapus. Chat tetap sebagai catatan.', vi: 'Tin đăng này đã bị xóa. Cuộc trò chuyện chỉ còn là bản lưu.', th: 'ประกาศนี้ถูกลบแล้ว แชทจะเก็บไว้เป็นบันทึกเท่านั้น', hi: 'यह लिस्टिंग हटा दी गई। चैट केवल रिकॉर्ड के रूप में रहेगी।',
+    ar: 'تم حذف هذا الإعلان. تبقى الدردشة كسجل فقط.', ru: 'Это объявление удалено. Чат остаётся только как история.', tr: 'Bu ilan silindi. Sohbet yalnızca kayıt olarak kalır.', it: 'Questo annuncio è stato eliminato. La chat resta come archivio.',
+    pl: 'To ogłoszenie zostało usunięte. Czat pozostaje jako zapis.', nl: 'Deze advertentie is verwijderd. De chat blijft als archief.', fil: 'Nadelete ang listing na ito. Mananatili ang chat bilang record.', uk: 'Це оголошення видалено. Чат залишається лише як історія.',
+    bn: 'এই লিস্টিং মুছে ফেলা হয়েছে। চ্যাট শুধু রেকর্ড হিসেবে থাকবে।', ms: 'Senarai ini telah dipadam. Sembang kekal sebagai rekod.', sw: 'Tangazo hili limefutwa. Gumzo linabaki kama kumbukumbu.', fa: 'این آگهی حذف شده است. گفتگو فقط به‌عنوان سابقه می‌ماند.',
+    ur: 'یہ لسٹنگ حذف کر دی گئی۔ چیٹ صرف ریکارڈ کے طور پر رہے گی۔',
+  },
   adminDeletedMessage: {
     en: 'This message was removed by an admin.', ko: '관리자가 가린 메시지입니다.', zh: '该消息已被管理员移除。', ja: '管理者が削除したメッセージです。',
     es: 'Un administrador eliminó este mensaje.', pt: 'Esta mensagem foi removida por um administrador.', fr: 'Ce message a été supprimé par un administrateur.', de: 'Diese Nachricht wurde von einem Admin entfernt.',
