@@ -94,6 +94,8 @@ const R2_MAX_UPLOAD_BYTES = Math.max(1, R2_MAX_UPLOAD_MB) * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/avif",
   "image/gif",
+  "image/heic",
+  "image/heif",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -145,11 +147,13 @@ function safePathSegment(value, fallback) {
 }
 
 function extensionForMime(mimeType, originalName = "") {
-  const fromName = String(originalName).toLowerCase().match(/\.(avif|gif|jpe?g|png|webp)$/);
+  const fromName = String(originalName).toLowerCase().match(/\.(avif|gif|heic|heif|jpe?g|png|webp)$/);
   if (fromName) return fromName[0] === ".jpeg" ? ".jpg" : fromName[0];
   const map = {
     "image/avif": ".avif",
     "image/gif": ".gif",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
@@ -617,7 +621,7 @@ const imageUpload = multer({
       cb(null, true);
       return;
     }
-    cb(new Error("Only JPG, PNG, WebP, GIF, or AVIF images are allowed"));
+    cb(new Error("Only JPG, PNG, WebP, GIF, AVIF, or HEIC images are allowed"));
   },
 });
 

@@ -43,6 +43,13 @@ async function blobUrlToFile(blobUrl: string): Promise<File> {
   return new File([blob], fileNameForMime(blob.type), { type: blob.type || 'image/jpeg' });
 }
 
+/** Files kept with their preview URL so submit does not have to re-read a blob:. */
+const previewFiles = new Map<string, File>();
+
+function fileForPreview(url: string): File | undefined {
+  return previewFiles.get(url);
+}
+
 const MAX_IMAGE_EDGE = 1920;
 const JPEG_QUALITY = 0.82;
 
@@ -107,9 +114,15 @@ async function prepareImageForUpload(file: File): Promise<File> {
   }
 
   if (!blob) {
-    const img = await loadHtmlImage(file);
-    ({ width, height } = scaledSize(img.naturalWidth || img.width, img.naturalHeight || img.height));
-    blob = await canvasToJpegBlob(img, width, height);
+    try {
+      const img = await loadHtmlImage(file);
+      ({ width, height } = scaledSize(img.naturalWidth || img.width, img.naturalHeight || img.height));
+      blob = await canvasToJpegBlob(img, width, height);
+    } catch {
+      // Phone ran out of memory or could not transcode (HEIC, huge photo).
+      // Send the original so Publish still has a chance.
+      return file;
+    }
   }
 
   return new File([blob], fileNameForMime('image/jpeg'), { type: 'image/jpeg' });
@@ -148,7 +161,12 @@ export async function uploadImageToR2(
     throw new Error('Only image files can be uploaded');
   }
 
-  const prepared = await prepareImageForUpload(file);
+  let prepared: File;
+  try {
+    prepared = await prepareImageForUpload(file);
+  } catch {
+    prepared = file;
+  }
 
   const send = async () => {
     const formData = new FormData();
@@ -211,11 +229,17 @@ export async function uploadImageToR2(
 export function createLocalPreviewUrls(files: File[]): string[] {
   return files
     .filter((file) => !file.type || file.type.startsWith('image/'))
-    .map((file) => URL.createObjectURL(file));
+    .map((file) => {
+      const url = URL.createObjectURL(file);
+      previewFiles.set(url, file);
+      return url;
+    });
 }
 
 export function revokeLocalPreviewUrl(url: string | undefined): void {
-  if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+  if (!url?.startsWith('blob:')) return;
+  previewFiles.delete(url);
+  URL.revokeObjectURL(url);
 }
 
 export async function uploadImagesToR2(
@@ -236,7 +260,8 @@ export async function uploadImageReferenceToR2(
     return uploadImageToR2(dataUrlToFile(image), options);
   }
   if (image.startsWith('blob:')) {
-    return uploadImageToR2(await blobUrlToFile(image), options);
+    const kept = fileForPreview(image);
+    return uploadImageToR2(kept ?? await blobUrlToFile(image), options);
   }
   return image;
 }
@@ -245,6 +270,12 @@ export async function uploadImageReferencesToR2(
   images: string[],
   options?: UploadImageOptions,
 ): Promise<string[]> {
-  const uploaded = await Promise.all(images.map((image) => uploadImageReferenceToR2(image, options)));
-  return uploaded.filter((image) => image.length > 0);
+  // One at a time: four large photos compressed together routinely crash the
+  // phone WebView, which looks like an instant "could not upload" on Publish.
+  const uploaded: string[] = [];
+  for (const image of images) {
+    const url = await uploadImageReferenceToR2(image, options);
+    if (url) uploaded.push(url);
+  }
+  return uploaded;
 }
