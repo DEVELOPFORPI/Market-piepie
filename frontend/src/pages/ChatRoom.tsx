@@ -1675,14 +1675,12 @@ export const ChatRoom: React.FC = () => {
                   : condition === 'bad'
                     ? t('conditionPoor')
                     : '';
-            const conditionIcon =
-              condition === 'good'
-                ? '/3 ICON/1.svg'
+            const conditionCardStyle =
+              condition === 'bad'
+                ? { backgroundColor: '#EB5757' }
                 : condition === 'normal'
-                  ? '/3 ICON/2.svg'
-                  : condition === 'bad'
-                    ? '/3 ICON/3.svg'
-                    : '/h.svg';
+                  ? { backgroundColor: '#DFAC11' }
+                  : { backgroundColor: '#27AE60' };
             return (
               <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
                 {unreadDivider}
@@ -1690,12 +1688,9 @@ export const ChatRoom: React.FC = () => {
                   <div className="flex flex-col max-w-[85%]">
                     <div
                       className="rounded-lg px-4 py-3 text-white text-sm shadow-sm"
-                      style={{
-                        background: 'linear-gradient(90deg, #00A8A3 0%, #27AE60 100%)',
-                      }}
+                      style={conditionCardStyle}
                     >
-                      <p className="font-semibold mb-2 flex items-center gap-1">
-                        <img src={conditionIcon} alt="" className="w-4 h-4 inline-block" />
+                      <p className={`font-semibold leading-snug${conditionLabel || notes ? ' mb-2' : ''}`}>
                         {displayChatMessageContent(msg.content, lang)}
                       </p>
                       {conditionLabel ? (

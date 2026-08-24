@@ -25,6 +25,7 @@ import {
   NOTIFY_OFFER_ACCEPTED,
   NOTIFY_OFFER_DECLINED,
   NOTIFY_PURCHASE_OFFER_ARRIVED,
+  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   NOTIFY_RECEIVE_CONFIRM,
   NOTIFY_REVIEW_WRITTEN,
   NOTIFY_TRADE_COMPLETE_CHECK,
@@ -42,6 +43,21 @@ const COMPLETION_TITLES = COMPLETION_TITLE_SET;
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
 const REVIEW_TITLES = new Set([NOTIFY_REVIEW_WRITTEN]);
 const ACCEPT_TITLES = new Set([NOTIFY_OFFER_ACCEPTED]);
+const DECLINE_TITLES = new Set([NOTIFY_OFFER_DECLINED, '제안이 거절되었습니다']);
+const OFFER_ARRIVED_TITLES = new Set([
+  NOTIFY_PURCHASE_OFFER_ARRIVED,
+  NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
+  '새 구매 제안이 도착했습니다',
+  '새 나눔 요청이 도착했습니다',
+]);
+const DISPUTE_TITLES = new Set([
+  NOTIFY_DISPUTE_FILED,
+  NOTIFY_DISPUTE_RESOLVED,
+  'Dispute post published',
+  '분쟁이 제기되었습니다',
+  '분쟁이 해결되었습니다',
+  '분쟁 게시글이 등록되었습니다',
+]);
 
 const CHAT_DEST_TITLES = new Set([
   NOTIFY_PURCHASE_OFFER_ARRIVED,
@@ -357,8 +373,8 @@ export const Notifications: React.FC = () => {
               <div className="text-2xl flex-shrink-0 w-6 h-6 flex items-center justify-center">
                 {notification.type === 'badge' ? (
                   <img src="/Batch/icon.svg" alt="" className="w-5 h-5 object-contain" />
-                ) : notification.type === 'chat' ? (
-                  <img src="/post/chat.svg" alt="" className="w-5 h-5 object-contain" />
+                ) : notification.type === 'comment' ? (
+                  <img src="/post/comment.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : isMeetupNotificationTitle(title) ? (
                   <img src="/post/time.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : COMPLETION_TITLES.has(title) ? (
@@ -367,8 +383,16 @@ export const Notifications: React.FC = () => {
                   <img src="/post/parcel.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : REVIEW_TITLES.has(title) ? (
                   <img src="/post/smile.svg" alt="" className="w-5 h-5 object-contain" />
+                ) : OFFER_ARRIVED_TITLES.has(title) ? (
+                  <img src="/post/offer.png" alt="" className="w-5 h-5 object-contain" />
+                ) : DISPUTE_TITLES.has(title) ? (
+                  <img src="/post/dispute.png" alt="" className="w-5 h-5 object-contain" />
+                ) : DECLINE_TITLES.has(title) ? (
+                  <img src="/post/offer-declined.png" alt="" className="w-5 h-5 object-contain" />
                 ) : ACCEPT_TITLES.has(title) ? (
                   <img src="/3 ICON/4.svg" alt="" className="w-5 h-5 object-contain" />
+                ) : notification.type === 'chat' ? (
+                  <img src="/post/chat.svg" alt="" className="w-5 h-5 object-contain" />
                 ) : (
                   getIcon(notification.type)
                 )}
