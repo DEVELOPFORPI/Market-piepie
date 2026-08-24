@@ -130,6 +130,16 @@ async function authHeaders(options?: UploadImageOptions): Promise<Record<string,
   return headers;
 }
 
+const UPLOAD_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 600;
+
+const wait = (ms: number) => new Promise((resolve) => { window.setTimeout(resolve, ms); });
+
+/** Worth another try: the request never got a real answer, or the server was busy. */
+function isRetriableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
 export async function uploadImageToR2(
   file: File,
   options?: UploadImageOptions,
@@ -154,24 +164,48 @@ export async function uploadImageToR2(
     return { res, data };
   };
 
-  let { res, data } = await send();
+  let lastError = 'Image upload failed';
+  let sessionRefreshed = false;
 
-  // Uploads need a session token. A token that never got issued (offline / rate
-  // limited at login) is retried once; one the server rejects is dropped.
-  if (res.status === 401) {
-    if (data?.error === 'Invalid or expired session') {
-      handleExpiredSession();
-    } else {
-      await ensureImplicitSession();
+  // A single dropped request used to fail the whole post / listing / message.
+  // On mobile the connection often dies mid-flight (webview backgrounded, cell
+  // handover), so give the same photo a couple more tries before giving up.
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
+    let res: Response;
+    let data: UploadImageResponse | null;
+    try {
       ({ res, data } = await send());
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : 'Network error';
+      if (attempt < UPLOAD_ATTEMPTS) {
+        await wait(RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+      break;
     }
+
+    if (res.ok && data?.url) return data.url;
+
+    lastError = data?.error || `Image upload failed (${res.status})`;
+
+    // Uploads need a session token. A token that never got issued (offline /
+    // rate limited at login) is retried once; one the server rejects is dropped.
+    if (res.status === 401) {
+      if (data?.error === 'Invalid or expired session') {
+        handleExpiredSession();
+        break;
+      }
+      if (sessionRefreshed) break;
+      sessionRefreshed = true;
+      await ensureImplicitSession();
+      continue;
+    }
+
+    if (!isRetriableStatus(res.status) || attempt === UPLOAD_ATTEMPTS) break;
+    await wait(RETRY_BASE_DELAY_MS * attempt);
   }
 
-  if (!res.ok || !data?.url) {
-    throw new Error(data?.error || `Image upload failed (${res.status})`);
-  }
-
-  return data.url;
+  throw new Error(lastError);
 }
 
 export function createLocalPreviewUrls(files: File[]): string[] {

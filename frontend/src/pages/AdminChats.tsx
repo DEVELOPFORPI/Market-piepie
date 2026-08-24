@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
@@ -51,6 +52,8 @@ const isHidden = (v: boolean | number | string | null | undefined): boolean =>
   v === true || v === 1 || v === '1';
 
 export const AdminChats: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const openedFromQuery = useRef(false);
   const [rooms, setRooms] = useState<ChatRoomRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -89,6 +92,15 @@ export const AdminChats: React.FC = () => {
     }
     setMessages(res.data || []);
   };
+
+  useEffect(() => {
+    const roomId = searchParams.get('room');
+    if (!roomId || openedFromQuery.current || loading || rooms.length === 0) return;
+    const match = rooms.find((r) => r.id === roomId);
+    if (!match) return;
+    openedFromQuery.current = true;
+    void openRoom(match);
+  }, [searchParams, loading, rooms]);
 
   const toggleMessageHidden = async (msg: AdminChatMessage) => {
     const hide = !msg.deleted_at;

@@ -142,6 +142,9 @@ export const PostWrite: React.FC = () => {
         setUploadingImages(true);
         try {
           imagesToSave = await uploadImageReferencesToR2(images, { folder: 'posts' });
+        } catch {
+          showToast(t('couldNotUpload'));
+          return;
         } finally {
           setUploadingImages(false);
         }

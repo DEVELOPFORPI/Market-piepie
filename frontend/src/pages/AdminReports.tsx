@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 import { toggleUserSuspension } from '@/utils/adminSuspension';
@@ -131,6 +132,7 @@ const TARGET_LABEL: Record<string, string> = {
   comment: '댓글',
   user: '사용자',
   review: '후기',
+  chat: '채팅',
 };
 
 type ReportTargetType = keyof typeof TARGET_LABEL;
@@ -171,6 +173,7 @@ function ReportCard({
 }
 
 export const AdminReports: React.FC = () => {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -243,7 +246,7 @@ export const AdminReports: React.FC = () => {
   };
 
   const targetKind = selected?.target_type;
-  const canModerateTarget = targetKind === 'product' || targetKind === 'post' || targetKind === 'comment';
+  const canModerateTarget = targetKind === 'product' || targetKind === 'post' || targetKind === 'comment' || targetKind === 'chat';
 
   const visibilityPath = (type: string, id: string) => {
     if (type === 'product') return `/api/admin/products/${id}/visibility`;
@@ -254,6 +257,7 @@ export const AdminReports: React.FC = () => {
   const deletePath = (type: string, id: string) => {
     if (type === 'product') return `/api/admin/products/${id}`;
     if (type === 'post') return `/api/admin/posts/${id}`;
+    if (type === 'chat') return `/api/admin/chat-rooms/${id}`;
     return `/api/admin/comments/${id}`;
   };
 
@@ -269,11 +273,17 @@ export const AdminReports: React.FC = () => {
       return;
     }
     setActionBusy('hide');
-    const res = await api.patch(
-      visibilityPath(selected.target_type, selected.target_id),
-      { hidden, reason },
-      { headers: adminPasswordHeaders() },
-    );
+    const res = selected.target_type === 'chat'
+      ? await api.put(
+          `/api/admin/chat-rooms/${selected.target_id}`,
+          { hidden, reason },
+          { headers: adminPasswordHeaders() },
+        )
+      : await api.patch(
+          visibilityPath(selected.target_type, selected.target_id),
+          { hidden, reason },
+          { headers: adminPasswordHeaders() },
+        );
     setActionBusy(null);
     if (!res.ok) {
       alert(`처리 실패: ${res.error || `HTTP ${res.status}`}`);
@@ -515,6 +525,15 @@ export const AdminReports: React.FC = () => {
                 )}
                 {isHiddenFlag(selected.target_hidden) && selected.target_hidden_reason && (
                   <p className="text-xs text-gray-500">숨김 사유: {selected.target_hidden_reason}</p>
+                )}
+                {selected.target_type === 'chat' && selected.target_row_id && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/chats?room=${encodeURIComponent(selected.target_id)}`)}
+                    className="w-full rounded-lg border border-teal-200 px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                  >
+                    대화 보기
+                  </button>
                 )}
                 {canModerateTarget && selected.target_row_id && (
                   <div className="flex gap-2 pt-1">

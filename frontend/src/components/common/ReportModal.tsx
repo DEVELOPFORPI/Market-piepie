@@ -6,7 +6,7 @@ import { TEXT_LIMIT } from '@/constants/textLimits';
 import { useLanguage } from '@/hooks/useLanguage';
 import { reportReasonLabel, reportT } from '@/i18n/reportMessages';
 
-export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment';
+export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment' | 'chat';
 
 interface Props {
   open: boolean;
@@ -25,6 +25,7 @@ const TYPE_KEY = {
   review: 'typeReview',
   user: 'typeUser',
   comment: 'typeComment',
+  chat: 'typeChat',
 } as const;
 
 const REASONS: Record<ReportTargetType, string[]> = {
@@ -64,6 +65,13 @@ const REASONS: Record<ReportTargetType, string[]> = {
     'Harassment',
     'Inappropriate content',
     'Off-topic',
+    'Other',
+  ],
+  chat: [
+    'Scam / fraud',
+    'Harassment',
+    'Inappropriate behavior',
+    'Spam',
     'Other',
   ],
 };

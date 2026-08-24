@@ -5071,6 +5071,7 @@ const VALID_REPORT_TARGETS = new Set([
   "review",
   "user",
   "comment",
+  "chat",
 ]);
 
 // User submits a report
@@ -5081,6 +5082,23 @@ app.post("/api/reports", requireDb, requireAuth, async (req, res) => {
   }
   if (!target_id || !reason || !String(reason).trim()) {
     return res.status(400).json({ error: "target_id and reason are required" });
+  }
+  if (target_type === "chat") {
+    try {
+      const { rows: roomRows } = await pool.query(
+        "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+        [target_id],
+      );
+      if (!roomRows.length) return res.status(404).json({ error: "Room not found" });
+      if (
+        req.authUserId !== roomRows[0].buyer_id &&
+        req.authUserId !== roomRows[0].seller_id
+      ) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
   const id = `rpt_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   try {
@@ -5155,6 +5173,7 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
                           WHEN 'comment' THEN LEFT(c.content, 80)
                           WHEN 'review' THEN COALESCE(rv.product_title, LEFT(rv.comment, 80))
                           WHEN 'user' THEN owner.nickname
+                          WHEN 'chat' THEN pchat.title
                           ELSE NULL
                         END AS target_title,
                         CASE r.target_type
@@ -5162,6 +5181,7 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
                           WHEN 'post' THEN cp.content
                           WHEN 'comment' THEN c.content
                           WHEN 'review' THEN rv.comment
+                          WHEN 'chat' THEN CONCAT(COALESCE(cr_buyer.nickname, ''), ' / ', COALESCE(cr_seller.nickname, ''))
                           ELSE NULL
                         END AS target_body,
                         CASE r.target_type WHEN 'product' THEN p.price ELSE NULL END AS target_price,
@@ -5169,6 +5189,7 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
                         CASE r.target_type
                           WHEN 'product' THEN p.images
                           WHEN 'post' THEN cp.images
+                          WHEN 'chat' THEN pchat.images
                           ELSE NULL
                         END AS target_images,
                         CASE r.target_type
@@ -5177,18 +5198,21 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
                           WHEN 'comment' THEN c.id
                           WHEN 'review' THEN rv.id
                           WHEN 'user' THEN owner.id
+                          WHEN 'chat' THEN cr.id
                           ELSE NULL
                         END AS target_row_id,
                         CASE r.target_type
                           WHEN 'product' THEN p.admin_hidden
                           WHEN 'post' THEN cp.admin_hidden
                           WHEN 'comment' THEN c.admin_hidden
+                          WHEN 'chat' THEN cr.admin_hidden
                           ELSE 0
                         END AS target_hidden,
                         CASE r.target_type
                           WHEN 'product' THEN p.admin_hidden_reason
                           WHEN 'post' THEN cp.admin_hidden_reason
                           WHEN 'comment' THEN c.admin_hidden_reason
+                          WHEN 'chat' THEN cr.admin_hidden_reason
                           ELSE NULL
                         END AS target_hidden_reason
                  FROM reports r
@@ -5198,12 +5222,18 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
                  LEFT JOIN community_posts cp ON r.target_type = 'post' AND r.target_id = cp.id
                  LEFT JOIN comments c ON r.target_type = 'comment' AND r.target_id = c.id
                  LEFT JOIN reviews rv ON r.target_type = 'review' AND r.target_id = rv.id
+                 LEFT JOIN chat_rooms cr ON r.target_type IN ('chat','chat_room') AND r.target_id = cr.id
+                 LEFT JOIN products pchat ON r.target_type IN ('chat','chat_room') AND cr.product_id = pchat.id
+                 LEFT JOIN users cr_buyer ON cr.buyer_id = cr_buyer.id
+                 LEFT JOIN users cr_seller ON cr.seller_id = cr_seller.id
                  LEFT JOIN users owner ON owner.id = CASE r.target_type
                    WHEN 'product' THEN p.seller_id
                    WHEN 'post' THEN cp.author_id
                    WHEN 'comment' THEN c.author_id
                    WHEN 'review' THEN rv.reviewer_id
                    WHEN 'user' THEN r.target_id
+                   WHEN 'chat' THEN CASE WHEN r.reporter_id = cr.buyer_id THEN cr.seller_id ELSE cr.buyer_id END
+                   WHEN 'chat_room' THEN CASE WHEN r.reporter_id = cr.buyer_id THEN cr.seller_id ELSE cr.buyer_id END
                    ELSE NULL
                  END
                  WHERE 1=1`;

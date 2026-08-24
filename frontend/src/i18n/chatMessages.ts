@@ -32,7 +32,8 @@ export type ChatMessageKey =
   | 'msgSentPhoto'
   | 'msgUserLeft'
   | 'inDispute'
-  | 'cannotLeaveChatReservedOrDispute';
+  | 'cannotLeaveChatReservedOrDispute'
+  | 'reportChat';
 
 const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
   en: {
@@ -67,6 +68,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} left the chat.',
     inDispute: 'In dispute',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   ko: {
     chatsTitle: '채팅',
@@ -100,6 +102,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} 님이 채팅방을 나갔습니다.',
     inDispute: '분쟁중',
     cannotLeaveChatReservedOrDispute: '예약중이거나 분쟁 중인 거래는 채팅방을 나갈 수 없습니다.',
+    reportChat: '신고하기',
   },
   zh: {
     chatsTitle: '聊天',
@@ -133,6 +136,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} 已离开聊天。',
     inDispute: '争议中',
     cannotLeaveChatReservedOrDispute: '商品已预订或交易存在争议时无法退出聊天。',
+    reportChat: '举报',
   },
   ja: {
     chatsTitle: 'チャット',
@@ -166,6 +170,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} がチャットを退出しました。',
     inDispute: '紛争中',
     cannotLeaveChatReservedOrDispute: '予約中または紛争中の取引ではチャットを退出できません。',
+    reportChat: '報告する',
   },
   es: {
     chatsTitle: 'Chats',
@@ -199,6 +204,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} salió del chat.',
     inDispute: 'En disputa',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   pt: {
     chatsTitle: 'Chats',
@@ -232,6 +238,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} saiu do chat.',
     inDispute: 'Em disputa',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   fr: {
     chatsTitle: 'Chats',
@@ -265,6 +272,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} a quitté le chat.',
     inDispute: 'En litige',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   de: {
     chatsTitle: 'Chats',
@@ -298,6 +306,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} hat den Chat verlassen.',
     inDispute: 'Im Streit',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   id: {
     chatsTitle: 'Chat',
@@ -331,6 +340,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} meninggalkan chat.',
     inDispute: 'Sengketa',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   vi: {
     chatsTitle: 'Chat',
@@ -364,6 +374,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} đã rời chat.',
     inDispute: 'Tranh chấp',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   th: {
     chatsTitle: 'แชท',
@@ -397,6 +408,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} ออกจากแชทแล้ว',
     inDispute: 'ข้อพิพาท',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   hi: {
     chatsTitle: 'चैट',
@@ -430,6 +442,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} ने चैट छोड़ी।',
     inDispute: 'विवाद में',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   ar: {
     chatsTitle: 'الدردشات',
@@ -463,6 +476,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: 'غادر {name} الدردشة.',
     inDispute: 'قيد النزاع',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   ru: {
     chatsTitle: 'Чаты',
@@ -496,6 +510,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} покинул(а) чат.',
     inDispute: 'Спор',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   tr: {
     chatsTitle: 'Sohbetler',
@@ -529,6 +544,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} sohbetten ayrıldı.',
     inDispute: 'Anlaşmazlıkta',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   it: {
     chatsTitle: 'Chat',
@@ -562,6 +578,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} ha lasciato la chat.',
     inDispute: 'In controversia',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   pl: {
     chatsTitle: 'Czaty',
@@ -595,6 +612,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} opuścił(a) czat.',
     inDispute: 'W sporze',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   nl: {
     chatsTitle: 'Chats',
@@ -628,6 +646,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} heeft de chat verlaten.',
     inDispute: 'In geschil',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   fil: {
     chatsTitle: 'Mga chat',
@@ -661,6 +680,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: 'Umalis si {name} sa chat.',
     inDispute: 'May dispute',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   uk: {
     chatsTitle: 'Чати',
@@ -694,6 +714,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} покинув(ла) чат.',
     inDispute: 'У спорі',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   bn: {
     chatsTitle: 'চ্যাট',
@@ -727,6 +748,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} চ্যাট ছেড়েছেন।',
     inDispute: 'বিবাদে',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   ms: {
     chatsTitle: 'Sembang',
@@ -760,6 +782,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} meninggalkan sembang.',
     inDispute: 'Dalam pertikaian',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   sw: {
     chatsTitle: 'Gumzo',
@@ -793,6 +816,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} ametoka gumzoni.',
     inDispute: 'Katika mzozo',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   fa: {
     chatsTitle: 'گفتگوها',
@@ -826,6 +850,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} گفتگو را ترک کرد.',
     inDispute: 'در اختلاف',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
   ur: {
     chatsTitle: 'چیٹس',
@@ -859,6 +884,7 @@ const CHAT_MESSAGES: Record<AppLanguage, Record<ChatMessageKey, string>> = {
     msgUserLeft: '{name} نے چیٹ چھوڑ دی۔',
     inDispute: 'تنازعے میں',
     cannotLeaveChatReservedOrDispute: 'You cannot leave while the listing is reserved or the trade is in dispute.',
+    reportChat: 'Report',
   },
 };
 

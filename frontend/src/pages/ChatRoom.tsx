@@ -47,6 +47,7 @@ import {
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 import { useLanguage } from '@/hooks/useLanguage';
 import { showToast } from '@/utils/toast';
+import { ReportModal } from '@/components/common/ReportModal';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 
@@ -273,6 +274,7 @@ export const ChatRoom: React.FC = () => {
   const [pendingImageMessages, setPendingImageMessages] = useState<PendingImageMessage[]>([]);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const chatMenuRef = useRef<HTMLDivElement>(null);
   useDismissOnClickOutside(chatMenuRef, showMenu, () => setShowMenu(false));
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
@@ -1334,31 +1336,42 @@ export const ChatRoom: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
-            {showMenu && !roomEnded && (
-              <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+            {showMenu && (
+              <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    if (!roomId) return;
-                    if (getChatLeaveBlock(room, currentOrder)) {
-                      showToast(t('cannotLeaveChatReservedOrDispute'));
-                      return;
-                    }
-                    void askConfirm({
-                      message: t('leaveChatConfirm'),
-                      confirmLabel: t('leaveChat'),
-                      cancelLabel: t('cancel'),
-                    }).then((ok) => {
-                      if (!ok) return;
-                      void leaveChatRoom(roomId).then((left) => {
-                        if (left) navigate('/chat', { replace: true });
-                      });
-                    });
+                    setShowReport(true);
                   }}
-                  className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
+                  className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
                 >
-                  {t('leaveChat')}
+                  {t('reportChat')}
                 </button>
+                {!roomEnded && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (!roomId) return;
+                      if (getChatLeaveBlock(room, currentOrder)) {
+                        showToast(t('cannotLeaveChatReservedOrDispute'));
+                        return;
+                      }
+                      void askConfirm({
+                        message: t('leaveChatConfirm'),
+                        confirmLabel: t('leaveChat'),
+                        cancelLabel: t('cancel'),
+                      }).then((ok) => {
+                        if (!ok) return;
+                        void leaveChatRoom(roomId).then((left) => {
+                          if (left) navigate('/chat', { replace: true });
+                        });
+                      });
+                    }}
+                    className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50"
+                  >
+                    {t('leaveChat')}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -2151,6 +2164,21 @@ export const ChatRoom: React.FC = () => {
         ) : null}
       </ModalShell>
       {confirmDialog}
+      {roomId && (
+        <ReportModal
+          open={showReport}
+          onClose={() => setShowReport(false)}
+          targetType="chat"
+          targetId={roomId}
+          targetLabel={
+            room
+              ? [resolveDisplayNickname(getOtherUser(room).id, getOtherUser(room).nickname), room.product?.title]
+                  .filter(Boolean)
+                  .join(' · ')
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };

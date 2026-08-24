@@ -201,6 +201,7 @@ const CHAT_KEYS = new Set<string>([
   'leaveChat',
   'leaveChatConfirm',
   'cannotLeaveChatReservedOrDispute',
+  'reportChat',
   'leaveNChats',
   'leaveNChatsConfirm',
   'msgProductReserved',
