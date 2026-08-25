@@ -473,7 +473,7 @@ export const ProductDetail: React.FC = () => {
       {/* Gallery + like count */}
       <div className="relative w-full aspect-square bg-gray-200">
         <div
-          className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex h-full w-full touch-pan-x touch-pan-y overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           onScroll={(e) => {
             const el = e.currentTarget;
             if (!el.clientWidth) return;

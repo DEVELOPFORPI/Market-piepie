@@ -732,7 +732,7 @@ export const PostDetail: React.FC = () => {
           <div>
             <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
               <div
-                className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex h-full w-full touch-pan-x touch-pan-y overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 onScroll={(e) => {
                   const el = e.currentTarget;
                   if (!el.clientWidth) return;
@@ -797,7 +797,7 @@ export const PostDetail: React.FC = () => {
             <p className="text-xs text-gray-500 mb-2">{t('evidence')}</p>
             <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
               <div
-                className="flex h-full w-full touch-pan-x overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex h-full w-full touch-pan-x touch-pan-y overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 onScroll={(e) => {
                   const el = e.currentTarget;
                   if (!el.clientWidth) return;
