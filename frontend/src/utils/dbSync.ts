@@ -31,6 +31,19 @@ function isWithinGraceWindow(isoOrMs: string | number | undefined): boolean {
   return Date.now() - t < LOCAL_ONLY_GRACE_MS;
 }
 
+/** MySQL DATETIME has no zone. Server clock is UTC — tag it so the device can show local time. */
+function serverDateToIso(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return new Date().toISOString();
+  if (/[zZ]$/.test(raw) || /[+-]\d{2}:?\d{2}$/.test(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  }
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(`${normalized}Z`);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
 /** `chat_1783473530324` 같은 id에서 생성 시각 추출 */
 function timestampFromGeneratedId(id: string): number | undefined {
   const m = id.match(/_(\d{12,})$/);
@@ -668,7 +681,7 @@ function parseTimelineFromDB(raw: unknown): Order['timeline'] {
       return {
         id: String(ev.id || ''),
         type: String(ev.type || ''),
-        timestamp: String(ev.timestamp || ev.created_at || new Date().toISOString()),
+        timestamp: serverDateToIso(ev.timestamp || ev.created_at),
         description: String(ev.description || ''),
       };
     });
@@ -718,7 +731,7 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
             requestNote: row.memo ? String(row.memo) : undefined,
           }
         : undefined,
-    createdAt: String(row.created_at || new Date().toISOString()),
+    createdAt: serverDateToIso(row.created_at),
     timeline,
     buyer: applyProfileCacheToUser({
       id: String(buyer.id || row.buyer_id || ''),
