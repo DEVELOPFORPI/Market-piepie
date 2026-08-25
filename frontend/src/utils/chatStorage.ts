@@ -25,6 +25,8 @@ import { addNotification } from '@/utils/notificationStorage';
 import {
   getOrderById,
   getOrders,
+  ensureOrderById,
+  mergeRemoteOrder,
   isOrderTradeInProgress,
   isOrderMeetupReserved,
   shouldFailOrderOnChatLeave,
@@ -340,7 +342,7 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
         if (idx >= 0) {
           rooms[idx] = room;
           saveAllChatRooms(rooms, room.id);
-          persistRoomOrderLink(room.id, order);
+          await persistRoomOrderLink(room.id, order);
         }
       }
     }
@@ -432,7 +434,7 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
     if (otherId) readPatch[otherId] = { read: false };
   });
   if (Object.keys(readPatch).length) {
-    void syncChatRoomMetaToDB(roomId, { read_state: readPatch });
+    await syncChatRoomMetaToDB(roomId, { read_state: readPatch });
   }
   sendMessageViaSocket(roomId, message, { buyerId: room.buyerId || '', sellerId: room.sellerId || '' });
   return saveResult;
@@ -604,10 +606,9 @@ export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: str
   return room;
 };
 
-const persistRoomOrderLink = (roomId: string, order?: Order) => {
-  if (order?.id) {
-    void syncChatRoomMetaToDB(roomId, { order_id: order.id });
-  }
+const persistRoomOrderLink = async (roomId: string, order?: Order): Promise<boolean> => {
+  if (!order?.id) return true;
+  return syncChatRoomMetaToDB(roomId, { order_id: order.id });
 };
 
 /** Meetup confirmed: add gradient card; persist room.order so receive flow works */
@@ -619,7 +620,7 @@ export const addMeetupConfirmedToChat = async (order: Order) => {
   if (r) {
     r.order = order;
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, order);
+    await persistRoomOrderLink(room.id, order);
   }
   const msg: ChatMessage = {
     id: `meetup_${Date.now()}`,
@@ -647,7 +648,7 @@ export const addMeetupUpdatedToChat = async (order: Order) => {
   if (!room) return;
   room.order = order;
   saveAllChatRooms(rooms, room.id);
-  persistRoomOrderLink(room.id, order);
+  await persistRoomOrderLink(room.id, order);
   const msg: ChatMessage = {
     id: `meetup_updated_${Date.now()}`,
     senderId: order.seller.id,
@@ -676,7 +677,7 @@ export const addMeetupCancelledToChat = async (order: Order) => {
       status: ORDER_STATUS_VALUE.ACCEPTED,
     };
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, r.order);
+    await persistRoomOrderLink(room.id, r.order);
   }
   const msg: ChatMessage = {
     id: `meetup_cancel_${Date.now()}`,
@@ -716,7 +717,7 @@ export const addSellerMeetupStartedToChat = async (order: Order, roomIdHint?: st
   if (r) {
     r.order = order;
     saveAllChatRooms(roomsAfter, room!.id);
-    persistRoomOrderLink(room!.id, order);
+    await persistRoomOrderLink(room!.id, order);
   }
 };
 
@@ -738,7 +739,7 @@ export const addReceiptConfirmedToChat = async (
   if (r) {
     r.order = order;
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, order);
+    await persistRoomOrderLink(room.id, order);
   }
   const condition = opts?.condition ?? order.receiptCondition;
   const notes = (opts?.notes ?? order.receiptNotes)?.trim() || undefined;
@@ -838,8 +839,8 @@ export const clearOrderFromRoom = (orderId: string) => {
   if (updated.some((r, i) => r !== rooms[i])) saveAllChatRooms(updated);
 };
 
-/** Hide room from my list immediately (other party still sees it until they leave). */
-function hideRoomForCurrentUser(roomId: string): { leftUserIds: string[]; alreadyEnded: boolean } | null {
+/** Hide room after the leave list is on the server (other party still sees it until they leave). */
+async function hideRoomForCurrentUser(roomId: string): Promise<{ leftUserIds: string[]; alreadyEnded: boolean } | null> {
   const userId = getCurrentUserId();
   if (!userId) return null;
   const rooms = getAllChatRooms();
@@ -851,21 +852,28 @@ function hideRoomForCurrentUser(roomId: string): { leftUserIds: string[]; alread
     return { leftUserIds: room.leftUserIds || [], alreadyEnded };
   }
   const leftUserIds = Array.from(new Set([...(room.leftUserIds || []), userId]));
-  rooms[idx] = { ...room, leftUserIds };
-  saveAllChatRooms(rooms, roomId);
-  void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+  const ok = await syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+  if (!ok) return null;
+  const nextRooms = getAllChatRooms();
+  const nextIdx = nextRooms.findIndex((r) => r.id === roomId);
+  if (nextIdx < 0) return { leftUserIds, alreadyEnded };
+  nextRooms[nextIdx] = { ...nextRooms[nextIdx], leftUserIds };
+  saveAllChatRooms(nextRooms, roomId);
   window.dispatchEvent(new Event('chatRoomsChanged'));
   return { leftUserIds, alreadyEnded };
 }
 
-/** Leave room: hide from my list first, then notify / unlock if I am the first to leave */
+/** Leave room: persist trade fail + leave list on the server, then hide locally */
 export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const room = getChatRoom(roomId);
   if (!room) return false;
   if (getChatLeaveBlock(room)) return false;
 
-  const hidden = hideRoomForCurrentUser(roomId);
+  if (!await failLinkedOrderOnChatLeave(room)) return false;
+
+  const hidden = await hideRoomForCurrentUser(roomId);
   if (!hidden) return false;
+
   // Other party already left — just drop it from my list (no second leave message).
   if (hidden.alreadyEnded) return true;
 
@@ -897,20 +905,28 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
     }
   }
 
-  const latest = getChatRoom(roomId) || room;
-  const linked = getRoomLinkedOrder(latest);
-  if (linked?.id && shouldFailOrderOnChatLeave(linked)) {
-    const uid = getCurrentUserId();
-    const leftAsBuyer = !!uid && uid === linked.buyer?.id;
-    await updateOrderStatus(
-      linked.id,
-      ORDER_STATUS_VALUE.TRADE_FAILED,
-      leftAsBuyer ? 'Buyer left the chat' : 'Seller left the chat',
-    );
-  }
-
   return true;
 };
+
+async function failLinkedOrderOnChatLeave(room: ChatRoom): Promise<boolean> {
+  const linked = getRoomLinkedOrder(room);
+  if (!linked?.id) return true;
+  if (!shouldFailOrderOnChatLeave(linked)) return true;
+
+  if (!getOrderById(linked.id)) {
+    mergeRemoteOrder(linked);
+  }
+  await ensureOrderById(linked.id);
+  if (!getOrderById(linked.id)) return false;
+
+  const uid = getCurrentUserId();
+  const leftAsBuyer = !!uid && uid === linked.buyer?.id;
+  return updateOrderStatus(
+    linked.id,
+    ORDER_STATUS_VALUE.TRADE_FAILED,
+    leftAsBuyer ? 'Buyer left the chat' : 'Seller left the chat',
+  );
+}
 
 /** Delete room entirely for both parties */
 export const deleteChatRoom = (roomId: string) => {

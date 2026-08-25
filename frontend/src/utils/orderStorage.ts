@@ -403,7 +403,8 @@ export const appendOrderTimeline = async (
     timestamp: new Date().toISOString(),
     description,
   };
-  await syncOrderStatusToDB(orderId, order.status, timelineEvent);
+  const ok = await syncOrderStatusToDB(orderId, order.status, timelineEvent);
+  if (!ok) return false;
   order.timeline.push(timelineEvent);
   setOrdersWithQuotaRetry(orders, orderId);
   window.dispatchEvent(new Event('ordersChanged'));
@@ -692,6 +693,7 @@ function findOpenOrderForTrade(productId: string, buyerId: string, sellerId: str
         o.seller?.id === sellerId &&
         o.status !== ORDER_STATUS_VALUE.COMPLETE &&
         o.status !== ORDER_STATUS_VALUE.TRADE_FAILED &&
+        o.status !== ORDER_STATUS_VALUE.OFFER_DECLINED &&
         o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED &&
         !(o.buyerCompleted && o.sellerCompleted),
     )
@@ -707,42 +709,14 @@ export const createOrder = async (params: CreateOrderParams): Promise<Order | nu
 
   const existing = findOpenOrderForTrade(params.product.id, myUser.id, params.product.seller.id);
   if (existing) {
+    // An open or in-progress trade must not be overwritten. Closed leftovers
+    // (leave / decline) fall through so a brand-new order is created.
     if (
       existing.status === ORDER_STATUS_VALUE.PENDING_OFFER
       || isOrderTradeInProgress(existing.status)
     ) {
       return null;
     }
-    existing.proposedPrice = params.proposedPrice;
-    existing.tradeMethod = params.tradeMethod;
-    // 약속 취소 후 재제안 등: 기존 주문을 다시 쓰더라도 수락 버튼이 뜨려면 대기 상태여야 한다.
-    if (existing.status !== ORDER_STATUS_VALUE.DISPUTE) {
-      existing.status = ORDER_STATUS_VALUE.PENDING_OFFER;
-    }
-    if (params.meetupPlace) existing.meetupPlace = params.meetupPlace;
-    if (params.meetupDate) existing.meetupDate = params.meetupDate;
-    if (params.meetupTime) existing.meetupTime = params.meetupTime;
-    if (params.memo) existing.memo = params.memo;
-    existing.timeline = [
-      ...(existing.timeline || []),
-      {
-        id: nextTimelineId(),
-        type: ORDER_STATUS_VALUE.PENDING_OFFER,
-        timestamp: now,
-        description: offerDesc,
-      },
-    ];
-    const saved = await saveOrder(existing);
-    if (!saved) return null;
-    void addNotification({
-      targetUserId: existing.seller.id,
-      type: 'order',
-      title: NOTIFY_PURCHASE_OFFER_ARRIVED,
-      content: `${existing.buyer.nickname} sent a ${existing.proposedPrice.toLocaleString()} Pi offer for "${existing.product.title}".`,
-      link: `/order/${existing.id}`,
-    });
-    void addPriceOfferToChat(existing);
-    return existing;
   }
 
   const order: Order = {

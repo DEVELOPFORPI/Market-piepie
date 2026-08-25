@@ -141,10 +141,10 @@ export const ChatList: React.FC = () => {
         showToast(t('cannotLeaveChatReservedOrDispute'));
       }
       if (!allowed.length) return;
-      setRooms((prev) => prev.filter((r) => !allowed.includes(r.id)));
+      await Promise.all(allowed.map((id) => leaveChatRoom(id)));
       setSelectedIds(new Set());
       setDeleteMode(false);
-      void Promise.all(allowed.map((id) => leaveChatRoom(id))).then(() => loadRooms());
+      loadRooms();
     })();
   };
 
@@ -195,8 +195,8 @@ export const ChatList: React.FC = () => {
         cancelLabel: t('cancel'),
       });
       if (!ok) return;
-      setRooms((prev) => prev.filter((r) => r.id !== roomId));
-      void leaveChatRoom(roomId).then(() => loadRooms());
+      await leaveChatRoom(roomId);
+      loadRooms();
     })();
   };
 

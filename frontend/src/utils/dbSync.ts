@@ -520,11 +520,19 @@ export async function syncOrderStatusToDB(
     const res = await api.put(`/api/orders/${orderId}`, { status, ...extra });
     if (!res.ok) return false;
     if (timelineEvent) {
-      await api.post(`/api/orders/${orderId}/timeline`, {
-        id: timelineEvent.id,
-        event_type: timelineEvent.type,
-        description: timelineEvent.description,
-      });
+      let timelineOk = false;
+      for (let i = 0; i < 3; i++) {
+        const tl = await api.post(`/api/orders/${orderId}/timeline`, {
+          id: timelineEvent.id,
+          event_type: timelineEvent.type,
+          description: timelineEvent.description,
+        });
+        if (tl.ok) {
+          timelineOk = true;
+          break;
+        }
+      }
+      if (!timelineOk) return false;
     }
     return true;
   } catch {
@@ -785,12 +793,15 @@ export async function syncChatRoomMetaToDB(
     read_state?: Record<string, { read?: boolean; lastReadAt?: string }>;
   },
 ): Promise<boolean> {
-  try {
-    const res = await api.patch(`/api/chat-rooms/${roomId}`, patch);
-    return res.ok;
-  } catch {
-    return false;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await api.patch(`/api/chat-rooms/${roomId}`, patch);
+      if (res.ok) return true;
+    } catch {
+      /* retry */
+    }
   }
+  return false;
 }
 
 function parseReadStateFromDB(raw: unknown): { readStatus: Record<string, boolean>; lastReadAt: Record<string, string> } {
