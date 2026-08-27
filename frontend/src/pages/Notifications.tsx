@@ -47,6 +47,7 @@ import { notifyT } from '@/i18n/notifyMessages';
 import { localizeNotification } from '@/utils/notifyDisplay';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
+import { fetchNoticeBannerTarget } from '@/utils/homePopupStorage';
 
 const COMPLETION_TITLES = COMPLETION_TITLE_SET;
 const RECEIVE_TITLES = new Set([NOTIFY_RECEIVE_CONFIRM]);
@@ -183,6 +184,7 @@ export const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteMode, setDeleteMode] = useState(false);
+  const [noticeBanner, setNoticeBanner] = useState<{ id: string; title: string } | null>(null);
 
   const load = () => setNotifications(getNotifications());
 
@@ -220,6 +222,7 @@ export const Notifications: React.FC = () => {
         load();
       });
     }
+    void fetchNoticeBannerTarget().then(setNoticeBanner);
     return () => window.removeEventListener('notificationsChanged', load);
   }, []);
 
@@ -367,6 +370,25 @@ export const Notifications: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {noticeBanner && (
+        <button
+          type="button"
+          onClick={() => navigate(`/notices/${noticeBanner.id}`)}
+          className="flex w-full items-center gap-2 px-4 py-2 text-left text-white"
+          style={{ backgroundColor: '#00A8A3' }}
+        >
+          <img
+            src="/post/notice.png"
+            alt=""
+            className="h-[18px] w-[18px] shrink-0 object-contain"
+            style={{ mixBlendMode: 'screen' }}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+            {t('noticesTitle')} - {noticeBanner.title}
+          </span>
+        </button>
+      )}
 
       <div className="divide-y divide-gray-100">
         {notifications.length === 0 ? (

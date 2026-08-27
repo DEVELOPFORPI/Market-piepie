@@ -56,6 +56,21 @@ export async function fetchActiveHomePopup(): Promise<HomePopupView | null> {
   return mapHomePopupRecord(res.data);
 }
 
+/** Popup-linked published notice, else newest published notice. */
+export async function fetchNoticeBannerTarget(): Promise<{ id: string; title: string } | null> {
+  const [noticesRes, popup] = await Promise.all([
+    api.get<NoticeRecord[]>('/api/notices'),
+    fetchActiveHomePopup(),
+  ]);
+  const notices = noticesRes.ok && Array.isArray(noticesRes.data) ? noticesRes.data : [];
+  if (!notices.length) return null;
+  const linked = popup?.noticeId
+    ? notices.find((n) => n.id === popup.noticeId)
+    : undefined;
+  const pick = linked ?? notices[0];
+  return pick ? { id: pick.id, title: pick.title } : null;
+}
+
 export async function fetchAdminHomePopups(): Promise<HomePopupRecord[]> {
   const res = await api.get<HomePopupRecord[]>('/api/admin/home-popups', {
     headers: adminPasswordHeaders(),
