@@ -179,64 +179,68 @@ export const Register: React.FC = () => {
       return;
     }
 
-    let imagesToSave: string[] = [];
+    let finished = false;
     setUploadingImages(true);
     try {
-      imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
-    } catch {
-      showToast(t('couldNotUpload'));
-      return;
-    } finally {
-      setUploadingImages(false);
-    }
-    if (imagesToSave.length === 0) {
-      showToast(t('addOnePhoto'));
-      return;
-    }
-
-    const product: Product = {
-      id: isEdit && originalProduct ? originalProduct.id : `product-${Date.now()}`,
-      title,
-      category: originalProduct?.category || 'Other',
-      price: isFreeShare ? 0 : Number(price),
-      images: imagesToSave,
-      region,
-      status: originalProduct?.status || PRODUCT_STATUS_VALUE.FOR_SALE,
-      description: description || '-',
-      createdAt: originalProduct?.createdAt || new Date().toISOString(),
-      seller: originalProduct?.seller || getMyUser(),
-      tradeMethods: originalProduct?.tradeMethods || [TRADE_METHOD_VALUE.IN_PERSON],
-      todayTradeAvailable: originalProduct?.todayTradeAvailable || false,
-      liked: originalProduct?.liked || false,
-      isFreeShare,
-      allowOffer: isFreeShare ? false : allowOffer,
-    };
-
-    try {
-      const saved = await saveProduct(product);
-      if (!saved) {
-        showToast(t('couldNotSaveListing'));
+      let imagesToSave: string[] = [];
+      try {
+        imagesToSave = await uploadImageReferencesToR2(images, { folder: 'products' });
+      } catch {
+        showToast(t('couldNotUpload'));
         return;
       }
-      images.forEach(revokeLocalPreviewUrl);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : t('couldNotSaveListing');
-      showToast(message);
-      return;
-    }
-    try {
-      sessionStorage.removeItem(draftKey);
-      sessionStorage.removeItem(REGISTER_REGION_PICKER_KEY);
-    } catch {
-      // ignore
-    }
-    window.dispatchEvent(new Event('productRegistered'));
+      if (imagesToSave.length === 0) {
+        showToast(t('addOnePhoto'));
+        return;
+      }
 
-    if (isEdit) {
-      showToast(t('listingUpdated'));
-      navigate(-1);
-    } else {
-      navigate('/register/complete', { state: { productId: product.id, ...product }, replace: true });
+      const product: Product = {
+        id: isEdit && originalProduct ? originalProduct.id : `product-${Date.now()}`,
+        title,
+        category: originalProduct?.category || 'Other',
+        price: isFreeShare ? 0 : Number(price),
+        images: imagesToSave,
+        region,
+        status: originalProduct?.status || PRODUCT_STATUS_VALUE.FOR_SALE,
+        description: description || '-',
+        createdAt: originalProduct?.createdAt || new Date().toISOString(),
+        seller: originalProduct?.seller || getMyUser(),
+        tradeMethods: originalProduct?.tradeMethods || [TRADE_METHOD_VALUE.IN_PERSON],
+        todayTradeAvailable: originalProduct?.todayTradeAvailable || false,
+        liked: originalProduct?.liked || false,
+        isFreeShare,
+        allowOffer: isFreeShare ? false : allowOffer,
+      };
+
+      try {
+        const saved = await saveProduct(product);
+        if (!saved) {
+          showToast(t('couldNotSaveListing'));
+          return;
+        }
+        images.forEach(revokeLocalPreviewUrl);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : t('couldNotSaveListing');
+        showToast(message);
+        return;
+      }
+      try {
+        sessionStorage.removeItem(draftKey);
+        sessionStorage.removeItem(REGISTER_REGION_PICKER_KEY);
+      } catch {
+        // ignore
+      }
+      window.dispatchEvent(new Event('productRegistered'));
+
+      if (isEdit) {
+        showToast(t('listingUpdated'));
+        navigate(-1);
+      } else {
+        navigate('/register/complete', { state: { productId: product.id, ...product }, replace: true });
+      }
+      finished = true;
+    } finally {
+      if (!finished) setUploadingImages(false);
     }
   };
 
