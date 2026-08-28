@@ -8,7 +8,8 @@ import { ModalShell } from '@/components/common/ModalShell';
 
 import { isTestLoginEnabled } from '@/config/features';
 
-import { clearImplicitSessionSkip, ensureImplicitSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
+import { clearImplicitSessionSkip, clearSuspendedAccount, ensureImplicitSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
+import { applySuspendedAccess } from '@/utils/guestGate';
 
 import { isDeviceProfileOnce, isOnboardingComplete } from '@/utils/onboardingStorage';
 
@@ -58,6 +59,12 @@ export const AppLogin: React.FC = () => {
 
       const verified = await verifyPiAuth(authResult.accessToken, getCurrentUserId());
       console.log('verified response:', verified);
+
+      if (verified.accountStatus === 'suspended') {
+        await applySuspendedAccess(verified.suspensionReason);
+        navigate('/', { replace: true });
+        return;
+      }
 
       if (!verified.piVerified) {
         setPendingVerified(verified);
@@ -251,6 +258,7 @@ export const AppLogin: React.FC = () => {
 
         onClick={() => {
           clearImplicitSessionSkip();
+          clearSuspendedAccount();
           // Decide destination before guest session exists (matches prior sync behavior).
           const uidNow = getCurrentUserId();
           const goHome = uidNow != null ? isOnboardingComplete() : isDeviceProfileOnce();

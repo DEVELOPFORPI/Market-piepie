@@ -23,6 +23,9 @@ import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { labelDisputeStoredValue } from '@/utils/disputeLabels';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
 import { localeForAppLanguage } from '@/utils/languageStorage';
+import { ExpandableText } from '@/components/common/ExpandableText';
+import { CommentActivityRow } from '@/components/common/CommentActivityRow';
+import type { AuthorCommentRow } from '@/pages/MyComments';
 
 interface ReviewFromDB {
   id: string;
@@ -58,7 +61,7 @@ interface PublicDispute {
   opened_by_user_id?: string;
 }
 
-type TabKey = 'listings' | 'posts' | 'reviews' | 'disputes';
+type TabKey = 'listings' | 'posts' | 'comments' | 'reviews' | 'disputes';
 type DisputeDirectionFilter = 'all' | 'sent' | 'received';
 type PostCategoryFilter = PostCategory | 'all';
 type ListingFilter = 'all' | 'free' | ProductStatus;
@@ -72,11 +75,12 @@ const POST_CATEGORY_TABS: PostCategoryFilter[] = [
   POST_CATEGORY_VALUE.SWAP,
 ];
 
-const TAB_ORDER: TabKey[] = ['listings', 'posts', 'reviews', 'disputes'];
+const TAB_ORDER: TabKey[] = ['listings', 'posts', 'comments', 'reviews', 'disputes'];
 
 const TAB_I18N: Record<TabKey, AppMessageKey> = {
   listings: 'listingsTab',
   posts: 'postsTab',
+  comments: 'commentsTab',
   reviews: 'reviews',
   disputes: 'disputes',
 };
@@ -152,6 +156,7 @@ export const SellerProfile: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [listingFilter, setListingFilter] = useState<ListingFilter>('all');
   const [posts, setPosts] = useState<Post[]>([]);
+  const [comments, setComments] = useState<AuthorCommentRow[]>([]);
   const [postCategoryFilter, setPostCategoryFilter] = useState<PostCategoryFilter>('all');
   const [reviews, setReviews] = useState<ReviewFromDB[]>([]);
   const [disputes, setDisputes] = useState<PublicDispute[]>([]);
@@ -164,11 +169,12 @@ export const SellerProfile: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [userRes, productsRes, reviewsRes, postsRes, disputesRes] = await Promise.all([
+        const [userRes, productsRes, reviewsRes, postsRes, commentsRes, disputesRes] = await Promise.all([
           fetch(`${API_BASE}/api/users/${id}`),
           fetch(`${API_BASE}/api/products?seller_id=${id}`),
           fetch(`${API_BASE}/api/reviews?reviewee_id=${id}`),
           fetch(`${API_BASE}/api/posts?author_id=${encodeURIComponent(id)}`),
+          fetch(`${API_BASE}/api/comments?author_id=${encodeURIComponent(id)}`),
           fetch(`${API_BASE}/api/users/${id}/disputes`),
         ]);
 
@@ -234,6 +240,12 @@ export const SellerProfile: React.FC = () => {
           setPosts(rows.map((row) => mapPostFromDB(row)));
         } else {
           setPosts([]);
+        }
+
+        if (commentsRes.ok) {
+          setComments((await commentsRes.json()) as AuthorCommentRow[]);
+        } else {
+          setComments([]);
         }
 
         if (disputesRes.ok) {
@@ -485,6 +497,26 @@ export const SellerProfile: React.FC = () => {
           </div>
         )}
 
+        {activeTab === 'comments' && (
+          <div>
+            {comments.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                {t('noProfileComments')}
+              </div>
+            ) : (
+              <div className="-mx-4">
+                {comments.map((comment) => (
+                  <CommentActivityRow
+                    key={comment.id}
+                    comment={comment}
+                    onClick={() => navigate(`/community/post/${comment.post_id}`)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'reviews' && (
           <div>
             {reviews.length === 0 ? (
@@ -534,7 +566,7 @@ export const SellerProfile: React.FC = () => {
                       </div>
                     )}
                     {review.comment && (
-                      <p className="text-sm text-gray-700">{review.comment}</p>
+                      <ExpandableText text={review.comment} className="text-sm text-gray-700" />
                     )}
                   </div>
                 ))}

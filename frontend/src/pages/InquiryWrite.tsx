@@ -1,13 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const TEAL = '#00A8A3';
 const MAX_IMAGES = 5;
@@ -25,7 +27,6 @@ export const InquiryWrite: React.FC = () => {
   useGuestPageGuard('inquiry');
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState('General');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -43,7 +44,6 @@ export const InquiryWrite: React.FC = () => {
     if (room <= 0) return;
     const picks = Array.from(files).slice(0, room);
     const previews = createLocalPreviewUrls(picks);
-    if (fileInputRef.current) fileInputRef.current.value = '';
     if (previews.length === 0) {
       showToast(t('uploadImageFailed'));
       return;
@@ -157,15 +157,21 @@ export const InquiryWrite: React.FC = () => {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelTitle')}</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+            <span>{t('labelTitle')}</span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.inquiryTitle}</span>
+          </label>
+          <input type="text" value={title} maxLength={TEXT_LIMIT.inquiryTitle} onChange={(e) => setTitle(e.target.value)}
             placeholder={t('inquiryTitlePh')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>
 
         <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">{t('labelContent')}</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)}
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+            <span>{t('labelContent')}</span>
+            <span className="text-xs font-normal text-gray-400">{content.length}/{TEXT_LIMIT.inquiryContent}</span>
+          </label>
+          <textarea value={content} maxLength={TEXT_LIMIT.inquiryContent} onChange={(e) => setContent(e.target.value)}
             placeholder={t('inquiryContentPh')}
             rows={6}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
@@ -187,22 +193,26 @@ export const InquiryWrite: React.FC = () => {
               </div>
             ))}
             {images.length < MAX_IMAGES && (
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-[#00A8A3] hover:text-[#00A8A3]">
+              <label className="relative w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:border-[#00A8A3] hover:text-[#00A8A3]">
+                <FilePickerInput
+                  multiple
+                  onChange={(e) => {
+                    handleFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 <span className="text-[10px] mt-1">{t('add')}</span>
-              </button>
+              </label>
             )}
           </div>
-          <input ref={fileInputRef} type="file" accept="image/*" multiple
-            onChange={(e) => handleFiles(e.target.files)} className="hidden" />
         </div>
 
         <div>
           <label className="text-sm font-medium text-gray-700 mb-1 block">{t('emailOptional')}</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <input type="email" value={email} maxLength={TEXT_LIMIT.inquiryEmail} onChange={(e) => setEmail(e.target.value)}
             placeholder={t('emailPlaceholder')}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30 focus:border-[#00A8A3]" />
         </div>

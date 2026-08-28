@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { toggleUserSuspension } from '@/utils/adminSuspension';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 type AccountStatus = 'active' | 'suspended';
 type DetailTab = 'basic' | 'products' | 'orders' | 'posts' | 'issues';
@@ -104,7 +106,6 @@ export const AdminUsers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | AccountStatus>('all');
   const [selected, setSelected] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>('basic');
@@ -139,7 +140,6 @@ export const AdminUsers: React.FC = () => {
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return users.filter((user) => {
-      if (statusFilter !== 'all' && user.account_status !== statusFilter) return false;
       if (!keyword) return true;
       return (
         user.nickname?.toLowerCase().includes(keyword) ||
@@ -148,7 +148,12 @@ export const AdminUsers: React.FC = () => {
         user.activity_region?.toLowerCase().includes(keyword)
       );
     });
-  }, [users, search, statusFilter]);
+  }, [users, search]);
+
+  const activeUsers = filtered.filter((user) => user.account_status !== 'suspended');
+  const suspendedUsers = filtered.filter((user) => user.account_status === 'suspended');
+  const activePage = useAdminPage(activeUsers, search);
+  const suspendedPage = useAdminPage(suspendedUsers, search);
 
   const loadDetail = async (id: string) => {
     setDetailLoading(true);
@@ -193,27 +198,10 @@ export const AdminUsers: React.FC = () => {
   };
 
   const handleSuspension = async (user: UserSummary) => {
-    const isSuspended = user.account_status === 'suspended';
-    let reason = '';
-    if (isSuspended) {
-      if (!confirm(`${user.nickname} 사용자의 정지를 해제할까요?`)) return;
-    } else {
-      const entered = window.prompt(`${user.nickname} 사용자를 정지할 사유를 입력하세요. (선택)`);
-      if (entered === null) return;
-      reason = entered.trim();
-    }
-
     setSuspendingId(user.id);
-    const response = await api.patch(
-      `/api/admin/users/${user.id}/suspension`,
-      { suspended: !isSuspended, reason },
-      { headers: adminPasswordHeaders() },
-    );
+    const result = await toggleUserSuspension(user.id, user.nickname, user.account_status);
     setSuspendingId(null);
-    if (!response.ok) {
-      alert(`처리 실패: ${response.error || `HTTP ${response.status}`}`);
-      return;
-    }
+    if (!result.changed && !result.status) return;
     await load();
     if (selected?.id === user.id) await loadDetail(user.id);
   };
@@ -225,7 +213,7 @@ export const AdminUsers: React.FC = () => {
   ).length;
 
   const actionButtons = (user: UserSummary) => (
-    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+    <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
         onClick={(event) => {
@@ -286,24 +274,13 @@ export const AdminUsers: React.FC = () => {
         ))}
       </div>
 
-      <div className="mb-5 flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="닉네임, Pi @, ID, 지역으로 검색"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="min-w-[240px] flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
-        />
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as 'all' | AccountStatus)}
-          className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-        >
-          <option value="all">전체 상태</option>
-          <option value="active">정상</option>
-          <option value="suspended">정지</option>
-        </select>
-      </div>
+      <input
+        type="text"
+        placeholder="닉네임, Pi @, ID, 지역으로 검색"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="mb-5 w-full max-w-md rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
+      />
 
       {loadError ? (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -314,75 +291,72 @@ export const AdminUsers: React.FC = () => {
       {loading ? (
         <p className="py-10 text-center text-sm text-gray-500">불러오는 중…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="w-full min-w-[980px] text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-left font-medium text-gray-600">사용자</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">인증</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">거래</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">상품·글</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">신고·분쟁</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">상태</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((user) => (
-                <tr
-                  key={user.id}
-                  onClick={() => openDetail(user)}
-                  className="cursor-pointer border-b border-gray-100 transition-colors hover:bg-gray-50"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar user={user} />
-                      <div className="min-w-0">
-                        <p className="max-w-[190px] truncate font-semibold text-gray-900">{user.nickname}</p>
-                        <p className="text-xs text-gray-500">
-                          {user.pi_username ? `@${user.pi_username}` : user.id}
-                        </p>
-                        <p className="text-[11px] text-gray-400">{user.activity_region || '지역 미설정'}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {([
+            { title: '정상', items: activeUsers, page: activePage, empty: '정상 사용자가 없습니다.' },
+            { title: '정지', items: suspendedUsers, page: suspendedPage, empty: '정지된 사용자가 없습니다.' },
+          ] as const).map((column) => (
+            <section key={column.title} className="min-w-0">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-800">{column.title}</h2>
+                <span className="text-xs text-gray-400">{column.items.length}명</span>
+              </div>
+              {column.items.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+                  <p className="text-sm text-gray-400">{column.empty}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {column.page.items.map((user) => (
+                    <div
+                      key={user.id}
+                      onClick={() => openDetail(user)}
+                      className="cursor-pointer rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Avatar user={user} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-semibold text-gray-900">{user.nickname}</p>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              user.kyc_status === 'verified'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {KYC_LABEL[user.kyc_status] || user.kyc_status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {user.pi_username ? `@${user.pi_username}` : user.id}
+                          </p>
+                          <p className="text-[11px] text-gray-400">{user.activity_region || '지역 미설정'}</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            거래 {user.trade_count} · 상품 {user.product_count} · 글 {user.post_count}
+                            {(user.report_count > 0 || user.dispute_count > 0) && (
+                              <span className="text-amber-600">
+                                {' '}· 신고 {user.report_count} · 분쟁 {user.dispute_count}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                        {actionButtons(user)}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      user.kyc_status === 'verified'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {KYC_LABEL[user.kyc_status] || user.kyc_status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{user.trade_count}</td>
-                  <td className="px-4 py-3 text-xs text-gray-600">
-                    상품 {user.product_count} · 글 {user.post_count}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">
-                    신고 {user.report_count} · 분쟁 {user.dispute_count}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      user.account_status === 'suspended'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-green-50 text-green-700'
-                    }`}>
-                      {user.account_status === 'suspended' ? '정지' : '정상'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{actionButtons(user)}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-sm text-gray-400">
-                    사용자를 찾을 수 없습니다.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  ))}
+                  <AdminPagination
+                    page={column.page.page}
+                    totalPages={column.page.totalPages}
+                    total={column.page.total}
+                    from={column.page.from}
+                    to={column.page.to}
+                    onPageChange={column.page.setPage}
+                  />
+                </div>
+              )}
+            </section>
+          ))}
         </div>
       )}
 

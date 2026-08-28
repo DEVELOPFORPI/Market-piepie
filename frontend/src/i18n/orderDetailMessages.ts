@@ -42,7 +42,11 @@ export type OrderDetailMessageKey =
   | 'tlBuyerDisputeOpened'
   | 'tlSellerDisputeOpened'
   | 'tlBuyerDisputeResolved'
-  | 'tlSellerDisputeResolved';
+  | 'tlSellerDisputeResolved'
+  | 'statusTradeFailed'
+  | 'tlTradeFailed'
+  | 'tlBuyerLeftChat'
+  | 'tlSellerLeftChat';
 
 const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, string>> = {
   en: {
@@ -87,6 +91,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Seller dispute',
     tlBuyerDisputeResolved: 'Buyer dispute resolved',
     tlSellerDisputeResolved: 'Seller dispute resolved',
+    statusTradeFailed: 'Trade failed',
+    tlTradeFailed: 'Trade fell through',
+    tlBuyerLeftChat: 'Buyer left the chat',
+    tlSellerLeftChat: 'Seller left the chat',
   },
   ko: {
     orderDetailTitle: '주문 상세',
@@ -130,6 +138,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: '판매자 분쟁',
     tlBuyerDisputeResolved: '구매자 분쟁 해결',
     tlSellerDisputeResolved: '판매자 분쟁 해결',
+    statusTradeFailed: '거래불발',
+    tlTradeFailed: '거래 불발',
+    tlBuyerLeftChat: '구매자가 채팅을 나갔습니다',
+    tlSellerLeftChat: '판매자가 채팅을 나갔습니다',
   },
   zh: {
     orderDetailTitle: '订单详情',
@@ -173,6 +185,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: '卖家争议',
     tlBuyerDisputeResolved: '买家争议已解决',
     tlSellerDisputeResolved: '卖家争议已解决',
+    statusTradeFailed: '交易未成',
+    tlTradeFailed: '交易未成',
+    tlBuyerLeftChat: '买家已离开聊天',
+    tlSellerLeftChat: '卖家已离开聊天',
   },
   ja: {
     orderDetailTitle: '注文詳細',
@@ -216,6 +232,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: '出品者の紛争',
     tlBuyerDisputeResolved: '購入者の紛争解決',
     tlSellerDisputeResolved: '出品者の紛争解決',
+    statusTradeFailed: '取引不成立',
+    tlTradeFailed: '取引不成立',
+    tlBuyerLeftChat: '購入者がチャットを退出しました',
+    tlSellerLeftChat: '出品者がチャットを退出しました',
   },
   es: {
     orderDetailTitle: 'Detalle del pedido',
@@ -259,6 +279,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Disputa del vendedor',
     tlBuyerDisputeResolved: 'Disputa del comprador resuelta',
     tlSellerDisputeResolved: 'Disputa del vendedor resuelta',
+    statusTradeFailed: 'Operación fallida',
+    tlTradeFailed: 'La operación no se concretó',
+    tlBuyerLeftChat: 'El comprador salió del chat',
+    tlSellerLeftChat: 'El vendedor salió del chat',
   },
   pt: {
     orderDetailTitle: 'Detalhe do pedido',
@@ -302,6 +326,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Disputa do vendedor',
     tlBuyerDisputeResolved: 'Disputa do comprador resolvida',
     tlSellerDisputeResolved: 'Disputa do vendedor resolvida',
+    statusTradeFailed: 'Negociação falhou',
+    tlTradeFailed: 'A negociação não se concretizou',
+    tlBuyerLeftChat: 'O comprador saiu do chat',
+    tlSellerLeftChat: 'O vendedor saiu do chat',
   },
   fr: {
     orderDetailTitle: 'Détail de la commande',
@@ -345,6 +373,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Litige vendeur',
     tlBuyerDisputeResolved: 'Litige acheteur résolu',
     tlSellerDisputeResolved: 'Litige vendeur résolu',
+    statusTradeFailed: 'Échange non abouti',
+    tlTradeFailed: 'L’échange n’a pas abouti',
+    tlBuyerLeftChat: 'L’acheteur a quitté le chat',
+    tlSellerLeftChat: 'Le vendeur a quitté le chat',
   },
   de: {
     orderDetailTitle: 'Bestelldetails',
@@ -388,6 +420,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Verkäufer-Streitfall',
     tlBuyerDisputeResolved: 'Käufer-Streitfall gelöst',
     tlSellerDisputeResolved: 'Verkäufer-Streitfall gelöst',
+    statusTradeFailed: 'Handel gescheitert',
+    tlTradeFailed: 'Der Handel kam nicht zustande',
+    tlBuyerLeftChat: 'Der Käufer hat den Chat verlassen',
+    tlSellerLeftChat: 'Der Verkäufer hat den Chat verlassen',
   },
   id: {
     orderDetailTitle: 'Detail pesanan',
@@ -431,6 +467,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Sengketa penjual',
     tlBuyerDisputeResolved: 'Sengketa pembeli selesai',
     tlSellerDisputeResolved: 'Sengketa penjual selesai',
+    statusTradeFailed: 'Transaksi gagal',
+    tlTradeFailed: 'Transaksi batal',
+    tlBuyerLeftChat: 'Pembeli meninggalkan chat',
+    tlSellerLeftChat: 'Penjual meninggalkan chat',
   },
   vi: {
     orderDetailTitle: 'Chi tiết đơn hàng',
@@ -474,6 +514,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Tranh chấp người bán',
     tlBuyerDisputeResolved: 'Đã giải quyết tranh chấp người mua',
     tlSellerDisputeResolved: 'Đã giải quyết tranh chấp người bán',
+    statusTradeFailed: 'Giao dịch thất bại',
+    tlTradeFailed: 'Giao dịch không thành',
+    tlBuyerLeftChat: 'Người mua đã rời chat',
+    tlSellerLeftChat: 'Người bán đã rời chat',
   },
   th: {
     orderDetailTitle: 'รายละเอียดคำสั่งซื้อ',
@@ -517,6 +561,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'ข้อพิพาทผู้ขาย',
     tlBuyerDisputeResolved: 'ยุติข้อพิพาทผู้ซื้อ',
     tlSellerDisputeResolved: 'ยุติข้อพิพาทผู้ขาย',
+    statusTradeFailed: 'การซื้อขายไม่สำเร็จ',
+    tlTradeFailed: 'การซื้อขายไม่สำเร็จ',
+    tlBuyerLeftChat: 'ผู้ซื้อออกจากแชท',
+    tlSellerLeftChat: 'ผู้ขายออกจากแชท',
   },
   hi: {
     orderDetailTitle: 'ऑर्डर विवरण',
@@ -560,6 +608,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'विक्रेता विवाद',
     tlBuyerDisputeResolved: 'खरीदार विवाद सुलझा',
     tlSellerDisputeResolved: 'विक्रेता विवाद सुलझा',
+    statusTradeFailed: 'सौदा विफल',
+    tlTradeFailed: 'सौदा नहीं हुआ',
+    tlBuyerLeftChat: 'खरीदार ने चैट छोड़ दी',
+    tlSellerLeftChat: 'विक्रेता ने चैट छोड़ दी',
   },
   ar: {
     orderDetailTitle: 'تفاصيل الطلب',
@@ -603,6 +655,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'نزاع البائع',
     tlBuyerDisputeResolved: 'حُل نزاع المشتري',
     tlSellerDisputeResolved: 'حُل نزاع البائع',
+    statusTradeFailed: 'فشلت الصفقة',
+    tlTradeFailed: 'لم تتم الصفقة',
+    tlBuyerLeftChat: 'غادر المشتري الدردشة',
+    tlSellerLeftChat: 'غادر البائع الدردشة',
   },
   ru: {
     orderDetailTitle: 'Детали заказа',
@@ -646,6 +702,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Спор продавца',
     tlBuyerDisputeResolved: 'Спор покупателя решён',
     tlSellerDisputeResolved: 'Спор продавца решён',
+    statusTradeFailed: 'Сделка не состоялась',
+    tlTradeFailed: 'Сделка сорвалась',
+    tlBuyerLeftChat: 'Покупатель покинул чат',
+    tlSellerLeftChat: 'Продавец покинул чат',
   },
   tr: {
     orderDetailTitle: 'Sipariş detayı',
@@ -689,6 +749,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Satıcı anlaşmazlığı',
     tlBuyerDisputeResolved: 'Alıcı anlaşmazlığı çözüldü',
     tlSellerDisputeResolved: 'Satıcı anlaşmazlığı çözüldü',
+    statusTradeFailed: 'İşlem gerçekleşmedi',
+    tlTradeFailed: 'İşlem gerçekleşmedi',
+    tlBuyerLeftChat: 'Alıcı sohbetten ayrıldı',
+    tlSellerLeftChat: 'Satıcı sohbetten ayrıldı',
   },
   it: {
     orderDetailTitle: 'Dettaglio ordine',
@@ -732,6 +796,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Controversia venditore',
     tlBuyerDisputeResolved: 'Controversia acquirente risolta',
     tlSellerDisputeResolved: 'Controversia venditore risolta',
+    statusTradeFailed: 'Scambio non riuscito',
+    tlTradeFailed: 'Lo scambio non è andato a buon fine',
+    tlBuyerLeftChat: 'L’acquirente ha lasciato la chat',
+    tlSellerLeftChat: 'Il venditore ha lasciato la chat',
   },
   pl: {
     orderDetailTitle: 'Szczegóły zamówienia',
@@ -775,6 +843,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Spór sprzedawcy',
     tlBuyerDisputeResolved: 'Spór kupującego rozwiązany',
     tlSellerDisputeResolved: 'Spór sprzedawcy rozwiązany',
+    statusTradeFailed: 'Transakcja nieudana',
+    tlTradeFailed: 'Transakcja nie doszła do skutku',
+    tlBuyerLeftChat: 'Kupujący opuścił czat',
+    tlSellerLeftChat: 'Sprzedawca opuścił czat',
   },
   nl: {
     orderDetailTitle: 'Bestelgegevens',
@@ -818,6 +890,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Geschil verkoper',
     tlBuyerDisputeResolved: 'Geschil koper opgelost',
     tlSellerDisputeResolved: 'Geschil verkoper opgelost',
+    statusTradeFailed: 'Deal niet doorgegaan',
+    tlTradeFailed: 'De deal ging niet door',
+    tlBuyerLeftChat: 'De koper heeft de chat verlaten',
+    tlSellerLeftChat: 'De verkoper heeft de chat verlaten',
   },
   fil: {
     orderDetailTitle: 'Detalye ng order',
@@ -861,6 +937,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Dispute ng seller',
     tlBuyerDisputeResolved: 'Naresolba ang dispute ng buyer',
     tlSellerDisputeResolved: 'Naresolba ang dispute ng seller',
+    statusTradeFailed: 'Hindi natuloy ang trade',
+    tlTradeFailed: 'Hindi natuloy ang trade',
+    tlBuyerLeftChat: 'Umalis ang buyer sa chat',
+    tlSellerLeftChat: 'Umalis ang seller sa chat',
   },
   uk: {
     orderDetailTitle: 'Деталі замовлення',
@@ -904,6 +984,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Спір продавця',
     tlBuyerDisputeResolved: 'Спір покупця вирішено',
     tlSellerDisputeResolved: 'Спір продавця вирішено',
+    statusTradeFailed: 'Угода не відбулась',
+    tlTradeFailed: 'Угода зірвалася',
+    tlBuyerLeftChat: 'Покупець покинув чат',
+    tlSellerLeftChat: 'Продавець покинув чат',
   },
   bn: {
     orderDetailTitle: 'অর্ডার বিবরণ',
@@ -947,6 +1031,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'বিক্রেতার বিবাদ',
     tlBuyerDisputeResolved: 'ক্রেতার বিবাদ সমাধান',
     tlSellerDisputeResolved: 'বিক্রেতার বিবাদ সমাধান',
+    statusTradeFailed: 'লেনদেন ব্যর্থ',
+    tlTradeFailed: 'লেনদেন হয়নি',
+    tlBuyerLeftChat: 'ক্রেতা চ্যাট ছেড়েছেন',
+    tlSellerLeftChat: 'বিক্রেতা চ্যাট ছেড়েছেন',
   },
   ms: {
     orderDetailTitle: 'Butiran pesanan',
@@ -990,6 +1078,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Pertikaian penjual',
     tlBuyerDisputeResolved: 'Pertikaian pembeli diselesaikan',
     tlSellerDisputeResolved: 'Pertikaian penjual diselesaikan',
+    statusTradeFailed: 'Urus niaga gagal',
+    tlTradeFailed: 'Urus niaga tidak jadi',
+    tlBuyerLeftChat: 'Pembeli meninggalkan sembang',
+    tlSellerLeftChat: 'Penjual meninggalkan sembang',
   },
   sw: {
     orderDetailTitle: 'Maelezo ya agizo',
@@ -1033,6 +1125,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'Mzozo wa muuzaji',
     tlBuyerDisputeResolved: 'Mzozo wa mnunuzi umetatuliwa',
     tlSellerDisputeResolved: 'Mzozo wa muuzaji umetatuliwa',
+    statusTradeFailed: 'Biashara imeshindwa',
+    tlTradeFailed: 'Biashara haikufanikiwa',
+    tlBuyerLeftChat: 'Mnunuzi ametoka kwenye gumzo',
+    tlSellerLeftChat: 'Muuzaji ametoka kwenye gumzo',
   },
   fa: {
     orderDetailTitle: 'جزئیات سفارش',
@@ -1076,6 +1172,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'اختلاف فروشنده',
     tlBuyerDisputeResolved: 'اختلاف خریدار حل شد',
     tlSellerDisputeResolved: 'اختلاف فروشنده حل شد',
+    statusTradeFailed: 'معامله انجام نشد',
+    tlTradeFailed: 'معامله سر نگرفت',
+    tlBuyerLeftChat: 'خریدار گفتگو را ترک کرد',
+    tlSellerLeftChat: 'فروشنده گفتگو را ترک کرد',
   },
   ur: {
     orderDetailTitle: 'آرڈر کی تفصیل',
@@ -1119,6 +1219,10 @@ const ORDER_DETAIL_MESSAGES: Record<AppLanguage, Record<OrderDetailMessageKey, s
     tlSellerDisputeOpened: 'فروخت کنندہ کا تنازعہ',
     tlBuyerDisputeResolved: 'خریدار کا تنازعہ حل ہوا',
     tlSellerDisputeResolved: 'فروخت کنندہ کا تنازعہ حل ہوا',
+    statusTradeFailed: 'سودا ناکام',
+    tlTradeFailed: 'سودا نہیں ہوا',
+    tlBuyerLeftChat: 'خریدار نے چیٹ چھوڑ دی',
+    tlSellerLeftChat: 'فروخت کنندہ نے چیٹ چھوڑ دی',
   },
 };
 

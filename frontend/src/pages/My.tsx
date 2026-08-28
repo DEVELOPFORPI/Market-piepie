@@ -62,6 +62,7 @@ export const My: React.FC = () => {
     { labelKey: 'saved', icon: '/profile/2.svg', path: '/my/favorites' },
     { labelKey: 'orders', icon: '/profile/3.svg', path: '/my/orders' },
     { labelKey: 'myPosts', icon: '/profile/5.svg', path: '/my/posts' },
+    { labelKey: 'myComments', icon: '/profile/comment.svg', path: '/my/comments' },
     { labelKey: 'reviews', icon: '/profile/6.svg', path: '/my/reviews' },
     { labelKey: 'inquiries', icon: '/profile/9.svg', path: '/my/inquiries' },
     { labelKey: 'disputes', icon: '/profile/4.svg', path: '/my/disputes' },
@@ -223,8 +224,8 @@ export const My: React.FC = () => {
               className="w-full flex items-center gap-4 px-4 py-5 bg-white rounded-xl border border-gray-100 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left shadow-sm"
             >
               {/* Icon */}
-              <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                <img src={item.icon} alt={label} className="max-w-[20px] max-h-[20px]" />
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center">
+                <img src={item.icon} alt={label} className="h-full w-full object-contain" />
               </div>
               {/* Label */}
               <span className="flex-1 text-sm font-medium text-gray-800">{label}</span>

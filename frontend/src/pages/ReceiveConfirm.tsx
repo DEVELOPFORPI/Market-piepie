@@ -8,6 +8,7 @@ import { ORDER_STATUS_VALUE, TRADE_METHOD_VALUE, type TradeMethod } from '@/type
 import { useLanguage } from '@/hooks/useLanguage';
 import { isListingHeldByOtherBuyerDispute } from '@/utils/disputeStorage';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 export const ReceiveConfirm: React.FC = () => {
   const navigate = useNavigate();
@@ -229,11 +230,13 @@ export const ReceiveConfirm: React.FC = () => {
 
         {price !== 0 && condition && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('notesOptional')}
+            <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+              <span>{t('notesOptional')}</span>
+              <span className="text-xs font-normal text-gray-400">{notes.length}/{TEXT_LIMIT.receiptNotes}</span>
             </label>
             <textarea
               value={notes}
+              maxLength={TEXT_LIMIT.receiptNotes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={t('notesConditionPh')}
               rows={4}

@@ -44,6 +44,7 @@ export type ChatRoomMessageKey =
   | 'bannerTradeComplete'
   | 'bannerListingOtherDispute'
   | 'bannerListingSold'
+  | 'bannerListingAdminHidden'
   | 'bannerYourDispute'
   | 'bannerTheirDispute'
   | 'bannerDisputeGeneric'
@@ -53,7 +54,9 @@ export type ChatRoomMessageKey =
   | 'couldNotSendPhotos'
   | 'messageSendFailed'
   | 'listingRemovedAlert'
-  | 'adminDeletedMessage';
+  | 'bannerListingDeleted'
+  | 'adminDeletedMessage'
+  | 'checkCameraPermission';
 
 const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>> = {
   en: {
@@ -99,6 +102,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Trade complete for this order.',
     bannerListingOtherDispute: 'This listing is in a dispute in another trade.',
     bannerListingSold: 'This listing has been sold.',
+    bannerListingAdminHidden: 'An admin hid this listing. New offers are blocked.',
     bannerYourDispute: 'You opened a dispute',
     bannerTheirDispute: 'The other party opened a dispute',
     bannerDisputeGeneric: 'This item is in a dispute',
@@ -108,7 +112,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Could not send photos. Check your connection and try again.',
     messageSendFailed: 'Message could not be sent. Check your connection and try again.',
     listingRemovedAlert: 'This listing was removed.',
+    bannerListingDeleted: 'This listing was deleted. The chat remains as a record.',
     adminDeletedMessage: 'This message was removed by an admin.',
+    checkCameraPermission: 'Camera did not open. Check camera permission for this app.',
   },
   ko: {
     reviewSubmitted: '리뷰 작성 완료',
@@ -153,6 +159,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: '이 주문의 거래가 완료되었습니다.',
     bannerListingOtherDispute: '이 상품은 다른 거래에서 분쟁 중입니다.',
     bannerListingSold: '이 상품은 판매되었습니다.',
+    bannerListingAdminHidden: '관리자가 숨긴 상품입니다. 새 제안은 할 수 없습니다.',
     bannerYourDispute: '내가 연 분쟁',
     bannerTheirDispute: '상대방이 분쟁을 열었습니다',
     bannerDisputeGeneric: '이 상품은 분쟁 중입니다',
@@ -162,7 +169,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '사진을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     messageSendFailed: '메시지를 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     listingRemovedAlert: '이 상품이 삭제되었습니다.',
+    bannerListingDeleted: '삭제된 상품입니다. 채팅은 기록으로만 남습니다.',
     adminDeletedMessage: '관리자가 가린 메시지입니다.',
+    checkCameraPermission: '카메라가 열리지 않았습니다. 앱의 카메라 권한을 확인해 주세요.',
   },
   zh: {
     reviewSubmitted: '已提交评价',
@@ -207,6 +216,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: '该订单交易已完成。',
     bannerListingOtherDispute: '该商品在另一笔交易中处于争议。',
     bannerListingSold: '该商品已售出。',
+    bannerListingAdminHidden: '管理员已隐藏该商品，无法再发起新报价。',
     bannerYourDispute: '你发起了争议',
     bannerTheirDispute: '对方发起了争议',
     bannerDisputeGeneric: '该商品处于争议中',
@@ -216,7 +226,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '无法发送照片，请检查网络后重试。',
     messageSendFailed: '消息发送失败，请检查网络后重试。',
     listingRemovedAlert: '该商品已删除。',
+    bannerListingDeleted: '该商品已删除。聊天仅作为记录保留。',
     adminDeletedMessage: '该消息已被管理员移除。',
+    checkCameraPermission: '相机未打开。请检查应用的相机权限。',
   },
   ja: {
     reviewSubmitted: 'レビュー投稿済み',
@@ -261,6 +273,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'この注文の取引は完了しました。',
     bannerListingOtherDispute: 'この商品は別の取引で紛争中です。',
     bannerListingSold: 'この出品は売却済みです。',
+    bannerListingAdminHidden: '管理者がこの商品を非表示にしました。新しい提案はできません。',
     bannerYourDispute: 'あなたが紛争を開始しました',
     bannerTheirDispute: '相手が紛争を開始しました',
     bannerDisputeGeneric: 'この商品は紛争中です',
@@ -270,7 +283,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: '写真を送れませんでした。接続を確認して再試行してください。',
     messageSendFailed: 'メッセージを送信できませんでした。接続を確認して再試行してください。',
     listingRemovedAlert: 'この出品は削除されました。',
+    bannerListingDeleted: 'この出品は削除されました。チャットは記録として残ります。',
     adminDeletedMessage: '管理者が削除したメッセージです。',
+    checkCameraPermission: 'カメラが開きませんでした。アプリのカメラ権限を確認してください。',
   },
   es: {
     reviewSubmitted: 'Reseña enviada',
@@ -315,6 +330,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Trato completado para este pedido.',
     bannerListingOtherDispute: 'Este anuncio está en disputa en otro trato.',
     bannerListingSold: 'Este anuncio se ha vendido.',
+    bannerListingAdminHidden: 'Un administrador ocultó este anuncio. No se permiten nuevas ofertas.',
     bannerYourDispute: 'Abriste una disputa',
     bannerTheirDispute: 'La otra parte abrió una disputa',
     bannerDisputeGeneric: 'Este artículo está en disputa',
@@ -324,7 +340,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'No se pudieron enviar las fotos. Comprueba la conexión e inténtalo de nuevo.',
     messageSendFailed: 'No se pudo enviar el mensaje. Comprueba la conexión e inténtalo de nuevo.',
     listingRemovedAlert: 'Este anuncio se eliminó.',
+    bannerListingDeleted: 'Este anuncio fue eliminado. El chat queda como registro.',
     adminDeletedMessage: 'Un administrador eliminó este mensaje.',
+    checkCameraPermission: 'La cámara no se abrió. Revisa el permiso de cámara de la app.',
   },
   pt: {
     reviewSubmitted: 'Avaliação enviada',
@@ -369,6 +387,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Negócio concluído para este pedido.',
     bannerListingOtherDispute: 'Este anúncio está em disputa em outra troca.',
     bannerListingSold: 'Este anúncio foi vendido.',
+    bannerListingAdminHidden: 'Um administrador ocultou este anúncio. Novas ofertas estão bloqueadas.',
     bannerYourDispute: 'Você abriu uma disputa',
     bannerTheirDispute: 'A outra parte abriu uma disputa',
     bannerDisputeGeneric: 'Este item está em disputa',
@@ -378,7 +397,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Não foi possível enviar as fotos. Verifique a conexão e tente novamente.',
     messageSendFailed: 'Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.',
     listingRemovedAlert: 'Este anúncio foi removido.',
+    bannerListingDeleted: 'Este anúncio foi excluído. O chat fica como registro.',
     adminDeletedMessage: 'Esta mensagem foi removida por um administrador.',
+    checkCameraPermission: 'A câmera não abriu. Verifique a permissão de câmera do app.',
   },
   fr: {
     reviewSubmitted: 'Avis envoyé',
@@ -423,6 +444,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Échange terminé pour cette commande.',
     bannerListingOtherDispute: 'Cette annonce est en litige dans un autre échange.',
     bannerListingSold: 'Cette annonce a été vendue.',
+    bannerListingAdminHidden: 'Un administrateur a masqué cette annonce. Nouvelles offres bloquées.',
     bannerYourDispute: 'Vous avez ouvert un litige',
     bannerTheirDispute: 'L’autre partie a ouvert un litige',
     bannerDisputeGeneric: 'Cet article est en litige',
@@ -432,7 +454,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Impossible d’envoyer les photos. Vérifiez la connexion et réessayez.',
     messageSendFailed: 'Le message n’a pas pu être envoyé. Vérifiez la connexion et réessayez.',
     listingRemovedAlert: 'Cette annonce a été supprimée.',
+    bannerListingDeleted: 'Cette annonce a été supprimée. La discussion reste en archive.',
     adminDeletedMessage: 'Ce message a été supprimé par un administrateur.',
+    checkCameraPermission: 'La caméra ne s’est pas ouverte. Vérifiez l’autorisation caméra de l’app.',
   },
   de: {
     reviewSubmitted: 'Bewertung gesendet',
@@ -477,6 +501,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Geschäft für diese Bestellung abgeschlossen.',
     bannerListingOtherDispute: 'Diese Anzeige ist in einem anderen Handel im Streit.',
     bannerListingSold: 'Diese Anzeige wurde verkauft.',
+    bannerListingAdminHidden: 'Ein Admin hat diese Anzeige ausgeblendet. Neue Angebote sind gesperrt.',
     bannerYourDispute: 'Du hast einen Streitfall eröffnet',
     bannerTheirDispute: 'Die andere Partei hat einen Streitfall eröffnet',
     bannerDisputeGeneric: 'Dieser Artikel ist in einem Streitfall',
@@ -486,7 +511,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Fotos konnten nicht gesendet werden. Verbindung prüfen.',
     messageSendFailed: 'Nachricht konnte nicht gesendet werden. Verbindung prüfen.',
     listingRemovedAlert: 'Diese Anzeige wurde entfernt.',
+    bannerListingDeleted: 'Diese Anzeige wurde gelöscht. Der Chat bleibt als Verlauf.',
     adminDeletedMessage: 'Diese Nachricht wurde von einem Admin entfernt.',
+    checkCameraPermission: 'Kamera wurde nicht geöffnet. Kamerazugriff der App prüfen.',
   },
   id: {
     reviewSubmitted: 'Ulasan dikirim',
@@ -531,6 +558,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Transaksi selesai untuk pesanan ini.',
     bannerListingOtherDispute: 'Listing ini sedang sengketa di transaksi lain.',
     bannerListingSold: 'Listing ini telah terjual.',
+    bannerListingAdminHidden: 'Admin menyembunyikan listing ini. Penawaran baru diblokir.',
     bannerYourDispute: 'Anda membuka sengketa',
     bannerTheirDispute: 'Pihak lain membuka sengketa',
     bannerDisputeGeneric: 'Item ini sedang sengketa',
@@ -540,7 +568,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Tidak dapat mengirim foto. Periksa koneksi dan coba lagi.',
     messageSendFailed: 'Pesan tidak dapat dikirim. Periksa koneksi dan coba lagi.',
     listingRemovedAlert: 'Listing ini dihapus.',
+    bannerListingDeleted: 'Listing ini dihapus. Chat tetap sebagai catatan.',
     adminDeletedMessage: 'Pesan ini dihapus oleh admin.',
+    checkCameraPermission: 'Kamera tidak terbuka. Periksa izin kamera aplikasi.',
   },
   vi: {
     reviewSubmitted: 'Đã gửi đánh giá',
@@ -585,6 +615,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Giao dịch hoàn tất cho đơn này.',
     bannerListingOtherDispute: 'Tin đăng này đang tranh chấp ở giao dịch khác.',
     bannerListingSold: 'Tin đăng này đã bán.',
+    bannerListingAdminHidden: 'Quản trị viên đã ẩn tin đăng này. Không thể gửi đề nghị mới.',
     bannerYourDispute: 'Bạn đã mở tranh chấp',
     bannerTheirDispute: 'Đối phương đã mở tranh chấp',
     bannerDisputeGeneric: 'Mặt hàng này đang tranh chấp',
@@ -594,7 +625,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Không gửi được ảnh. Kiểm tra kết nối và thử lại.',
     messageSendFailed: 'Không gửi được tin nhắn. Kiểm tra kết nối và thử lại.',
     listingRemovedAlert: 'Tin đăng này đã bị xóa.',
+    bannerListingDeleted: 'Tin đăng này đã bị xóa. Cuộc trò chuyện chỉ còn là bản lưu.',
     adminDeletedMessage: 'Tin nhắn này đã bị quản trị viên xóa.',
+    checkCameraPermission: 'Camera không mở. Hãy kiểm tra quyền camera của ứng dụng.',
   },
   th: {
     reviewSubmitted: 'ส่งรีวิวแล้ว',
@@ -639,6 +672,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'การซื้อขายของคำสั่งนี้เสร็จแล้ว',
     bannerListingOtherDispute: 'ประกาศนี้อยู่ในข้อพิพาทของการซื้อขายอื่น',
     bannerListingSold: 'ประกาศนี้ขายแล้ว',
+    bannerListingAdminHidden: 'ผู้ดูแลซ่อนประกาศนี้แล้ว ไม่สามารถเสนอราคาใหม่ได้',
     bannerYourDispute: 'คุณเปิดข้อพิพาทแล้ว',
     bannerTheirDispute: 'อีกฝ่ายเปิดข้อพิพาทแล้ว',
     bannerDisputeGeneric: 'สินค้านี้กำลังมีข้อพิพาท',
@@ -648,7 +682,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ส่งรูปไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่',
     messageSendFailed: 'ส่งข้อความไม่ได้ ตรวจการเชื่อมต่อแล้วลองใหม่',
     listingRemovedAlert: 'ประกาศนี้ถูกลบแล้ว',
+    bannerListingDeleted: 'ประกาศนี้ถูกลบแล้ว แชทจะเก็บไว้เป็นบันทึกเท่านั้น',
     adminDeletedMessage: 'ข้อความนี้ถูกผู้ดูแลระบบลบแล้ว',
+    checkCameraPermission: 'กล้องไม่เปิด ตรวจสอบสิทธิ์กล้องของแอป',
   },
   hi: {
     reviewSubmitted: 'समीक्षा भेजी गई',
@@ -693,6 +729,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'इस ऑर्डर का लेन-देन पूरा।',
     bannerListingOtherDispute: 'यह लिस्टिंग दूसरे लेन-देन में विवाद में है।',
     bannerListingSold: 'यह लिस्टिंग बिक चुकी है।',
+    bannerListingAdminHidden: 'एडमिन ने यह लिस्टिंग छिपा दी है। नए ऑफ़र नहीं भेज सकते।',
     bannerYourDispute: 'आपने विवाद खोला',
     bannerTheirDispute: 'दूसरे पक्ष ने विवाद खोला',
     bannerDisputeGeneric: 'यह वस्तु विवाद में है',
@@ -702,7 +739,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'फ़ोटो नहीं भेजी जा सकीं। कनेक्शन जांचें।',
     messageSendFailed: 'संदेश नहीं भेजा जा सका। कनेक्शन जांचें।',
     listingRemovedAlert: 'यह लिस्टिंग हटा दी गई।',
+    bannerListingDeleted: 'यह लिस्टिंग हटा दी गई। चैट केवल रिकॉर्ड के रूप में रहेगी।',
     adminDeletedMessage: 'यह संदेश व्यवस्थापक ने हटा दिया।',
+    checkCameraPermission: 'कैमरा नहीं खुला। ऐप की कैमरा अनुमति जांचें।',
   },
   ar: {
     reviewSubmitted: 'تم إرسال التقييم',
@@ -747,6 +786,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'اكتملت الصفقة لهذا الطلب.',
     bannerListingOtherDispute: 'هذا الإعلان في نزاع بصفقة أخرى.',
     bannerListingSold: 'تم بيع هذا الإعلان.',
+    bannerListingAdminHidden: 'أخفى المشرف هذا الإعلان. لا يمكن تقديم عروض جديدة.',
     bannerYourDispute: 'فتحت نزاعًا',
     bannerTheirDispute: 'فتح الطرف الآخر نزاعًا',
     bannerDisputeGeneric: 'هذا العنصر في نزاع',
@@ -756,7 +796,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'تعذر إرسال الصور. تحقق من الاتصال وحاول مرة أخرى.',
     messageSendFailed: 'تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى.',
     listingRemovedAlert: 'تم حذف هذا الإعلان.',
+    bannerListingDeleted: 'تم حذف هذا الإعلان. تبقى الدردشة كسجل فقط.',
     adminDeletedMessage: 'تمت إزالة هذه الرسالة بواسطة المشرف.',
+    checkCameraPermission: 'لم تُفتح الكاميرا. تحقق من إذن الكاميرا للتطبيق.',
   },
   ru: {
     reviewSubmitted: 'Отзыв отправлен',
@@ -801,6 +843,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Сделка по этому заказу завершена.',
     bannerListingOtherDispute: 'Это объявление в споре по другой сделке.',
     bannerListingSold: 'Это объявление продано.',
+    bannerListingAdminHidden: 'Администратор скрыл это объявление. Новые предложения недоступны.',
     bannerYourDispute: 'Вы открыли спор',
     bannerTheirDispute: 'Другая сторона открыла спор',
     bannerDisputeGeneric: 'Этот товар в споре',
@@ -810,7 +853,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Не удалось отправить фото. Проверьте соединение.',
     messageSendFailed: 'Не удалось отправить сообщение. Проверьте соединение.',
     listingRemovedAlert: 'Это объявление удалено.',
+    bannerListingDeleted: 'Это объявление удалено. Чат остаётся только как история.',
     adminDeletedMessage: 'Это сообщение удалено администратором.',
+    checkCameraPermission: 'Камера не открылась. Проверьте доступ к камере для приложения.',
   },
   tr: {
     reviewSubmitted: 'Yorum gönderildi',
@@ -855,6 +900,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Bu sipariş için ticaret tamam.',
     bannerListingOtherDispute: 'Bu ilan başka bir ticarette anlaşmazlıkta.',
     bannerListingSold: 'Bu ilan satıldı.',
+    bannerListingAdminHidden: 'Bir yönetici bu ilanı gizledi. Yeni teklif gönderilemez.',
     bannerYourDispute: 'Bir anlaşmazlık açtınız',
     bannerTheirDispute: 'Karşı taraf bir anlaşmazlık açtı',
     bannerDisputeGeneric: 'Bu ürün anlaşmazlıkta',
@@ -864,7 +910,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Fotoğraflar gönderilemedi. Bağlantınızı kontrol edin.',
     messageSendFailed: 'Mesaj gönderilemedi. Bağlantınızı kontrol edin.',
     listingRemovedAlert: 'Bu ilan kaldırıldı.',
+    bannerListingDeleted: 'Bu ilan silindi. Sohbet yalnızca kayıt olarak kalır.',
     adminDeletedMessage: 'Bu mesaj yönetici tarafından kaldırıldı.',
+    checkCameraPermission: 'Kamera açılmadı. Uygulamanın kamera iznini kontrol edin.',
   },
   it: {
     reviewSubmitted: 'Recensione inviata',
@@ -909,6 +957,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Scambio completato per questo ordine.',
     bannerListingOtherDispute: 'Questo annuncio è in controversia in un altro scambio.',
     bannerListingSold: 'Questo annuncio è stato venduto.',
+    bannerListingAdminHidden: 'Un amministratore ha nascosto questo annuncio. Nuove offerte bloccate.',
     bannerYourDispute: 'Hai aperto una controversia',
     bannerTheirDispute: 'L’altra parte ha aperto una controversia',
     bannerDisputeGeneric: 'Questo articolo è in controversia',
@@ -918,7 +967,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Impossibile inviare le foto. Controlla la connessione.',
     messageSendFailed: 'Messaggio non inviato. Controlla la connessione.',
     listingRemovedAlert: 'Questo annuncio è stato rimosso.',
+    bannerListingDeleted: 'Questo annuncio è stato eliminato. La chat resta come archivio.',
     adminDeletedMessage: 'Questo messaggio è stato rimosso da un amministratore.',
+    checkCameraPermission: 'La fotocamera non si è aperta. Controlla il permesso fotocamera dell’app.',
   },
   pl: {
     reviewSubmitted: 'Opinia wysłana',
@@ -963,6 +1014,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Transakcja dla tego zamówienia zakończona.',
     bannerListingOtherDispute: 'To ogłoszenie jest w sporze w innej transakcji.',
     bannerListingSold: 'To ogłoszenie zostało sprzedane.',
+    bannerListingAdminHidden: 'Administrator ukrył to ogłoszenie. Nowe oferty są zablokowane.',
     bannerYourDispute: 'Otworzyłeś spór',
     bannerTheirDispute: 'Druga strona otworzyła spór',
     bannerDisputeGeneric: 'Ten przedmiot jest w sporze',
@@ -972,7 +1024,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Nie udało się wysłać zdjęć. Sprawdź połączenie.',
     messageSendFailed: 'Nie udało się wysłać wiadomości. Sprawdź połączenie.',
     listingRemovedAlert: 'To ogłoszenie zostało usunięte.',
+    bannerListingDeleted: 'To ogłoszenie zostało usunięte. Czat pozostaje jako zapis.',
     adminDeletedMessage: 'Ta wiadomość została usunięta przez administratora.',
+    checkCameraPermission: 'Kamera się nie otwarła. Sprawdź uprawnienie kamery aplikacji.',
   },
   nl: {
     reviewSubmitted: 'Review verzonden',
@@ -1017,6 +1071,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Handel voor deze bestelling afgerond.',
     bannerListingOtherDispute: 'Deze advertentie zit in een geschil bij een andere deal.',
     bannerListingSold: 'Deze advertentie is verkocht.',
+    bannerListingAdminHidden: 'Een beheerder heeft deze advertentie verborgen. Nieuwe biedingen zijn geblokkeerd.',
     bannerYourDispute: 'Je hebt een geschil geopend',
     bannerTheirDispute: 'De andere partij heeft een geschil geopend',
     bannerDisputeGeneric: 'Dit item zit in een geschil',
@@ -1026,7 +1081,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Foto’s konden niet worden verzonden. Controleer je verbinding.',
     messageSendFailed: 'Bericht kon niet worden verzonden. Controleer je verbinding.',
     listingRemovedAlert: 'Deze advertentie is verwijderd.',
+    bannerListingDeleted: 'Deze advertentie is verwijderd. De chat blijft als archief.',
     adminDeletedMessage: 'Dit bericht is verwijderd door een beheerder.',
+    checkCameraPermission: 'Camera ging niet open. Controleer de cameratoestemming van de app.',
   },
   fil: {
     reviewSubmitted: 'Naipasa ang review',
@@ -1071,6 +1128,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Tapos na ang trade para sa order na ito.',
     bannerListingOtherDispute: 'May dispute ang listing na ito sa ibang trade.',
     bannerListingSold: 'Nabenta na ang listing na ito.',
+    bannerListingAdminHidden: 'Itinago ng admin ang listing na ito. Hindi na puwedeng mag-offer.',
     bannerYourDispute: 'Nagbukas ka ng dispute',
     bannerTheirDispute: 'Nagbukas ng dispute ang kabilang partido',
     bannerDisputeGeneric: 'May dispute ang item na ito',
@@ -1080,7 +1138,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Hindi maipadala ang mga larawan. Suriin ang koneksyon.',
     messageSendFailed: 'Hindi maipadala ang mensahe. Suriin ang koneksyon.',
     listingRemovedAlert: 'Inalis ang listing na ito.',
+    bannerListingDeleted: 'Nadelete ang listing na ito. Mananatili ang chat bilang record.',
     adminDeletedMessage: 'Inalis ng admin ang mensaheng ito.',
+    checkCameraPermission: 'Hindi bumukas ang camera. Suriin ang camera permission ng app.',
   },
   uk: {
     reviewSubmitted: 'Відгук надіслано',
@@ -1125,6 +1185,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Угоду за цим замовленням завершено.',
     bannerListingOtherDispute: 'Це оголошення в спорі в іншій угоді.',
     bannerListingSold: 'Це оголошення продано.',
+    bannerListingAdminHidden: 'Адміністратор приховав це оголошення. Нові пропозиції заблоковано.',
     bannerYourDispute: 'Ви відкрили спір',
     bannerTheirDispute: 'Інша сторона відкрила спір',
     bannerDisputeGeneric: 'Цей товар у спорі',
@@ -1134,7 +1195,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Не вдалося надіслати фото. Перевірте з’єднання.',
     messageSendFailed: 'Не вдалося надіслати повідомлення. Перевірте з’єднання.',
     listingRemovedAlert: 'Це оголошення видалено.',
+    bannerListingDeleted: 'Це оголошення видалено. Чат залишається лише як історія.',
     adminDeletedMessage: 'Це повідомлення видалив адміністратор.',
+    checkCameraPermission: 'Камера не відкрилася. Перевірте доступ до камери для застосунку.',
   },
   bn: {
     reviewSubmitted: 'রিভিউ পাঠানো হয়েছে',
@@ -1179,6 +1242,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'এই অর্ডারের লেনদেন সম্পন্ন।',
     bannerListingOtherDispute: 'এই লিস্টিং অন্য লেনদেনে বিবাদে আছে।',
     bannerListingSold: 'এই লিস্টিং বিক্রি হয়ে গেছে।',
+    bannerListingAdminHidden: 'অ্যাডমিন এই লিস্টিং লুকিয়েছেন। নতুন প্রস্তাব দেওয়া যাবে না।',
     bannerYourDispute: 'আপনি একটি বিবাদ খুলেছেন',
     bannerTheirDispute: 'অন্য পক্ষ একটি বিবাদ খুলেছে',
     bannerDisputeGeneric: 'এই আইটেম বিবাদে আছে',
@@ -1188,7 +1252,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ছবি পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।',
     messageSendFailed: 'বার্তা পাঠানো যায়নি। সংযোগ পরীক্ষা করুন।',
     listingRemovedAlert: 'এই লিস্টিং সরানো হয়েছে।',
+    bannerListingDeleted: 'এই লিস্টিং মুছে ফেলা হয়েছে। চ্যাট শুধু রেকর্ড হিসেবে থাকবে।',
     adminDeletedMessage: 'এই বার্তাটি অ্যাডমিন সরিয়ে দিয়েছেন।',
+    checkCameraPermission: 'ক্যামেরা খোলেনি। অ্যাপের ক্যামেরা অনুমতি দেখুন।',
   },
   ms: {
     reviewSubmitted: 'Ulasan dihantar',
@@ -1233,6 +1299,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Dagangan selesai untuk pesanan ini.',
     bannerListingOtherDispute: 'Senarai ini dalam pertikaian di dagangan lain.',
     bannerListingSold: 'Senarai ini telah dijual.',
+    bannerListingAdminHidden: 'Admin menyembunyikan senarai ini. Tawaran baharu disekat.',
     bannerYourDispute: 'Anda membuka pertikaian',
     bannerTheirDispute: 'Pihak lain membuka pertikaian',
     bannerDisputeGeneric: 'Item ini dalam pertikaian',
@@ -1242,7 +1309,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Tidak dapat hantar foto. Semak sambungan.',
     messageSendFailed: 'Mesej tidak dapat dihantar. Semak sambungan.',
     listingRemovedAlert: 'Senarai ini dialih keluar.',
+    bannerListingDeleted: 'Senarai ini telah dipadam. Sembang kekal sebagai rekod.',
     adminDeletedMessage: 'Mesej ini dialih keluar oleh admin.',
+    checkCameraPermission: 'Kamera tidak dibuka. Semak kebenaran kamera apl.',
   },
   sw: {
     reviewSubmitted: 'Hakiki imetumwa',
@@ -1287,6 +1356,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'Biashara imekamilika kwa agizo hili.',
     bannerListingOtherDispute: 'Tangazo hili lina mzozo katika biashara nyingine.',
     bannerListingSold: 'Tangazo hili limeshauziwa.',
+    bannerListingAdminHidden: 'Msimamizi ameficha tangazo hili. Ofa mpya zimezuiwa.',
     bannerYourDispute: 'Umefungua mzozo',
     bannerTheirDispute: 'Upande mwingine umefungua mzozo',
     bannerDisputeGeneric: 'Kipengele hiki kiko katika mzozo',
@@ -1296,7 +1366,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'Imeshindwa kutuma picha. Angalia muunganisho.',
     messageSendFailed: 'Ujumbe haukuweza kutumwa. Angalia muunganisho.',
     listingRemovedAlert: 'Tangazo hili limeondolewa.',
+    bannerListingDeleted: 'Tangazo hili limefutwa. Gumzo linabaki kama kumbukumbu.',
     adminDeletedMessage: 'Ujumbe huu umeondolewa na msimamizi.',
+    checkCameraPermission: 'Kamera haikufunguka. Angalia ruhusa ya kamera ya programu.',
   },
   fa: {
     reviewSubmitted: 'نظر ارسال شد',
@@ -1341,6 +1413,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'معامله این سفارش کامل شد.',
     bannerListingOtherDispute: 'این آگهی در معامله دیگری اختلاف دارد.',
     bannerListingSold: 'این آگهی فروخته شده است.',
+    bannerListingAdminHidden: 'مدیر این آگهی را پنهان کرده است. پیشنهاد جدید ممکن نیست.',
     bannerYourDispute: 'شما اختلاف باز کردید',
     bannerTheirDispute: 'طرف مقابل اختلاف باز کرد',
     bannerDisputeGeneric: 'این کالا در اختلاف است',
@@ -1350,7 +1423,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'ارسال عکس ممکن نشد. اتصال را بررسی کنید.',
     messageSendFailed: 'ارسال پیام ممکن نشد. اتصال را بررسی کنید.',
     listingRemovedAlert: 'این آگهی حذف شد.',
+    bannerListingDeleted: 'این آگهی حذف شده است. گفتگو فقط به‌عنوان سابقه می‌ماند.',
     adminDeletedMessage: 'این پیام توسط مدیر حذف شد.',
+    checkCameraPermission: 'دوربین باز نشد. دسترسی دوربین برنامه را بررسی کنید.',
   },
   ur: {
     reviewSubmitted: 'جائزہ بھیج دیا گیا',
@@ -1395,6 +1470,7 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     bannerTradeComplete: 'اس آرڈر کا لین دین مکمل۔',
     bannerListingOtherDispute: 'یہ لسٹنگ دوسرے لین دین میں تنازعے میں ہے۔',
     bannerListingSold: 'یہ لسٹنگ بک چکی ہے۔',
+    bannerListingAdminHidden: 'ایڈمن نے یہ لسٹنگ چھپا دی ہے۔ نئی پیشکش ممکن نہیں۔',
     bannerYourDispute: 'آپ نے تنازعہ کھولا',
     bannerTheirDispute: 'دوسری فریق نے تنازعہ کھولا',
     bannerDisputeGeneric: 'یہ آئٹم تنازعے میں ہے',
@@ -1404,7 +1480,9 @@ const CHAT_ROOM_MESSAGES: Record<AppLanguage, Record<ChatRoomMessageKey, string>
     couldNotSendPhotos: 'تصاویر نہ بھیجی جا سکیں۔ کنکشن چیک کریں۔',
     messageSendFailed: 'پیغام نہ بھیجا جا سکا۔ کنکشن چیک کریں۔',
     listingRemovedAlert: 'یہ لسٹنگ ہٹا دی گئی۔',
+    bannerListingDeleted: 'یہ لسٹنگ حذف کر دی گئی۔ چیٹ صرف ریکارڈ کے طور پر رہے گی۔',
     adminDeletedMessage: 'یہ پیغام ایڈمن نے ہٹا دیا۔',
+    checkCameraPermission: 'کیمرا نہیں کھلا۔ ایپ کی کیمرا اجازت چیک کریں۔',
   },
 };
 

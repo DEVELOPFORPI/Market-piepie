@@ -9,7 +9,7 @@ import {
   PRODUCT_STATUS_VALUE,
   TRADE_METHOD_VALUE,
 } from '@/types';
-import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta } from '@/utils/chatStorage';
+import { getChatRoom, getMessages, addMessage, markAsRead, markAsReadUpTo, markAsReadByOther, getOtherUser, leaveChatRoom, addPriceOfferResultToChat, ensureChatRoomForOrder, addRemoteMessage, addTradeCompletedToChat, isChatRoomEnded, parseReceiptMessageMeta, getChatLeaveBlock } from '@/utils/chatStorage';
 import { getOrderById, getOrders, ensureOrderById, updateOrderStatus, hasMyOfferBlockingNewOffer, hasProductReservedOrder, isMyAcceptedTradeOnProduct, isOfferAwaitingSellerResponse, createOrderBySeller, completeOrderOnReceive, ORDER_QUOTA_EXCEEDED_MESSAGE, mergeRemoteOrder } from '@/utils/orderStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { connectChatSocket, joinRoom as wsJoinRoom, leaveRoom as wsLeaveRoom, onNewMessage, emitReadReceipt, onReadReceipt } from '@/utils/chatSocket';
@@ -27,15 +27,17 @@ import {
 import { syncDisputesFromDB } from '@/utils/dbSync';
 import { getMyReviewForOrder } from '@/utils/reviewStorage';
 import { getDisplayImageUrl } from '@/utils/imageUrl';
-import { uploadImagesToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferencesToR2 } from '@/utils/imageUpload';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 import { AvatarWithBadgeOverlay } from '@/components/common/AvatarWithBadgeOverlay';
 import { UserAvatarImage } from '@/components/common/UserAvatarImage';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ModalShell } from '@/components/common/ModalShell';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { resolveProfileAvatarUrl, resolveDisplayNickname } from '@/utils/profileStorage';
 import { api } from '@/utils/api';
-import { syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
+import { syncChatRoomsFromDB, syncRoomMessagesFromDB, syncRoomReadStateFromDB } from '@/utils/dbSync';
 import {
   displayChatMessageContent,
   isMeetupCanceledMessage,
@@ -45,6 +47,7 @@ import {
 import { useDismissOnClickOutside } from '@/hooks/useDismissOnClickOutside';
 import { useLanguage } from '@/hooks/useLanguage';
 import { showToast } from '@/utils/toast';
+import { ReportModal } from '@/components/common/ReportModal';
 import type { AppMessageKey } from '@/hooks/useLanguage';
 import { localeForAppLanguage } from '@/utils/languageStorage';
 
@@ -62,6 +65,16 @@ const DISPUTE_ELIGIBLE = new Set<OrderStatus>([
 ]);
 
 const NEAR_BOTTOM_PX = 120;
+const MAX_CHAT_IMAGES = 4;
+
+/** Photo message shown in the thread while its images are still uploading. */
+type PendingImageMessage = {
+  id: string;
+  images: string[];
+  content: string;
+  timestamp: string;
+  failed: boolean;
+};
 
 /** Price-offer accept/decline needs order rows in local cache (often missing until DB sync). */
 async function syncChatOfferOrders(roomId: string, extraOrderId?: string | null): Promise<void> {
@@ -258,9 +271,10 @@ export const ChatRoom: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-  const [uploadingImages, setUploadingImages] = useState(false);
+  const [pendingImageMessages, setPendingImageMessages] = useState<PendingImageMessage[]>([]);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const chatMenuRef = useRef<HTMLDivElement>(null);
   useDismissOnClickOutside(chatMenuRef, showMenu, () => setShowMenu(false));
   const [meetupDetailMessage, setMeetupDetailMessage] = useState<ChatMessage | null>(null);
@@ -279,8 +293,6 @@ export const ChatRoom: React.FC = () => {
   const pinToBottomRef = useRef(false);
   /** True while the viewport is already at/near the latest message */
   const stickToBottomRef = useRef(true);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   /** Message ids for which we already showed the "meetup started" popup */
   const shownMeetupPopupIdsRef = useRef<Set<string>>(new Set());
   /** Message ids already present when room was entered (for delta-only popup checks) */
@@ -293,20 +305,23 @@ export const ChatRoom: React.FC = () => {
     lastReadAt: '',
     enteredAt: '',
   });
-  /** Show deleted-listing alert once, then leave */
-  const deletedProductPopupShownRef = useRef(false);
-
   // Whether listing was deleted
   const [isProductDeleted, setIsProductDeleted] = useState(false);
 
   const checkProductDeleted = () => {
-    if (room?.product?.id) {
+    if (!room) return;
+    if (room.productDeleted) {
+      setIsProductDeleted(true);
+      return;
+    }
+    if (room.product?.id) {
+      // 관리자가 숨긴 상품은 로컬 목록에서도 빠지지만 삭제된 것은 아니다.
       const exists = getProductById(room.product.id);
-      setIsProductDeleted(!exists);
+      setIsProductDeleted(!exists && !room.productAdminHidden);
     }
   };
 
-  // Sync room when roomId changes; reset deleted-listing ref
+  // Sync room when roomId changes
   useEffect(() => {
     initialScrollDoneRef.current = false;
     prevMessageCountRef.current = 0;
@@ -314,7 +329,6 @@ export const ChatRoom: React.FC = () => {
     stickToBottomRef.current = true;
     setNewMessageCount(0);
     setRoom(roomId ? getChatRoom(roomId) : null);
-    deletedProductPopupShownRef.current = false;
     shownMeetupPopupIdsRef.current = new Set();
     knownMessageIdsRef.current = new Set();
     initialMessageSeedDoneRef.current = false;
@@ -350,15 +364,6 @@ export const ChatRoom: React.FC = () => {
       unsubRead();
     };
   }, [roomId]);
-
-  // Partner deleted listing: alert once and leave
-  useEffect(() => {
-    if (!roomId || !isProductDeleted) return;
-    if (deletedProductPopupShownRef.current) return;
-    deletedProductPopupShownRef.current = true;
-    showToast(t('listingRemovedAlert'));
-    navigate('/chat', { replace: true });
-  }, [isProductDeleted, roomId, navigate]);
 
   // On enter / room updates: load messages; ended rooms stay read-only (no rejoin)
   useEffect(() => {
@@ -595,7 +600,11 @@ export const ChatRoom: React.FC = () => {
     const isCompleteOrder = (o: import('@/types').Order) =>
       o.status === ORDER_STATUS_VALUE.COMPLETE ||
       !!(o.buyerCompleted && o.sellerCompleted);
-    const isActiveOrder = (o: import('@/types').Order) => !isCompleteOrder(o);
+    const isActiveOrder = (o: import('@/types').Order) =>
+      !isCompleteOrder(o)
+      && o.status !== ORDER_STATUS_VALUE.TRADE_FAILED
+      && o.status !== ORDER_STATUS_VALUE.OFFER_DECLINED
+      && o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED;
     const newest = (list: import('@/types').Order[]) =>
       [...list].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -652,6 +661,8 @@ export const ChatRoom: React.FC = () => {
   const isListingSold = listingProduct?.status === PRODUCT_STATUS_VALUE.SOLD;
   const isSoldToOtherParty = !!(isListingSold && !isTradeCompleteForThisChat);
   const roomEnded = isChatRoomEnded(room);
+  /** 관리자가 숨긴 상품: 대화는 그대로 두고 새 거래만 막는다 */
+  const productAdminHidden = !!room?.productAdminHidden;
 
   const completedTradeReviewChips = (orderId: string): ChatChipAction[] => {
     if (getMyReviewForOrder(orderId)) {
@@ -725,6 +736,8 @@ export const ChatRoom: React.FC = () => {
   const productForOffer = room?.product ? getProductById(room.product.id) || room.product : null;
   const canOfferPrice = !!(
     !isSoldToOtherParty
+    && !productAdminHidden
+    && !isProductDeleted
     && !isTradeCompleteForThisChat
     && !hasOpenDisputeOnOrder
     && productForOffer
@@ -779,7 +792,7 @@ export const ChatRoom: React.FC = () => {
   };
 
   const buyerChips: ChatChipAction[] = (() => {
-    if (!isBuyer || !room?.product || isProductDeleted || roomEnded) return [];
+    if (!isBuyer || !room?.product || isProductDeleted || roomEnded || productAdminHidden) return [];
     if (isSoldToOtherParty) return [];
     if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
@@ -838,7 +851,7 @@ export const ChatRoom: React.FC = () => {
   })();
 
   const sellerChips: ChatChipAction[] = (() => {
-    if (!isSeller || !room?.product || isProductDeleted || roomEnded) return [];
+    if (!isSeller || !room?.product || isProductDeleted || roomEnded || productAdminHidden) return [];
     if (isSoldToOtherParty) return [];
     if (listingHeldByOtherDispute && !isTradeCompleteForThisChat) return [];
     if (isTradeCompleteForThisChat && currentOrder) {
@@ -846,7 +859,8 @@ export const ChatRoom: React.FC = () => {
     }
     if (!currentOrder || !shouldShowTradeActionChips(currentOrder, meetupCanceled)) {
       const chips: ChatChipAction[] = [];
-      if (!hasOpenDisputeOnOrder) {
+      // 숨긴 상품은 새 주문을 시작할 수 없다 — 진행 중인 주문은 그대로 이어간다.
+      if (!hasOpenDisputeOnOrder && !(productAdminHidden && !currentOrder)) {
         chips.push({
           key: 'meetup',
           label: t('scheduleMeetup'),
@@ -1090,6 +1104,9 @@ export const ChatRoom: React.FC = () => {
     let cancelled = false;
     (async () => {
       const uid = getCurrentUserId();
+      // 방 정보(상품 숨김·삭제 여부 등)는 목록 응답에만 담겨 온다.
+      if (uid) await syncChatRoomsFromDB(uid);
+      if (cancelled) return;
       await syncRoomMessagesFromDB(roomId, uid || undefined);
       if (cancelled) return;
       const r = getChatRoom(roomId);
@@ -1104,28 +1121,121 @@ export const ChatRoom: React.FC = () => {
     return () => { cancelled = true; };
   }, [roomId]);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);
-    setUploadingImages(true);
-    try {
-      const urls = await uploadImagesToR2(fileArray, { folder: 'chat' });
-      setPreviewImages((prev) => [...prev, ...urls]);
-    } catch {
-      showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImages(false);
-      e.target.value = '';
+  /** Photos stay local until send; upload happens in handleSend. */
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    const remaining = MAX_CHAT_IMAGES - previewImages.length;
+    if (remaining <= 0) {
+      showToast(t('upToPhotos', { n: MAX_CHAT_IMAGES }));
+      return;
     }
+    if (files.length > remaining) {
+      showToast(t('upToPhotos', { n: MAX_CHAT_IMAGES }));
+    }
+    const previews = createLocalPreviewUrls(files.slice(0, remaining));
+    if (previews.length === 0) {
+      showToast(t('couldNotUpload'));
+      return;
+    }
+    setPreviewImages((prev) => [...prev, ...previews].slice(0, MAX_CHAT_IMAGES));
+  };
+
+  /**
+   * Tapping the camera hands off to the OS camera, which puts this page in the
+   * background. If nothing happens the app has no camera permission, since the
+   * web side cannot read that OS-level setting.
+   */
+  const watchCameraLaunch = () => {
+    let leftPage = false;
+    const markHidden = () => {
+      if (document.visibilityState === 'hidden') leftPage = true;
+    };
+    const markBlurred = () => { leftPage = true; };
+    document.addEventListener('visibilitychange', markHidden);
+    window.addEventListener('blur', markBlurred);
+    window.setTimeout(() => {
+      document.removeEventListener('visibilitychange', markHidden);
+      window.removeEventListener('blur', markBlurred);
+      if (!leftPage) showToast(t('checkCameraPermission'));
+    }, 2500);
   };
 
   const removePreviewImage = (idx: number) => {
-    setPreviewImages((prev) => prev.filter((_, i) => i !== idx));
+    setPreviewImages((prev) => {
+      revokeLocalPreviewUrl(prev[idx]);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const scrollAfterSend = () => {
+    if (!roomId) return;
+    requestAnimationFrame(() => {
+      scrollToBottomInstant();
+      requestAnimationFrame(scrollToBottomInstant);
+      markAsRead(roomId);
+      emitReadReceipt(roomId);
+      setRoom(getChatRoom(roomId));
+      setNewMessageCount(0);
+    });
+  };
+
+  /** Upload the photos of a bubble that is already visible in the thread. */
+  const deliverPendingImageMessage = async (pending: PendingImageMessage) => {
+    if (!roomId) return;
+    const markFailed = () => {
+      setPendingImageMessages((prev) =>
+        prev.map((p) => (p.id === pending.id ? { ...p, failed: true } : p)),
+      );
+    };
+
+    let uploaded: string[];
+    try {
+      uploaded = await uploadImageReferencesToR2(pending.images, { folder: 'chat' });
+    } catch {
+      markFailed();
+      showToast(t('couldNotUpload'));
+      return;
+    }
+    if (uploaded.length === 0) {
+      markFailed();
+      showToast(t('couldNotUpload'));
+      return;
+    }
+
+    const imgMessage: ChatMessage = {
+      id: pending.id,
+      senderId: getCurrentUserId() || 'me',
+      content: pending.content,
+      timestamp: new Date().toISOString(),
+      type: 'user',
+      images: uploaded,
+    };
+    const saved = await addMessage(roomId, imgMessage);
+    if (!saved) {
+      markFailed();
+      showToast(t('couldNotSendPhotos'));
+      return;
+    }
+    setPendingImageMessages((prev) => prev.filter((p) => p.id !== pending.id));
+    pending.images.forEach(revokeLocalPreviewUrl);
+    scrollAfterSend();
+  };
+
+  const retryPendingImageMessage = (pending: PendingImageMessage) => {
+    setPendingImageMessages((prev) =>
+      prev.map((p) => (p.id === pending.id ? { ...p, failed: false } : p)),
+    );
+    void deliverPendingImageMessage({ ...pending, failed: false });
+  };
+
+  const discardPendingImageMessage = (pending: PendingImageMessage) => {
+    setPendingImageMessages((prev) => prev.filter((p) => p.id !== pending.id));
+    pending.images.forEach(revokeLocalPreviewUrl);
   };
 
   const handleSend = async () => {
-    if (uploadingImages) return;
     if (roomEnded) return;
     if (!input.trim() && previewImages.length === 0) return;
     if (!roomId) return;
@@ -1133,35 +1243,20 @@ export const ChatRoom: React.FC = () => {
     pinToBottomRef.current = true;
     stickToBottomRef.current = true;
 
-    const scrollAfterSend = () => {
-      requestAnimationFrame(() => {
-        scrollToBottomInstant();
-        requestAnimationFrame(scrollToBottomInstant);
-        markAsRead(roomId);
-        emitReadReceipt(roomId);
-        setRoom(getChatRoom(roomId));
-        setNewMessageCount(0);
-      });
-    };
-
-    // Image message (random suffix avoids duplicate keys in same ms)
+    // Photos: show the bubble right away, then upload behind it.
     if (previewImages.length > 0) {
-      const imgMessage: ChatMessage = {
+      const pending: PendingImageMessage = {
         id: `m${Date.now()}_${Math.random().toString(36).slice(2, 9)}_img`,
-        senderId: getCurrentUserId() || 'me',
-        content: input.trim() || '',
+        images: previewImages.slice(0, MAX_CHAT_IMAGES),
+        content: input.trim(),
         timestamp: new Date().toISOString(),
-        type: 'user',
-        images: [...previewImages],
+        failed: false,
       };
-      const saved = await addMessage(roomId, imgMessage);
-      if (saved) {
-        setPreviewImages([]);
-        setInput('');
-        scrollAfterSend();
-      } else {
-        showToast(t('couldNotSendPhotos'));
-      }
+      setPendingImageMessages((prev) => [...prev, pending]);
+      setPreviewImages([]);
+      setInput('');
+      scrollAfterSend();
+      void deliverPendingImageMessage(pending);
       return;
     }
 
@@ -1241,27 +1336,42 @@ export const ChatRoom: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
-            {showMenu && !roomEnded && (
-              <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+            {showMenu && (
+              <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    if (!roomId) return;
-                    void askConfirm({
-                      message: t('leaveChatConfirm'),
-                      confirmLabel: t('leaveChat'),
-                      cancelLabel: t('cancel'),
-                    }).then((ok) => {
-                      if (!ok) return;
-                      void leaveChatRoom(roomId).then((left) => {
-                        if (left) navigate('/chat', { replace: true });
-                      });
-                    });
+                    setShowReport(true);
                   }}
-                  className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50 rounded-lg"
+                  className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
                 >
-                  {t('leaveChat')}
+                  {t('reportChat')}
                 </button>
+                {!roomEnded && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (!roomId) return;
+                      if (getChatLeaveBlock(room, currentOrder)) {
+                        showToast(t('cannotLeaveChatReservedOrDispute'));
+                        return;
+                      }
+                      void askConfirm({
+                        message: t('leaveChatConfirm'),
+                        confirmLabel: t('leaveChat'),
+                        cancelLabel: t('cancel'),
+                      }).then((ok) => {
+                        if (!ok) return;
+                        void leaveChatRoom(roomId).then((left) => {
+                          if (left) navigate('/chat', { replace: true });
+                        });
+                      });
+                    }}
+                    className="w-full px-4 py-2.5 text-sm text-left text-red-500 hover:bg-red-50"
+                  >
+                    {t('leaveChat')}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1364,6 +1474,18 @@ export const ChatRoom: React.FC = () => {
           </div>
         )}
 
+        {productAdminHidden && !roomEnded && (
+          <div className="bg-amber-50 border-t border-amber-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-amber-800">{t('bannerListingAdminHidden')}</p>
+          </div>
+        )}
+
+        {isProductDeleted && !roomEnded && (
+          <div className="bg-gray-100 border-t border-gray-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-gray-600">{t('bannerListingDeleted')}</p>
+          </div>
+        )}
+
         {meetupBannerInfo
           && !isTradeCompleteForThisChat
           && !isSoldToOtherParty
@@ -1374,10 +1496,6 @@ export const ChatRoom: React.FC = () => {
               <img src="/h.svg" alt="" className="w-4 h-4 flex-shrink-0" />
               <p className="text-sm font-medium text-teal-800 flex-1 truncate">
                 {t('msgProductReserved')}
-                {' · '}
-                {meetupBannerInfo.place}
-                {' · '}
-                {[meetupBannerInfo.date, meetupBannerInfo.time].filter(Boolean).join(' ')}
               </p>
               <button
                 type="button"
@@ -1431,7 +1549,10 @@ export const ChatRoom: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </div>
-              <p className="text-sm text-gray-400">{t('listingRemoved')}</p>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-400 line-through truncate">{room.product.title}</p>
+                <p className="text-xs text-gray-400">{t('listingRemoved')}</p>
+              </div>
             </div>
           ) : (
             <>
@@ -1580,14 +1701,12 @@ export const ChatRoom: React.FC = () => {
                   : condition === 'bad'
                     ? t('conditionPoor')
                     : '';
-            const conditionIcon =
-              condition === 'good'
-                ? '/3 ICON/1.svg'
+            const conditionCardStyle =
+              condition === 'bad'
+                ? { backgroundColor: '#EB5757' }
                 : condition === 'normal'
-                  ? '/3 ICON/2.svg'
-                  : condition === 'bad'
-                    ? '/3 ICON/3.svg'
-                    : '/h.svg';
+                  ? { backgroundColor: '#DFAC11' }
+                  : { backgroundColor: '#27AE60' };
             return (
               <div key={msgKey} data-msg-index={msgIndex} data-msg-timestamp={msg.timestamp}>
                 {unreadDivider}
@@ -1595,12 +1714,9 @@ export const ChatRoom: React.FC = () => {
                   <div className="flex flex-col max-w-[85%]">
                     <div
                       className="rounded-lg px-4 py-3 text-white text-sm shadow-sm"
-                      style={{
-                        background: 'linear-gradient(90deg, #00A8A3 0%, #27AE60 100%)',
-                      }}
+                      style={conditionCardStyle}
                     >
-                      <p className="font-semibold mb-2 flex items-center gap-1">
-                        <img src={conditionIcon} alt="" className="w-4 h-4 inline-block" />
+                      <p className={`font-semibold leading-snug${conditionLabel || notes ? ' mb-2' : ''}`}>
                         {displayChatMessageContent(msg.content, lang)}
                       </p>
                       {conditionLabel ? (
@@ -1635,6 +1751,8 @@ export const ChatRoom: React.FC = () => {
               && msg.id === actionablePriceOfferMessageId
               && !meetupBannerInfo
               && !listingHeldByOtherDispute
+              && !productAdminHidden
+              && !isProductDeleted
               && !(
                 currentOrder
                 && currentOrder.status !== ORDER_STATUS_VALUE.PENDING_OFFER
@@ -1836,6 +1954,64 @@ export const ChatRoom: React.FC = () => {
           </div>
           );
         })}
+        {pendingImageMessages
+          .filter((pending) => !messages.some((m) => m.id === pending.id))
+          .map((pending) => (
+            <div key={pending.id} className="flex justify-end">
+              <div className="flex flex-col max-w-[70%]">
+                <div
+                  className={`mb-1 ${pending.images.length === 1 ? '' : 'grid grid-cols-2 gap-1'}`}
+                >
+                  {pending.images.map((img, idx) => (
+                    <div key={idx} className="relative rounded-lg overflow-hidden">
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full max-w-[240px] rounded-lg object-cover opacity-50"
+                        style={{ maxHeight: pending.images.length === 1 ? '240px' : '120px' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {pending.failed ? (
+                          <button
+                            type="button"
+                            onClick={() => retryPendingImageMessage(pending)}
+                            aria-label={t('couldNotUpload')}
+                            className="w-8 h-8 rounded-full bg-black/60 text-white text-base flex items-center justify-center"
+                          >
+                            ↻
+                          </button>
+                        ) : (
+                          <span className="w-6 h-6 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {pending.content && (
+                  <div
+                    className="rounded-lg px-4 py-2.5 text-white rounded-br-sm opacity-60"
+                    style={{ backgroundColor: '#00A8A3' }}
+                  >
+                    <p className="text-sm leading-relaxed">{pending.content}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-1 px-1 justify-end">
+                  {pending.failed && (
+                    <button
+                      type="button"
+                      onClick={() => discardPendingImageMessage(pending)}
+                      className="text-xs text-gray-500 underline"
+                    >
+                      {t('cancel')}
+                    </button>
+                  )}
+                  <span className={`text-xs ${pending.failed ? 'text-red-500' : 'text-gray-500'}`}>
+                    {pending.failed ? t('couldNotUpload') : t('uploading')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         <div ref={messagesEndRef} />
         </div>
         {newMessageCount > 0 && (
@@ -1853,14 +2029,9 @@ export const ChatRoom: React.FC = () => {
       </div>
 
       {/* Image Preview */}
-      {(previewImages.length > 0 || uploadingImages) && (
+      {previewImages.length > 0 && (
         <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
           <div className="flex gap-2 overflow-x-auto">
-            {uploadingImages && (
-              <div className="w-16 h-16 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] text-gray-500">
-                {t('uploading')}
-              </div>
-            )}
             {previewImages.map((img, idx) => (
               <div key={idx} className="relative flex-shrink-0">
                 <img
@@ -1870,7 +2041,9 @@ export const ChatRoom: React.FC = () => {
                 />
                 <button
                   onClick={() => removePreviewImage(idx)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                  aria-label={t('removeImage')}
+                  className="absolute top-1 right-1 w-5 h-5 text-white rounded-full flex items-center justify-center text-xs leading-none shadow"
+                  style={{ backgroundColor: '#00A8A3' }}
                 >
                   ×
                 </button>
@@ -1895,58 +2068,40 @@ export const ChatRoom: React.FC = () => {
         </div>
       ) : (
         <div className="shrink-0 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)]">
-          <input
-            ref={galleryInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-
           <div className="flex items-center gap-2 px-3 py-2">
             <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg shrink-0">
-              <button
-                onClick={() => galleryInputRef.current?.click()}
-                disabled={uploadingImages}
-                className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
-              >
+              <label className="relative flex p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors cursor-pointer">
+                <FilePickerInput multiple onChange={handleImageSelect} />
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-              </button>
-              <button
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={uploadingImages}
-                className="p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors"
-              >
+              </label>
+              <label className="relative flex p-1.5 text-white hover:bg-gray-700 rounded active:bg-gray-600 transition-colors cursor-pointer">
+                <FilePickerInput
+                  capture="environment"
+                  onOpen={watchCameraLaunch}
+                  onChange={handleImageSelect}
+                />
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-              </button>
+              </label>
             </div>
 
             <input
               type="text"
               value={input}
+              maxLength={TEXT_LIMIT.chatMessage}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !uploadingImages && handleSend()}
+              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder={t('typeMessage')}
               className="flex-1 min-w-0 px-3 py-2.5 bg-white border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00A8A3] focus:border-transparent"
             />
 
             <button
               onClick={handleSend}
-              disabled={uploadingImages || (!input.trim() && previewImages.length === 0)}
+              disabled={!input.trim() && previewImages.length === 0}
               className="w-9 h-9 flex items-center justify-center rounded-full text-white shrink-0 disabled:opacity-40"
               style={{ backgroundColor: '#00A8A3' }}
             >
@@ -2009,6 +2164,21 @@ export const ChatRoom: React.FC = () => {
         ) : null}
       </ModalShell>
       {confirmDialog}
+      {roomId && (
+        <ReportModal
+          open={showReport}
+          onClose={() => setShowReport(false)}
+          targetType="chat"
+          targetId={roomId}
+          targetLabel={
+            room
+              ? [resolveDisplayNickname(getOtherUser(room).id, getOtherUser(room).nickname), room.product?.title]
+                  .filter(Boolean)
+                  .join(' · ')
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };

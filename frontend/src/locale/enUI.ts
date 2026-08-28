@@ -102,6 +102,7 @@ export function labelOrderStatus(s: OrderStatus): string {
     [ORDER_STATUS_VALUE.COMPLETE]: accountT(lang, 'orderStatusComplete'),
     [ORDER_STATUS_VALUE.DISPUTE]: accountT(lang, 'orderStatusDispute'),
     [ORDER_STATUS_VALUE.ADMIN_RESOLVED]: orderDetailT(lang, 'statusAdminResolved'),
+    [ORDER_STATUS_VALUE.TRADE_FAILED]: orderDetailT(lang, 'statusTradeFailed'),
   };
   return map[s];
 }
@@ -192,6 +193,7 @@ export function descriptionForOrderStatusForTimeline(s: OrderStatus): string {
     [ORDER_STATUS_VALUE.COMPLETE]: 'Trade completed',
     [ORDER_STATUS_VALUE.DISPUTE]: 'Dispute opened',
     [ORDER_STATUS_VALUE.ADMIN_RESOLVED]: 'Dispute resolved by admin',
+    [ORDER_STATUS_VALUE.TRADE_FAILED]: 'Trade fell through',
   };
   return map[s] ?? s;
 }
@@ -239,8 +241,8 @@ export const chatMsgRejectOffer = (amount: string) => pick(`The offer of ${amoun
 export const chatMsgUserLeft = (nickname: string) => pick(`${nickname} left the chat.`, `${nickname} 님이 채팅방을 나갔습니다.`);
 export const CHAT_LEAVE_ROOM = pick('Leave chat', '채팅방 나가기');
 export const CHAT_LEAVE_ROOM_CONFIRM = pick(
-  'Leave this chat?\nThe chat will end for both of you. You can start a new chat from the listing.',
-  '채팅방을 나가시겠습니까?\n채팅이 양쪽 모두 종료됩니다. 상품에서 다시 새 채팅을 시작할 수 있습니다.',
+  'Leave this chat?\nThe chat will end and the trade will fall through.',
+  '채팅방을 나가시겠습니까?\n채팅은 종료되며 거래는 불발이 됩니다.',
 );
 export const CHAT_ROOM_ENDED = pick(
   'This chat has ended. Start a new chat from the listing.',
@@ -272,9 +274,16 @@ export const NOTIFY_PURCHASE_OFFER_ARRIVED = pick('New purchase offer', '새 구
 export const NOTIFY_FREE_SHARE_REQUEST_ARRIVED = pick('New free share request', '새 나눔 요청이 도착했습니다');
 export const NOTIFY_BADGE_UNLOCKED = pick('New activity badge unlocked!', '새로운 활동 배지가 획득되었습니다!');
 export const NOTIFY_POST_COMMENT = pick('New comment', '새 댓글이 달렸습니다');
+export const NOTIFY_POST_REPLY = pick('New reply', '답글이 달렸습니다');
 export const NOTIFY_INQUIRY_REPLY = pick('Inquiry reply', '문의 답변이 도착했습니다');
 export const NOTIFY_DISPUTE_FILED = pick('Dispute filed', '분쟁이 제기되었습니다');
 export const NOTIFY_DISPUTE_RESOLVED = pick('Dispute resolved', '분쟁이 해결되었습니다');
+export const NOTIFY_LISTING_SUSPENDED = pick('Listing suspended', '상품이 관리자에 의해 정지되었습니다');
+export const NOTIFY_LISTING_REMOVED = pick('Listing removed', '상품이 관리자에 의해 삭제되었습니다');
+export const NOTIFY_POST_HIDDEN = pick('Post hidden', '게시글이 관리자에 의해 숨겨졌습니다');
+export const NOTIFY_POST_REMOVED = pick('Post removed', '게시글이 관리자에 의해 삭제되었습니다');
+export const NOTIFY_COMMENT_HIDDEN = pick('Comment hidden', '댓글이 관리자에 의해 숨겨졌습니다');
+export const NOTIFY_COMMENT_REMOVED = pick('Comment removed', '댓글이 관리자에 의해 삭제되었습니다');
 export const MEETUP_STARTED_SNIPPET = pick('started scheduling a meetup', '약속 잡기를 시작');
 
 export const MEETUP_TITLE_SET = new Set<string>([
@@ -314,9 +323,16 @@ const LEGACY_NOTIFY_TITLE_TO_EN: Record<string, string> = {
   '새 구매 제안이 도착했습니다': NOTIFY_PURCHASE_OFFER_ARRIVED,
   '새 나눔 요청이 도착했습니다': NOTIFY_FREE_SHARE_REQUEST_ARRIVED,
   '새 댓글이 달렸습니다': NOTIFY_POST_COMMENT,
+  '답글이 달렸습니다': NOTIFY_POST_REPLY,
   '문의 답변이 도착했습니다': NOTIFY_INQUIRY_REPLY,
   '분쟁이 제기되었습니다': NOTIFY_DISPUTE_FILED,
   '분쟁이 해결되었습니다': NOTIFY_DISPUTE_RESOLVED,
+  '상품이 관리자에 의해 정지되었습니다': NOTIFY_LISTING_SUSPENDED,
+  '상품이 관리자에 의해 삭제되었습니다': NOTIFY_LISTING_REMOVED,
+  '게시글이 관리자에 의해 숨겨졌습니다': NOTIFY_POST_HIDDEN,
+  '게시글이 관리자에 의해 삭제되었습니다': NOTIFY_POST_REMOVED,
+  '댓글이 관리자에 의해 숨겨졌습니다': NOTIFY_COMMENT_HIDDEN,
+  '댓글이 관리자에 의해 삭제되었습니다': NOTIFY_COMMENT_REMOVED,
 };
 
 export function normalizeNotificationTitle(title: string): string {

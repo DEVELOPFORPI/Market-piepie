@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { showToast } from '@/utils/toast';
 import { ModalShell } from '@/components/common/ModalShell';
+import { TEXT_LIMIT } from '@/constants/textLimits';
+import { useLanguage } from '@/hooks/useLanguage';
+import { reportReasonLabel, reportT } from '@/i18n/reportMessages';
 
-export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment';
+export type ReportTargetType = 'product' | 'post' | 'review' | 'user' | 'comment' | 'chat';
 
 interface Props {
   open: boolean;
@@ -15,8 +18,15 @@ interface Props {
 }
 
 const TEAL = '#00A8A3';
-const PENDING_REPORT_TOAST = '이미 신고한 항목입니다. 처리 중입니다.';
-const REPORT_SUBMIT_FAILED_TOAST = '신고를 보내지 못했습니다.';
+
+const TYPE_KEY = {
+  product: 'typeProduct',
+  post: 'typePost',
+  review: 'typeReview',
+  user: 'typeUser',
+  comment: 'typeComment',
+  chat: 'typeChat',
+} as const;
 
 const REASONS: Record<ReportTargetType, string[]> = {
   product: [
@@ -57,14 +67,13 @@ const REASONS: Record<ReportTargetType, string[]> = {
     'Off-topic',
     'Other',
   ],
-};
-
-const TYPE_LABEL: Record<ReportTargetType, string> = {
-  product: 'product',
-  post: 'post',
-  review: 'review',
-  user: 'user',
-  comment: 'comment',
+  chat: [
+    'Scam / fraud',
+    'Harassment',
+    'Inappropriate behavior',
+    'Spam',
+    'Other',
+  ],
 };
 
 interface MyReport {
@@ -74,6 +83,7 @@ interface MyReport {
 }
 
 export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, targetId, targetLabel }) => {
+  const { lang } = useLanguage();
   const [reason, setReason] = useState<string>('');
   const [description, setDescription] = useState('');
   const [sending, setSending] = useState(false);
@@ -94,7 +104,7 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
   };
 
   const notifyPendingReport = () => {
-    showToast(PENDING_REPORT_TOAST);
+    showToast(reportT(lang, 'pendingToast'));
     close();
   };
 
@@ -150,7 +160,7 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
         notifyPendingReport();
         return;
       }
-      showToast(res.error || REPORT_SUBMIT_FAILED_TOAST);
+      showToast(res.error || reportT(lang, 'submitFailed'));
       return;
     }
     setDone(true);
@@ -173,31 +183,33 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Report submitted</h2>
-              <p className="text-sm text-gray-500">Thanks. Our team will review it shortly.</p>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">{reportT(lang, 'submittedTitle')}</h2>
+              <p className="text-sm text-gray-500">{reportT(lang, 'submittedBody')}</p>
             </div>
             <button onClick={close}
               className="w-full mt-4 py-2.5 text-sm text-white font-medium rounded-lg"
               style={{ backgroundColor: TEAL }}>
-              Close
+              {reportT(lang, 'close')}
             </button>
           </>
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Report this {TYPE_LABEL[targetType]}</h2>
-              <button onClick={close} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+              <h2 className="text-lg font-bold text-gray-900">
+                {reportT(lang, 'reportThis', { type: reportT(lang, TYPE_KEY[targetType]) })}
+              </h2>
+              <button onClick={close} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label={reportT(lang, 'close')}>×</button>
             </div>
 
             {targetLabel && (
               <div className="mb-3 px-3 py-2 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-400">Target</p>
+                <p className="text-xs text-gray-400">{reportT(lang, 'target')}</p>
                 <p className="text-sm text-gray-800 truncate">{targetLabel}</p>
               </div>
             )}
 
             <div className="mb-3">
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Reason</label>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">{reportT(lang, 'reason')}</label>
               <div className="flex flex-col gap-2">
                 {reasons.map((r) => (
                   <label key={r} className="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-gray-50"
@@ -210,21 +222,23 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
                       onChange={() => setReason(r)}
                       className="accent-[#00A8A3]"
                     />
-                    <span className="text-sm text-gray-800">{r}</span>
+                    <span className="text-sm text-gray-800">{reportReasonLabel(lang, r)}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Details <span className="text-gray-400 font-normal">(optional)</span>
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-1">
+                <span>{reportT(lang, 'details')} <span className="text-gray-400 font-normal">{reportT(lang, 'optional')}</span></span>
+                <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.reportDetails}</span>
               </label>
               <textarea
                 value={description}
+                maxLength={TEXT_LIMIT.reportDetails}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                placeholder="Add any context that helps us review faster"
+                placeholder={reportT(lang, 'detailsPh')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#00A8A3]/30"
               />
             </div>
@@ -232,12 +246,12 @@ export const ReportModal: React.FC<Props> = ({ open, onClose, targetType, target
             <div className="flex gap-2">
               <button onClick={close}
                 className="flex-1 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                Cancel
+                {reportT(lang, 'cancel')}
               </button>
               <button onClick={handleSubmit} disabled={!reason || sending}
                 className="flex-1 py-2.5 text-sm text-white font-medium rounded-lg disabled:opacity-50"
                 style={{ backgroundColor: '#dc2626' }}>
-                {sending ? 'Submitting...' : 'Submit report'}
+                {sending ? reportT(lang, 'submitting') : reportT(lang, 'submit')}
               </button>
             </div>
           </>

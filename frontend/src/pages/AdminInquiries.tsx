@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface Inquiry {
   id: string;
@@ -114,6 +115,7 @@ export const AdminInquiries: React.FC = () => {
       ].some((value) => value?.toLowerCase().includes(keyword));
     });
   }, [inquiries, statusFilter, categoryFilter, search]);
+  const paged = useAdminPage(filtered, `${search}|${statusFilter}|${categoryFilter}`);
   const pendingCount = inquiries.filter((i) => i.status === 'pending').length;
 
   const openDetail = (inq: Inquiry) => {
@@ -276,7 +278,7 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
         </div>
       ) : !loading && inquiries.length > 0 ? (
         <div className="space-y-3">
-          {filtered.map((inq) => (
+          {paged.items.map((inq) => (
             <div key={inq.id} onClick={() => openDetail(inq)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
@@ -299,6 +301,14 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_user ON inquiries(user_id);`}
           {filtered.length === 0 && (
             <p className="text-center py-12 text-gray-400 text-sm">이 조건에 해당하는 문의가 없습니다</p>
           )}
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </div>
       ) : null}
 

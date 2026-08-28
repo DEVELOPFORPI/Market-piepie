@@ -31,6 +31,19 @@ function isWithinGraceWindow(isoOrMs: string | number | undefined): boolean {
   return Date.now() - t < LOCAL_ONLY_GRACE_MS;
 }
 
+/** MySQL DATETIME has no zone. Server clock is UTC — tag it so the device can show local time. */
+function serverDateToIso(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return new Date().toISOString();
+  if (/[zZ]$/.test(raw) || /[+-]\d{2}:?\d{2}$/.test(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  }
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(`${normalized}Z`);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
 /** `chat_1783473530324` 같은 id에서 생성 시각 추출 */
 function timestampFromGeneratedId(id: string): number | undefined {
   const m = id.match(/_(\d{12,})$/);
@@ -427,6 +440,10 @@ export function mapPostFromDB(row: Record<string, unknown>, favoriteIds?: Set<st
     latitude: row.latitude as number | undefined,
     longitude: row.longitude as number | undefined,
     orderId: row.order_id as string | undefined,
+    adminHidden: Boolean(row.admin_hidden),
+    adminHiddenReason: row.admin_hidden_reason
+      ? String(row.admin_hidden_reason)
+      : undefined,
     attachedProduct,
     author: applyProfileCacheToUser({
       id: String(author.id || ''),
@@ -516,11 +533,19 @@ export async function syncOrderStatusToDB(
     const res = await api.put(`/api/orders/${orderId}`, { status, ...extra });
     if (!res.ok) return false;
     if (timelineEvent) {
-      await api.post(`/api/orders/${orderId}/timeline`, {
-        id: timelineEvent.id,
-        event_type: timelineEvent.type,
-        description: timelineEvent.description,
-      });
+      let timelineOk = false;
+      for (let i = 0; i < 3; i++) {
+        const tl = await api.post(`/api/orders/${orderId}/timeline`, {
+          id: timelineEvent.id,
+          event_type: timelineEvent.type,
+          description: timelineEvent.description,
+        });
+        if (tl.ok) {
+          timelineOk = true;
+          break;
+        }
+      }
+      if (!timelineOk) return false;
     }
     return true;
   } catch {
@@ -656,7 +681,7 @@ function parseTimelineFromDB(raw: unknown): Order['timeline'] {
       return {
         id: String(ev.id || ''),
         type: String(ev.type || ''),
-        timestamp: String(ev.timestamp || ev.created_at || new Date().toISOString()),
+        timestamp: serverDateToIso(ev.timestamp || ev.created_at),
         description: String(ev.description || ''),
       };
     });
@@ -706,7 +731,7 @@ function mapOrderFromDB(row: Record<string, unknown>): Order {
             requestNote: row.memo ? String(row.memo) : undefined,
           }
         : undefined,
-    createdAt: String(row.created_at || new Date().toISOString()),
+    createdAt: serverDateToIso(row.created_at),
     timeline,
     buyer: applyProfileCacheToUser({
       id: String(buyer.id || row.buyer_id || ''),
@@ -781,12 +806,15 @@ export async function syncChatRoomMetaToDB(
     read_state?: Record<string, { read?: boolean; lastReadAt?: string }>;
   },
 ): Promise<boolean> {
-  try {
-    const res = await api.patch(`/api/chat-rooms/${roomId}`, patch);
-    return res.ok;
-  } catch {
-    return false;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await api.patch(`/api/chat-rooms/${roomId}`, patch);
+      if (res.ok) return true;
+    } catch {
+      /* retry */
+    }
   }
+  return false;
 }
 
 function parseReadStateFromDB(raw: unknown): { readStatus: Record<string, boolean>; lastReadAt: Record<string, string> } {
@@ -845,8 +873,15 @@ export async function syncRoomReadStateFromDB(roomId: string): Promise<boolean> 
   }
 }
 
-/** 메시지를 DB에 저장 — 성공 여부 반환 (DB-first) */
-export async function syncMessageToDB(roomId: string, message: ChatMessage): Promise<boolean> {
+/**
+ * 메시지를 DB에 저장 — 성공 여부 반환 (DB-first).
+ * 서버가 모르는 방이면 404가 오는데, 호출측이 방을 다시 올려 되살릴 수 있게
+ * 그 경우를 따로 알려준다.
+ */
+export async function syncMessageToDB(
+  roomId: string,
+  message: ChatMessage,
+): Promise<{ ok: boolean; roomMissing: boolean }> {
   try {
     if (message.senderId && message.senderId !== 'system') {
       const myUser = getMyUser();
@@ -868,9 +903,9 @@ export async function syncMessageToDB(roomId: string, message: ChatMessage): Pro
       meetup_date: message.meetupDate,
       meetup_time: message.meetupTime,
     });
-    return res.ok;
+    return { ok: res.ok, roomMissing: res.status === 404 };
   } catch {
-    return false;
+    return { ok: false, roomMissing: false };
   }
 }
 
@@ -915,6 +950,9 @@ function mergeRoomDbPreferred(dbRoom: ChatRoom, local?: ChatRoom): ChatRoom {
       ...(local.leftUserIds || []),
     ])),
     order: dbRoom.order ?? local.order,
+    // Deleted listings drop out of the DB join; keep the last known copy so the
+    // chat can still say which listing it was.
+    product: dbRoom.product ?? local.product,
     otherUser: freshOther?.nickname
       ? applyProfileCacheToUser(freshOther)
       : applyProfileCacheToUser(local.otherUser ?? dbRoom.otherUser),
@@ -980,13 +1018,22 @@ export async function syncChatRoomsFromDB(userId: string): Promise<void> {
         mergedMap.set(id, merged);
       });
       // 생성 직후라 DB에 아직 없는 방만 잠시 유지 — DB에서 삭제된 방은 로컬에서도 제거
+      const pendingIds: string[] = [];
       existing.forEach((room) => {
         if (mergedMap.has(room.id)) return;
         const createdTs = timestampFromGeneratedId(room.id);
         if (isWithinGraceWindow(createdTs) || isWithinGraceWindow(room.lastMessageTime)) {
           mergedMap.set(room.id, room);
+          pendingIds.push(room.id);
         }
       });
+      // 유예로 남긴 방 중 서버가 이미 아는 방은 숨김·삭제된 것이므로 로컬에서도 뺀다.
+      if (pendingIds.length > 0) {
+        const known = await api.post<{ ids?: string[] }>('/api/chat-rooms/known', { ids: pendingIds });
+        if (known.ok && Array.isArray(known.data?.ids)) {
+          known.data.ids.forEach((id) => mergedMap.delete(String(id)));
+        }
+      }
       setItem('all_chatrooms', JSON.stringify(Array.from(mergedMap.values())));
       window.dispatchEvent(new Event('chatRoomsChanged'));
       window.dispatchEvent(new Event('userProfilesChanged'));
@@ -1172,6 +1219,8 @@ function mapChatRoomFromDB(row: Record<string, unknown>): ChatRoom {
 
     leftUserIds,
     adminHidden: !!row.admin_hidden,
+    productAdminHidden: !!row.product_admin_hidden,
+    productDeleted: !!row.product_deleted,
 
     product,
 
@@ -1211,6 +1260,18 @@ export async function syncCommentToDB(
     return { ok: res.ok, count: res.ok ? res.data?.count : undefined };
   } catch {
     return { ok: false };
+  }
+}
+
+export async function syncCommentUpdateToDB(
+  commentId: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const res = await api.patch(`/api/comments/${commentId}`, { content });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -1254,6 +1315,8 @@ export async function syncCommentsFromDB(postId: string): Promise<void> {
         content: String(row.content || ''),
         parentId: (row.parent_id as string | undefined) || undefined,
         createdAt: String(row.created_at || new Date().toISOString()),
+        adminHidden: Boolean(row.admin_hidden),
+        adminRemoved: Boolean(row.admin_removed),
       }));
       const raw = getItem('community_comments');
       const all: Record<string, unknown[]> = raw ? JSON.parse(raw) : {};

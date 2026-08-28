@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface Dispute {
   id: string;
@@ -109,6 +110,7 @@ export const AdminDisputes: React.FC = () => {
       ].some((value) => value?.toLowerCase().includes(keyword));
     });
   }, [disputes, filter, reasonFilter, search]);
+  const paged = useAdminPage(filtered, `${search}|${filter}|${reasonFilter}`);
 
   const openDetail = (d: Dispute) => {
     setSelected(d);
@@ -190,7 +192,7 @@ export const AdminDisputes: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((d) => (
+          {paged.items.map((d) => (
             <div key={d.id} onClick={() => openDetail(d)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
@@ -213,6 +215,14 @@ export const AdminDisputes: React.FC = () => {
           {filtered.length === 0 && (
             <p className="text-center py-12 text-gray-400 text-sm">분쟁 내역이 없습니다</p>
           )}
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </div>
       )}
 

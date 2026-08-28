@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface PaymentRow {
   id: string;
@@ -146,6 +147,7 @@ export const AdminPayments: React.FC = () => {
       );
     });
   }, [rows, search, statusFilter, typeFilter, periodFilter]);
+  const paged = useAdminPage(filtered, `${search}|${statusFilter}|${typeFilter}|${periodFilter}`);
 
   const handleRepair = async (row: PaymentRow) => {
     if (
@@ -291,7 +293,7 @@ export const AdminPayments: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {paged.items.map((row) => (
                   <tr
                     key={row.id}
                     onClick={() => setSelected(row)}
@@ -379,6 +381,14 @@ export const AdminPayments: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </>
       )}
 

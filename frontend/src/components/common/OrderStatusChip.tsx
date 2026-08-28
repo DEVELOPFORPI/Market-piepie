@@ -22,6 +22,7 @@ export const OrderStatusChip: React.FC<OrderStatusChipProps> = ({ status }) => {
     [ORDER_STATUS_VALUE.COMPLETE]: 'success',
     [ORDER_STATUS_VALUE.DISPUTE]: 'danger',
     [ORDER_STATUS_VALUE.ADMIN_RESOLVED]: 'default',
+    [ORDER_STATUS_VALUE.TRADE_FAILED]: 'default',
   };
 
   return (

@@ -1,4 +1,4 @@
-import { ChatRoom, ChatMessage, Product, Order, ORDER_STATUS_VALUE, PRODUCT_STATUS_VALUE } from '@/types';
+import { ChatRoom, ChatMessage, Product, Order, ORDER_STATUS_VALUE } from '@/types';
 import { syncChatRoomToDB, syncMessageToDB, syncChatRoomMetaToDB } from '@/utils/dbSync';
 import { sendMessageViaSocket, notifyNewRoom } from '@/utils/chatSocket';
 import {
@@ -22,8 +22,17 @@ import { getCurrentUserId } from '@/utils/authStorage';
 import { getMyUser } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { getOrderById, getOrders, cancelOrderMeetup, isOrderTradeInProgress } from '@/utils/orderStorage';
-import { getProductById, updateProductStatus } from '@/utils/productStorage';
+import {
+  getOrderById,
+  getOrders,
+  ensureOrderById,
+  mergeRemoteOrder,
+  isOrderTradeInProgress,
+  isOrderMeetupReserved,
+  shouldFailOrderOnChatLeave,
+  updateOrderStatus,
+} from '@/utils/orderStorage';
+import { getDisputesByOrderId } from '@/utils/disputeStorage';
 import { getItem, setItem } from '@/utils/heavyStorage';
 
 /** Shared storage: all chat rooms */
@@ -56,6 +65,20 @@ const trackRoomSync = (room: ChatRoom): Promise<boolean> => {
   const p = syncChatRoomToDB(room).finally(() => pendingRoomSyncs.delete(room.id));
   pendingRoomSyncs.set(room.id, p);
   return p;
+};
+
+/**
+ * 방 저장이 한 번 실패하면(오프라인·요청 제한 등) 로컬에만 방이 남아, 이후 모든
+ * 메시지가 404로 거절돼 대화가 영구히 먹통이 된다. 그런 경우 방을 다시 올린 뒤
+ * 한 번 재시도해 스스로 복구시킨다.
+ */
+const pushMessage = async (room: ChatRoom, message: ChatMessage): Promise<boolean> => {
+  const sent = await syncMessageToDB(room.id, message);
+  if (sent.ok) return true;
+  if (!sent.roomMissing) return false;
+  if (!(await syncChatRoomToDB(room))) return false;
+  notifyNewRoom(room);
+  return (await syncMessageToDB(room.id, message)).ok;
 };
 
 /** WebSocket에서 받은 메시지를 로컬에 추가 (중복 방지) */
@@ -204,10 +227,55 @@ export const getChatRoomByProduct = (productId: string): ChatRoom | null => {
 /** Resolve live order row for a room (prefer storage over stale room.order snapshot) */
 const getRoomLinkedOrder = (room: ChatRoom): Order | undefined => {
   if (room.order?.id) {
-    return getOrderById(room.order.id) || room.order;
+    const stored = getOrderById(room.order.id);
+    if (stored) return stored;
+  }
+  if (room.product?.id && room.buyerId && room.sellerId) {
+    const pair = getOrders().filter(
+      (o) =>
+        o.product?.id === room.product?.id
+        && o.buyer?.id === room.buyerId
+        && o.seller?.id === room.sellerId,
+    );
+    const disputed = pair.find((o) =>
+      getDisputesByOrderId(o.id).some((d) => d.status !== 'RESOLVED'),
+    );
+    if (disputed) return disputed;
+    const reserved = pair.find(isOrderMeetupReserved);
+    if (reserved) return reserved;
+    const active = pair.filter(
+      (o) =>
+        o.status !== ORDER_STATUS_VALUE.COMPLETE
+        && o.status !== ORDER_STATUS_VALUE.TRADE_FAILED
+        && o.status !== ORDER_STATUS_VALUE.OFFER_DECLINED
+        && o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED,
+    );
+    if (active.length) {
+      return [...active].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+    }
   }
   return room.order;
 };
+
+export type ChatLeaveBlock = 'reserved' | 'dispute';
+
+export function getChatLeaveBlock(
+  room: ChatRoom | null | undefined,
+  orderOverride?: Order | null,
+): ChatLeaveBlock | null {
+  const order = orderOverride || (room ? getRoomLinkedOrder(room) : undefined);
+  if (!order) return null;
+  if (
+    order.status === ORDER_STATUS_VALUE.DISPUTE
+    || getDisputesByOrderId(order.id).some((d) => d.status !== 'RESOLVED')
+  ) {
+    return 'dispute';
+  }
+  if (isOrderMeetupReserved(order)) return 'reserved';
+  return null;
+}
 
 /** Room whose linked trade is finished (complete / dispute / mutual complete flags) */
 const isCompletedChatRoom = (room: ChatRoom): boolean => {
@@ -249,6 +317,9 @@ const findOrderForChat = (productId: string, buyerId: string, sellerId: string):
       o.seller.id === sellerId &&
       o.status !== ORDER_STATUS_VALUE.COMPLETE &&
       o.status !== ORDER_STATUS_VALUE.DISPUTE &&
+      o.status !== ORDER_STATUS_VALUE.TRADE_FAILED &&
+      o.status !== ORDER_STATUS_VALUE.OFFER_DECLINED &&
+      o.status !== ORDER_STATUS_VALUE.ADMIN_RESOLVED &&
       !(o.buyerCompleted && o.sellerCompleted)
   );
   if (active.length === 0) return undefined;
@@ -271,7 +342,7 @@ export const createOrGetChatRoom = async (product: Product): Promise<ChatRoom> =
         if (idx >= 0) {
           rooms[idx] = room;
           saveAllChatRooms(rooms, room.id);
-          persistRoomOrderLink(room.id, order);
+          await persistRoomOrderLink(room.id, order);
         }
       }
     }
@@ -330,13 +401,12 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
     return false;
   }
 
+  // 방 저장이 끝나야 메시지가 FK 검사를 통과한다. 저장이 실패했더라도 여기서
+  // 포기하지 않는다 — pushMessage 가 방을 다시 올리고 재시도한다.
   const pendingRoom = pendingRoomSyncs.get(roomId);
-  if (pendingRoom) {
-    const roomOk = await pendingRoom;
-    if (!roomOk) return false;
-  }
+  if (pendingRoom) await pendingRoom;
 
-  const dbOk = await syncMessageToDB(roomId, message);
+  const dbOk = await pushMessage(room, message);
   if (!dbOk) return false;
 
   if (!room.messages) room.messages = [];
@@ -364,7 +434,7 @@ export const addMessage = async (roomId: string, message: ChatMessage): Promise<
     if (otherId) readPatch[otherId] = { read: false };
   });
   if (Object.keys(readPatch).length) {
-    void syncChatRoomMetaToDB(roomId, { read_state: readPatch });
+    await syncChatRoomMetaToDB(roomId, { read_state: readPatch });
   }
   sendMessageViaSocket(roomId, message, { buyerId: room.buyerId || '', sellerId: room.sellerId || '' });
   return saveResult;
@@ -536,10 +606,9 @@ export const ensureChatRoomForOrder = async (order: Order, createdByUserId?: str
   return room;
 };
 
-const persistRoomOrderLink = (roomId: string, order?: Order) => {
-  if (order?.id) {
-    void syncChatRoomMetaToDB(roomId, { order_id: order.id });
-  }
+const persistRoomOrderLink = async (roomId: string, order?: Order): Promise<boolean> => {
+  if (!order?.id) return true;
+  return syncChatRoomMetaToDB(roomId, { order_id: order.id });
 };
 
 /** Meetup confirmed: add gradient card; persist room.order so receive flow works */
@@ -551,7 +620,7 @@ export const addMeetupConfirmedToChat = async (order: Order) => {
   if (r) {
     r.order = order;
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, order);
+    await persistRoomOrderLink(room.id, order);
   }
   const msg: ChatMessage = {
     id: `meetup_${Date.now()}`,
@@ -579,7 +648,7 @@ export const addMeetupUpdatedToChat = async (order: Order) => {
   if (!room) return;
   room.order = order;
   saveAllChatRooms(rooms, room.id);
-  persistRoomOrderLink(room.id, order);
+  await persistRoomOrderLink(room.id, order);
   const msg: ChatMessage = {
     id: `meetup_updated_${Date.now()}`,
     senderId: order.seller.id,
@@ -608,7 +677,7 @@ export const addMeetupCancelledToChat = async (order: Order) => {
       status: ORDER_STATUS_VALUE.ACCEPTED,
     };
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, r.order);
+    await persistRoomOrderLink(room.id, r.order);
   }
   const msg: ChatMessage = {
     id: `meetup_cancel_${Date.now()}`,
@@ -648,7 +717,7 @@ export const addSellerMeetupStartedToChat = async (order: Order, roomIdHint?: st
   if (r) {
     r.order = order;
     saveAllChatRooms(roomsAfter, room!.id);
-    persistRoomOrderLink(room!.id, order);
+    await persistRoomOrderLink(room!.id, order);
   }
 };
 
@@ -670,7 +739,7 @@ export const addReceiptConfirmedToChat = async (
   if (r) {
     r.order = order;
     saveAllChatRooms(rooms, room.id);
-    persistRoomOrderLink(room.id, order);
+    await persistRoomOrderLink(room.id, order);
   }
   const condition = opts?.condition ?? order.receiptCondition;
   const notes = (opts?.notes ?? order.receiptNotes)?.trim() || undefined;
@@ -770,8 +839,8 @@ export const clearOrderFromRoom = (orderId: string) => {
   if (updated.some((r, i) => r !== rooms[i])) saveAllChatRooms(updated);
 };
 
-/** Hide room from my list immediately (other party still sees it until they leave). */
-function hideRoomForCurrentUser(roomId: string): { leftUserIds: string[]; alreadyEnded: boolean } | null {
+/** Hide room after the leave list is on the server (other party still sees it until they leave). */
+async function hideRoomForCurrentUser(roomId: string): Promise<{ leftUserIds: string[]; alreadyEnded: boolean } | null> {
   const userId = getCurrentUserId();
   if (!userId) return null;
   const rooms = getAllChatRooms();
@@ -783,20 +852,28 @@ function hideRoomForCurrentUser(roomId: string): { leftUserIds: string[]; alread
     return { leftUserIds: room.leftUserIds || [], alreadyEnded };
   }
   const leftUserIds = Array.from(new Set([...(room.leftUserIds || []), userId]));
-  rooms[idx] = { ...room, leftUserIds };
-  saveAllChatRooms(rooms, roomId);
-  void syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+  const ok = await syncChatRoomMetaToDB(roomId, { left_user_ids: leftUserIds });
+  if (!ok) return null;
+  const nextRooms = getAllChatRooms();
+  const nextIdx = nextRooms.findIndex((r) => r.id === roomId);
+  if (nextIdx < 0) return { leftUserIds, alreadyEnded };
+  nextRooms[nextIdx] = { ...nextRooms[nextIdx], leftUserIds };
+  saveAllChatRooms(nextRooms, roomId);
   window.dispatchEvent(new Event('chatRoomsChanged'));
   return { leftUserIds, alreadyEnded };
 }
 
-/** Leave room: hide from my list first, then notify / unlock if I am the first to leave */
+/** Leave room: persist trade fail + leave list on the server, then hide locally */
 export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
   const room = getChatRoom(roomId);
   if (!room) return false;
+  if (getChatLeaveBlock(room)) return false;
 
-  const hidden = hideRoomForCurrentUser(roomId);
+  if (!await failLinkedOrderOnChatLeave(room)) return false;
+
+  const hidden = await hideRoomForCurrentUser(roomId);
   if (!hidden) return false;
+
   // Other party already left — just drop it from my list (no second leave message).
   if (hidden.alreadyEnded) return true;
 
@@ -811,7 +888,7 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
     type: 'system',
   };
   // Room is already marked left, so addMessage would reject it — write the notice directly.
-  const dbOk = await syncMessageToDB(roomId, msg);
+  const dbOk = (await syncMessageToDB(roomId, msg)).ok;
   if (dbOk) {
     const rooms = getAllChatRooms();
     const idx = rooms.findIndex((r) => r.id === roomId);
@@ -828,32 +905,28 @@ export const leaveChatRoom = async (roomId: string): Promise<boolean> => {
     }
   }
 
-  const latest = getChatRoom(roomId) || room;
-  const linked = getRoomLinkedOrder(latest);
-  if (linked?.id) {
-    const hasMeetup =
-      linked.status === ORDER_STATUS_VALUE.MEETUP_SET ||
-      !!(linked.meetupPlace && linked.meetupDate && linked.meetupTime);
-    if (hasMeetup && linked.status !== ORDER_STATUS_VALUE.COMPLETE && linked.status !== ORDER_STATUS_VALUE.DISPUTE) {
-      void cancelOrderMeetup(linked.id);
-    } else {
-      const productId = linked.product?.id || room.product?.id;
-      if (productId) {
-        const product = getProductById(productId);
-        if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
-          void updateProductStatus(productId, PRODUCT_STATUS_VALUE.FOR_SALE);
-        }
-      }
-    }
-  } else if (room.product?.id) {
-    const product = getProductById(room.product.id);
-    if (product?.status === PRODUCT_STATUS_VALUE.RESERVED) {
-      void updateProductStatus(room.product.id, PRODUCT_STATUS_VALUE.FOR_SALE);
-    }
-  }
-
   return true;
 };
+
+async function failLinkedOrderOnChatLeave(room: ChatRoom): Promise<boolean> {
+  const linked = getRoomLinkedOrder(room);
+  if (!linked?.id) return true;
+  if (!shouldFailOrderOnChatLeave(linked)) return true;
+
+  if (!getOrderById(linked.id)) {
+    mergeRemoteOrder(linked);
+  }
+  await ensureOrderById(linked.id);
+  if (!getOrderById(linked.id)) return false;
+
+  const uid = getCurrentUserId();
+  const leftAsBuyer = !!uid && uid === linked.buyer?.id;
+  return updateOrderStatus(
+    linked.id,
+    ORDER_STATUS_VALUE.TRADE_FAILED,
+    leftAsBuyer ? 'Buyer left the chat' : 'Seller left the chat',
+  );
+}
 
 /** Delete room entirely for both parties */
 export const deleteChatRoom = (roomId: string) => {

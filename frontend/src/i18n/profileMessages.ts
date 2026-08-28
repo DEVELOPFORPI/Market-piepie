@@ -36,7 +36,12 @@ export type ProfileMessageKey =
   | 'noSavedMatchFilter'
   | 'listingWasRemoved'
   | 'removeFromList'
-  | 'removeFromSavedAria';
+  | 'removeFromSavedAria'
+  | 'myComments'
+  | 'noMyComments'
+  | 'commentOnPost'
+  | 'commentFilterReplies'
+  | 'noCommentsInFilter';
 
 const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> = {
   en: {
@@ -75,6 +80,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'This listing was removed.',
     removeFromList: 'Remove from list',
     removeFromSavedAria: 'Remove from saved',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   ko: {
     myTitle: 'MY',
@@ -112,6 +122,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: '삭제된 상품입니다.',
     removeFromList: '목록에서 제거',
     removeFromSavedAria: '관심목록에서 제거',
+    myComments: '내가 쓴 댓글',
+    noMyComments: '작성한 댓글이 없습니다.',
+    commentOnPost: '"{title}"에 남긴 댓글',
+    commentFilterReplies: '대댓글',
+    noCommentsInFilter: '이 분류에 댓글이 없습니다.',
   },
   zh: {
     myTitle: '我的',
@@ -149,6 +164,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: '该商品已删除。',
     removeFromList: '从列表移除',
     removeFromSavedAria: '从收藏移除',
+    myComments: '我的评论',
+    noMyComments: '暂无评论。',
+    commentOnPost: '发表于“{title}”',
+    commentFilterReplies: '回复',
+    noCommentsInFilter: '该筛选下没有评论。',
   },
   ja: {
     myTitle: 'MY',
@@ -186,6 +206,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'この出品は削除されました。',
     removeFromList: 'リストから削除',
     removeFromSavedAria: '保存から削除',
+    myComments: '自分のコメント',
+    noMyComments: 'コメントはまだありません。',
+    commentOnPost: '「{title}」へのコメント',
+    commentFilterReplies: '返信',
+    noCommentsInFilter: 'この条件のコメントはありません。',
   },
   es: {
     myTitle: 'YO',
@@ -223,6 +248,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Este anuncio se eliminó.',
     removeFromList: 'Quitar de la lista',
     removeFromSavedAria: 'Quitar de guardados',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   pt: {
     myTitle: 'EU',
@@ -260,6 +290,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Este anúncio foi removido.',
     removeFromList: 'Remover da lista',
     removeFromSavedAria: 'Remover dos salvos',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   fr: {
     myTitle: 'MOI',
@@ -297,6 +332,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Cette annonce a été supprimée.',
     removeFromList: 'Retirer de la liste',
     removeFromSavedAria: 'Retirer des enregistrés',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   de: {
     myTitle: 'ICH',
@@ -334,6 +374,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Diese Anzeige wurde entfernt.',
     removeFromList: 'Aus Liste entfernen',
     removeFromSavedAria: 'Aus Gespeichert entfernen',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   id: {
     myTitle: 'SAYA',
@@ -371,6 +416,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Listing ini telah dihapus.',
     removeFromList: 'Hapus dari daftar',
     removeFromSavedAria: 'Hapus dari tersimpan',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   vi: {
     myTitle: 'TÔI',
@@ -408,6 +458,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Tin này đã bị xóa.',
     removeFromList: 'Xóa khỏi danh sách',
     removeFromSavedAria: 'Xóa khỏi đã lưu',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   th: {
     myTitle: 'ของฉัน',
@@ -445,6 +500,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'รายการนี้ถูกลบแล้ว',
     removeFromList: 'ลบออกจากรายการ',
     removeFromSavedAria: 'ลบออกจากที่บันทึก',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   hi: {
     myTitle: 'मेरा',
@@ -482,6 +542,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'यह लिस्टिंग हटा दी गई।',
     removeFromList: 'सूची से हटाएँ',
     removeFromSavedAria: 'सेव्ड से हटाएँ',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   ar: {
     myTitle: 'حسابي',
@@ -519,6 +584,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'تم حذف هذا الإعلان.',
     removeFromList: 'إزالة من القائمة',
     removeFromSavedAria: 'إزالة من المحفوظات',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   ru: {
     myTitle: 'Я',
@@ -556,6 +626,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Это объявление удалено.',
     removeFromList: 'Убрать из списка',
     removeFromSavedAria: 'Убрать из сохранённых',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   tr: {
     myTitle: 'BEN',
@@ -593,6 +668,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Bu ilan kaldırıldı.',
     removeFromList: 'Listeden kaldır',
     removeFromSavedAria: 'Kaydedilenlerden kaldır',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   it: {
     myTitle: 'IO',
@@ -630,6 +710,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Questo annuncio è stato rimosso.',
     removeFromList: 'Rimuovi dall’elenco',
     removeFromSavedAria: 'Rimuovi dai salvati',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   pl: {
     myTitle: 'JA',
@@ -667,6 +752,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'To ogłoszenie zostało usunięte.',
     removeFromList: 'Usuń z listy',
     removeFromSavedAria: 'Usuń z zapisanych',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   nl: {
     myTitle: 'IK',
@@ -704,6 +794,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Deze advertentie is verwijderd.',
     removeFromList: 'Uit lijst verwijderen',
     removeFromSavedAria: 'Uit opgeslagen verwijderen',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   fil: {
     myTitle: 'AKO',
@@ -741,6 +836,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Natanggal na ang listing na ito.',
     removeFromList: 'Alisin sa listahan',
     removeFromSavedAria: 'Alisin sa naka-save',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   uk: {
     myTitle: 'Я',
@@ -778,6 +878,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Це оголошення видалено.',
     removeFromList: 'Прибрати зі списку',
     removeFromSavedAria: 'Прибрати зі збережених',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   bn: {
     myTitle: 'আমি',
@@ -815,6 +920,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'এই লিস্টিং সরানো হয়েছে।',
     removeFromList: 'তালিকা থেকে সরান',
     removeFromSavedAria: 'সেভড থেকে সরান',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   ms: {
     myTitle: 'SAYA',
@@ -852,6 +962,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Senarai ini telah dialih keluar.',
     removeFromList: 'Buang dari senarai',
     removeFromSavedAria: 'Buang dari disimpan',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   sw: {
     myTitle: 'MIMI',
@@ -889,6 +1004,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'Orodha hii imeondolewa.',
     removeFromList: 'Ondoa kwenye orodha',
     removeFromSavedAria: 'Ondoa kutoka zilizohifadhiwa',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   fa: {
     myTitle: 'من',
@@ -926,6 +1046,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'این آگهی حذف شده است.',
     removeFromList: 'حذف از فهرست',
     removeFromSavedAria: 'حذف از ذخیره‌شده‌ها',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
   ur: {
     myTitle: 'میرا',
@@ -963,6 +1088,11 @@ const PROFILE_MESSAGES: Record<AppLanguage, Record<ProfileMessageKey, string>> =
     listingWasRemoved: 'یہ لسٹنگ ہٹا دی گئی۔',
     removeFromList: 'فہرست سے ہٹائیں',
     removeFromSavedAria: 'محفوظ سے ہٹائیں',
+    myComments: 'My comments',
+    noMyComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
+    commentFilterReplies: 'Replies',
+    noCommentsInFilter: 'No comments in this filter.',
   },
 };
 

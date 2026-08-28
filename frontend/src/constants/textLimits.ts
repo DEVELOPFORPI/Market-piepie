@@ -1,0 +1,16 @@
+export const TEXT_LIMIT = {
+  listingTitle: 40,
+  listingDescription: 2000,
+  postTitle: 40,
+  postBody: 2000,
+  inquiryTitle: 40,
+  inquiryContent: 1000,
+  inquiryEmail: 255,
+  meetupPlace: 50,
+  comment: 300,
+  receiptNotes: 200,
+  reviewComment: 500,
+  reportDetails: 500,
+  chatMessage: 1000,
+  disputeDetails: 1000,
+} as const;

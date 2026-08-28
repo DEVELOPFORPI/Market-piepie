@@ -1,10 +1,10 @@
 import { Post, Comment } from '@/types';
 import { tryFreeSpaceForSave } from '@/utils/storageClear';
 import { getItem, setItem, removeItem } from '@/utils/heavyStorage';
-import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentDeleteToDB, syncPostFromDB } from '@/utils/dbSync';
+import { syncPostToDB, syncPostDeleteToDB, syncCommentToDB, syncCommentUpdateToDB, syncCommentDeleteToDB, syncPostFromDB } from '@/utils/dbSync';
 import { applyPostCommentCount } from '@/utils/postCommentCountStorage';
 import { addNotification } from '@/utils/notificationStorage';
-import { NOTIFY_POST_COMMENT } from '@/locale/enUI';
+import { NOTIFY_POST_COMMENT, NOTIFY_POST_REPLY } from '@/locale/enUI';
 
 const DISPUTE_STORAGE_KEY = 'community_dispute_posts';
 const USER_POSTS_STORAGE_KEY = 'community_user_posts';
@@ -271,16 +271,32 @@ export const addComment = async (postId: string, comment: Comment): Promise<bool
   }
 
   const post = getPostById(postId) || await ensurePostById(postId);
-  const authorId = post?.author?.id;
   const commenterId = comment.author?.id;
-  if (authorId && commenterId && authorId !== commenterId) {
-    void addNotification({
-      targetUserId: authorId,
-      type: 'comment',
-      title: NOTIFY_POST_COMMENT,
-      content: `${comment.author.nickname || 'Someone'} commented on "${post.title}".`,
-      link: `/community/post/${postId}`,
-    });
+  const commenterName = comment.author?.nickname || 'Someone';
+  const postTitle = post?.title || 'Post';
+  if (comment.parentId) {
+    const parent = (all[postId] || []).find((c) => c.id === comment.parentId);
+    const parentAuthorId = parent?.author?.id;
+    if (parentAuthorId && commenterId && parentAuthorId !== commenterId) {
+      void addNotification({
+        targetUserId: parentAuthorId,
+        type: 'reply',
+        title: NOTIFY_POST_REPLY,
+        content: `${commenterName} replied to your comment on "${postTitle}".`,
+        link: `/community/post/${postId}`,
+      });
+    }
+  } else {
+    const authorId = post?.author?.id;
+    if (authorId && commenterId && authorId !== commenterId) {
+      void addNotification({
+        targetUserId: authorId,
+        type: 'comment',
+        title: NOTIFY_POST_COMMENT,
+        content: `${commenterName} commented on "${postTitle}".`,
+        link: `/community/post/${postId}`,
+      });
+    }
   }
 
   window.dispatchEvent(new Event('commentsChanged'));
@@ -303,15 +319,37 @@ const collectCommentIdsToDelete = (comments: Comment[], targetId: string): Set<s
   return set;
 };
 
+export const updateComment = async (
+  postId: string,
+  commentId: string,
+  content: string,
+): Promise<boolean> => {
+  const text = content.trim();
+  if (!text) return false;
+  const ok = await syncCommentUpdateToDB(commentId, text);
+  if (!ok) return false;
+  const all = getAllComments();
+  if (all[postId]) {
+    all[postId] = all[postId].map((c) => (c.id === commentId ? { ...c, content: text } : c));
+    setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
+    window.dispatchEvent(new Event('commentsChanged'));
+  }
+  return true;
+};
+
 export const deleteComment = async (postId: string, commentId: string): Promise<boolean> => {
   const all = getAllComments();
-  if (!all[postId]) return false;
-  const toDelete = collectCommentIdsToDelete(all[postId], commentId);
+  const local = all[postId] ?? [];
+  const toDelete = local.length
+    ? collectCommentIdsToDelete(local, commentId)
+    : new Set([commentId]);
   const results = await Promise.all([...toDelete].map((id) => syncCommentDeleteToDB(id)));
   if (results.some((r) => !r.ok)) return false;
 
-  all[postId] = all[postId].filter((c) => !toDelete.has(c.id));
-  setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
+  if (all[postId]) {
+    all[postId] = all[postId].filter((c) => !toDelete.has(c.id));
+    setItem(COMMENTS_STORAGE_KEY, JSON.stringify(all));
+  }
 
   const lastCount = [...results].reverse().find((r) => r.count != null)?.count;
   if (lastCount != null) {

@@ -5,7 +5,7 @@
  *   (marketpiepie.vercel.app / marketpiepietest.vercel.app).
  */
 
-import { getSessionToken } from '@/utils/authStorage';
+import { getSessionToken, handleExpiredSession } from '@/utils/authStorage';
 import { setAdminVerified } from '@/utils/adminAccessStorage';
 import { API_BASE } from '@/utils/apiConfig';
 
@@ -30,7 +30,11 @@ async function request<T>(
   options: RequestInit = {},
   baseUrl = API_BASE,
 ): Promise<ApiResponse<T>> {
-  if (Date.now() < rateLimitedUntil) {
+  // The cooldown exists to stop background polling from piling onto a limited
+  // server. Writes are things the user just tapped, so they must still be sent
+  // — otherwise one throttled poll blocks sending offers and chat messages.
+  const isRead = (options.method ?? 'GET').toUpperCase() === 'GET';
+  if (isRead && Date.now() < rateLimitedUntil) {
     return { ok: false, error: 'Rate limited (cooldown)', status: 429 };
   }
 
@@ -62,6 +66,21 @@ async function request<T>(
     }
 
     const data = await res.json().catch(() => null);
+
+    // Saved token no longer valid on the server: drop it instead of failing silently.
+    if (
+      res.status === 401
+      && data?.error === 'Invalid or expired session'
+      && !path.startsWith('/api/admin/')
+    ) {
+      handleExpiredSession();
+    }
+
+    if (data?.error === 'Account suspended') {
+      void import('@/utils/guestGate').then(({ applySuspendedAccess }) => {
+        void applySuspendedAccess(undefined, { prompt: false });
+      });
+    }
 
     return {
       ok: res.ok,

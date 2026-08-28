@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface ChatRoomRow {
   id: string;
@@ -50,6 +52,8 @@ const isHidden = (v: boolean | number | string | null | undefined): boolean =>
   v === true || v === 1 || v === '1';
 
 export const AdminChats: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const openedFromQuery = useRef(false);
   const [rooms, setRooms] = useState<ChatRoomRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -88,6 +92,15 @@ export const AdminChats: React.FC = () => {
     }
     setMessages(res.data || []);
   };
+
+  useEffect(() => {
+    const roomId = searchParams.get('room');
+    if (!roomId || openedFromQuery.current || loading || rooms.length === 0) return;
+    const match = rooms.find((r) => r.id === roomId);
+    if (!match) return;
+    openedFromQuery.current = true;
+    void openRoom(match);
+  }, [searchParams, loading, rooms]);
 
   const toggleMessageHidden = async (msg: AdminChatMessage) => {
     const hide = !msg.deleted_at;
@@ -147,6 +160,7 @@ export const AdminChats: React.FC = () => {
     load();
   };
 
+  const paged = useAdminPage(rooms, `${search}|${filter}|${rooms.length}`);
   const disputeRooms = useMemo(
     () => rooms.filter((r) => num(r.dispute_count) > 0).length,
     [rooms],
@@ -199,7 +213,7 @@ export const AdminChats: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {rooms.map((r) => (
+          {paged.items.map((r) => (
             <div key={r.id} onClick={() => openRoom(r)}
               className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-3">
@@ -253,6 +267,14 @@ export const AdminChats: React.FC = () => {
               </div>
             </div>
           ))}
+          <AdminPagination
+            page={paged.page}
+            totalPages={paged.totalPages}
+            total={paged.total}
+            from={paged.from}
+            to={paged.to}
+            onPageChange={paged.setPage}
+          />
         </div>
       )}
 

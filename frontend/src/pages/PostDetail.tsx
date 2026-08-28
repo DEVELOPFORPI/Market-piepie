@@ -27,6 +27,8 @@ import { useConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useLanguage, type AppMessageKey } from '@/hooks/useLanguage';
 import { useLocalizedRegion } from '@/hooks/useLocalizedRegion';
 import { labelDisputeStoredValue, localizeDisputePostTitle } from '@/utils/disputeLabels';
+import { TEXT_LIMIT } from '@/constants/textLimits';
+import { ExpandableText } from '@/components/common/ExpandableText';
 
 const CAT_KEY: Record<string, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -83,13 +85,19 @@ const CommentTree: React.FC<{
   timeAgo: (createdAt: string) => string;
   replyLabel: string;
   commentOptionsAria: string;
-}> = ({ items, depth = 0, parentAuthorNickname, onReply, onOpenMenu, onAuthorClick, timeAgo, replyLabel, commentOptionsAria }) => (
+  currentUserId?: string;
+  adminHiddenLabel: string;
+  adminHiddenMineLabel: string;
+  adminRemovedLabel: string;
+}> = ({ items, depth = 0, parentAuthorNickname, onReply, onOpenMenu, onAuthorClick, timeAgo, replyLabel, commentOptionsAria, currentUserId, adminHiddenLabel, adminHiddenMineLabel, adminRemovedLabel }) => (
   <>
     {items.map((c) => {
       const displayName = resolveDisplayNickname(c.author.id, c.author.nickname);
       const isReply = depth > 0;
       const indentDeltaRem = depth === 1 ? REPLY_INDENT_REM : 0;
       const showReplyTarget = isReply && depth > MAX_REPLY_INDENT_DEPTH && !!parentAuthorNickname;
+      const isMineComment = !!currentUserId && c.author.id === currentUserId;
+      const hideAsPlaceholder = !!c.adminRemoved || (!!c.adminHidden && !isMineComment);
 
       return (
       <div
@@ -97,6 +105,11 @@ const CommentTree: React.FC<{
         className={isReply ? 'mt-3 min-w-0' : 'py-3 border-b border-gray-50 last:border-b-0 min-w-0'}
         style={isReply && indentDeltaRem > 0 ? { marginLeft: `${indentDeltaRem}rem` } : undefined}
       >
+        {hideAsPlaceholder ? (
+          <p className="text-sm italic text-gray-400">
+            {c.adminRemoved ? adminRemovedLabel : adminHiddenLabel}
+          </p>
+        ) : (
         <div className="flex gap-3 min-w-0">
           <button
             type="button"
@@ -142,18 +155,27 @@ const CommentTree: React.FC<{
                 </svg>
               </button>
             </div>
-            <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap break-words">
-              {maskSensitiveContent(c.content)}
-            </p>
-            <button
-              type="button"
-              onClick={() => onReply(c.id, c.author.nickname)}
-              className="text-xs text-gray-500 hover:text-[#00A8A3] mt-2"
-            >
-              {replyLabel}
-            </button>
+            {c.adminHidden && (
+              <p className="mt-2 text-xs text-amber-700">{adminHiddenMineLabel}</p>
+            )}
+            <div className="mt-2">
+              <ExpandableText
+                text={maskSensitiveContent(c.content)}
+                className="text-sm text-gray-700 break-words"
+              />
+            </div>
+            {!c.adminHidden && (
+              <button
+                type="button"
+                onClick={() => onReply(c.id, c.author.nickname)}
+                className="text-xs text-gray-500 hover:text-[#00A8A3] mt-2"
+              >
+                {replyLabel}
+              </button>
+            )}
           </div>
         </div>
+        )}
         {c.replies && c.replies.length > 0 && (
           <CommentTree
             items={c.replies}
@@ -165,6 +187,10 @@ const CommentTree: React.FC<{
             timeAgo={timeAgo}
             replyLabel={replyLabel}
             commentOptionsAria={commentOptionsAria}
+            currentUserId={currentUserId}
+            adminHiddenLabel={adminHiddenLabel}
+            adminHiddenMineLabel={adminHiddenMineLabel}
+            adminRemovedLabel={adminRemovedLabel}
           />
         )}
       </div>
@@ -198,6 +224,7 @@ export const PostDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [linkedDisputeStatus, setLinkedDisputeStatus] = useState<string | undefined>(undefined);
   const [publicDispute, setPublicDispute] = useState<Dispute | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const isMine = post?.author.id === getCurrentUserId();
   const currentUserId = getCurrentUserId();
@@ -303,6 +330,10 @@ export const PostDetail: React.FC = () => {
     linkedDisputeStatus !== 'RESOLVED' &&
     linkedDispute?.sellerId === getCurrentUserId();
   const canEditOrDeletePost = isMine && !isSellerBlockedFromEdit && !isAutoCreatedDisputePost;
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [id]);
 
   useEffect(() => {
     if (id && !isDisputePost) {
@@ -519,15 +550,17 @@ export const PostDetail: React.FC = () => {
               <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
                 {canEditOrDeletePost && (
                   <>
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        navigate(`/community/edit/${post.id}`);
-                      }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
-                    >
-                      {t('edit')}
-                    </button>
+                    {!post.adminHidden && (
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          navigate(`/community/edit/${post.id}`);
+                        }}
+                        className="w-full px-4 py-2.5 text-sm text-left text-gray-700 hover:bg-gray-50"
+                      >
+                        {t('edit')}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setShowMenu(false);
@@ -558,6 +591,16 @@ export const PostDetail: React.FC = () => {
       />
 
       <div className="px-4 py-6 space-y-6">
+        {post.adminHidden && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <p className="text-sm font-medium text-amber-800">{t('postAdminHidden')}</p>
+            {post.adminHiddenReason && (
+              <p className="mt-0.5 text-xs text-amber-700">
+                {t('postAdminHiddenReason', { reason: post.adminHiddenReason })}
+              </p>
+            )}
+          </div>
+        )}
         {isDisputePost ? (
           <h1 className="text-xl font-bold text-gray-900">
             {localizeDisputePostTitle(lang, post.title, t('catDispute'))}
@@ -663,53 +706,62 @@ export const PostDetail: React.FC = () => {
             {disputeBodySummary?.details && (
               <div className="text-sm text-gray-700">
                 <p className="font-medium text-gray-900 mb-1">{t('disputeDetails')}</p>
-                <p className="whitespace-pre-line text-gray-600">{maskSensitiveContent(disputeBodySummary.details)}</p>
+                <ExpandableText
+                  text={maskSensitiveContent(disputeBodySummary.details)}
+                  className="text-sm text-gray-600"
+                />
               </div>
             )}
           </div>
         ) : (
           <div className="max-w-none">
-            <p className={`whitespace-pre-line leading-relaxed ${isGeneralPost ? 'text-base text-gray-600' : 'text-sm text-gray-700'}`}>
-              {maskSensitiveContent(post.content)}
-            </p>
-          </div>
-        )}
-
-        {isAutoCreatedDisputePost && (
-          <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
-            {linkedDisputeStatus === 'RESOLVED' ? (
-              <p className={`text-sm font-medium ${isDisputeParty ? 'mb-2' : ''} text-green-800`}>
-                {t('disputePostResolved')}
-              </p>
+            {isDisputePost ? (
+              <ExpandableText
+                text={maskSensitiveContent(post.content)}
+                className="text-sm text-gray-700"
+              />
             ) : (
-              <p className={`text-sm text-gray-700 ${isDisputeParty ? 'mb-2' : ''}`}>
-                {t('disputeShareView')}
+              <p className="whitespace-pre-line leading-relaxed text-base text-gray-600">
+                {maskSensitiveContent(post.content)}
               </p>
-            )}
-            {isDisputeParty && disputePath && (
-              <button
-                type="button"
-                onClick={() => navigate(disputePath)}
-                className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${
-                  linkedDisputeStatus === 'RESOLVED'
-                    ? 'border border-green-300 text-green-700 hover:bg-green-50'
-                    : 'border border-red-300 text-red-700 hover:bg-red-50'
-                }`}
-              >
-                {t('disputeView')}
-              </button>
             )}
           </div>
         )}
 
-        {/* Images */}
-        {post.images && post.images.length > 0 && (
-          <div className="space-y-2">
-            {post.images.map((img, idx) => (
-              <div key={idx} className="w-full rounded-lg overflow-hidden bg-gray-200">
-                <img src={getDisplayImageUrl(img)} alt={`Post image ${idx + 1}`} className="w-full h-auto object-cover" />
+        {!isAutoCreatedDisputePost && post.images && post.images.length > 0 && (
+          <div>
+            <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
+              <div
+                className="flex h-full w-full touch-pan-x touch-pan-y overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.clientWidth) return;
+                  const next = Math.round(el.scrollLeft / el.clientWidth);
+                  if (next !== currentImageIndex) setCurrentImageIndex(next);
+                }}
+              >
+                {post.images.map((img, idx) => (
+                  <img
+                    key={`${img}-${idx}`}
+                    src={getDisplayImageUrl(img)}
+                    alt={`Post image ${idx + 1}`}
+                    draggable={false}
+                    className="h-full w-full flex-shrink-0 snap-center snap-always object-cover"
+                  />
+                ))}
               </div>
-            ))}
+            </div>
+            {post.images.length > 1 && (
+              <div className="flex justify-center gap-1.5 pt-2">
+                {post.images.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: idx === currentImageIndex ? '#00A8A3' : '#d1d5db' }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -737,6 +789,67 @@ export const PostDetail: React.FC = () => {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {isAutoCreatedDisputePost && post.images && post.images.length > 0 && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2">{t('evidence')}</p>
+            <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-gray-200">
+              <div
+                className="flex h-full w-full touch-pan-x touch-pan-y overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.clientWidth) return;
+                  const next = Math.round(el.scrollLeft / el.clientWidth);
+                  if (next !== currentImageIndex) setCurrentImageIndex(next);
+                }}
+              >
+                {post.images.map((img, idx) => (
+                  <img
+                    key={`${img}-${idx}`}
+                    src={getDisplayImageUrl(img)}
+                    alt={t('evidenceAlt', { n: idx + 1 })}
+                    draggable={false}
+                    className="h-full w-full flex-shrink-0 snap-center snap-always object-cover"
+                  />
+                ))}
+              </div>
+            </div>
+            {post.images.length > 1 && (
+              <div className="flex justify-center gap-1.5 pt-2">
+                {post.images.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: idx === currentImageIndex ? '#00A8A3' : '#d1d5db' }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isAutoCreatedDisputePost && (linkedDisputeStatus === 'RESOLVED' || (isDisputeParty && disputePath)) && (
+          <div className={`p-4 rounded-lg border ${linkedDisputeStatus === 'RESOLVED' ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+            {linkedDisputeStatus === 'RESOLVED' && (
+              <p className={`text-sm font-medium ${isDisputeParty ? 'mb-2' : ''} text-green-800`}>
+                {t('disputePostResolved')}
+              </p>
+            )}
+            {isDisputeParty && disputePath && (
+              <button
+                type="button"
+                onClick={() => navigate(disputePath)}
+                className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium ${
+                  linkedDisputeStatus === 'RESOLVED'
+                    ? 'border border-green-300 text-green-700 hover:bg-green-50'
+                    : 'border border-red-300 text-red-700 hover:bg-red-50'
+                }`}
+              >
+                {t('disputeView')}
+              </button>
+            )}
           </div>
         )}
 
@@ -796,6 +909,10 @@ export const PostDetail: React.FC = () => {
               timeAgo={(createdAt) => relativeTimeLabel(createdAt, t)}
               replyLabel={t('reply')}
               commentOptionsAria={t('commentOptions')}
+              currentUserId={currentUserId || undefined}
+              adminHiddenLabel={t('commentAdminHidden')}
+              adminHiddenMineLabel={t('commentAdminHiddenMine')}
+              adminRemovedLabel={t('commentAdminRemoved')}
             />
           )}
         </div>
@@ -819,6 +936,7 @@ export const PostDetail: React.FC = () => {
           <input
             type="text"
             value={commentText}
+            maxLength={TEXT_LIMIT.comment}
             onFocus={() => { guestGuard('comment'); }}
             onChange={(e) => setCommentText(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSubmitComment()}

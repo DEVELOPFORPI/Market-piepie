@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { Badge } from '@/components/common/Badge';
 import { SellerMiniCard } from '@/components/common/SellerMiniCard';
 import { ImageLightbox } from '@/components/common/ImageLightbox';
@@ -32,6 +33,10 @@ import { localeForAppLanguage } from '@/utils/languageStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { scrollAppToTop } from '@/utils/appScroll';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
+import { ExpandableText } from '@/components/common/ExpandableText';
+
+const MAX_EVIDENCE_IMAGES = 5;
 
 const buyerDisputeReasons = [
   'Listing mismatch',
@@ -228,7 +233,13 @@ export const Dispute: React.FC = () => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
-    const previews = createLocalPreviewUrls(files);
+    const room = MAX_EVIDENCE_IMAGES - evidence.length;
+    if (room <= 0) {
+      showToast(t('upTo5ImagesAlert'));
+      return;
+    }
+    if (files.length > room) showToast(t('upTo5ImagesAlert'));
+    const previews = createLocalPreviewUrls(files.slice(0, room));
     if (previews.length === 0) {
       showToast(t('couldNotUpload'));
       return;
@@ -368,6 +379,11 @@ export const Dispute: React.FC = () => {
   const iHaveFiled = Boolean(
     currentUserId && orderDisputes.some((d) => d.openedByUserId === currentUserId),
   );
+  const visibleDisputes = orderDisputes.filter((d) => {
+    if (!currentUserId) return true;
+    const mine = d.openedByUserId === currentUserId;
+    return viewOtherParty ? !mine : mine;
+  });
   const showRequestedActionSummary = Boolean(dispute?.action?.trim());
   const disputeReasonOptions = isSellerOpening ? sellerDisputeReasons : buyerDisputeReasons;
   const showSubmitBar = Boolean(order && !viewOtherParty && !iHaveFiled);
@@ -406,15 +422,10 @@ export const Dispute: React.FC = () => {
       />
 
       <div className={`px-4 py-6 space-y-6 ${showSubmitBar ? 'pb-24' : ''}`}>
-        {orderDisputes.length > 0 && (
+        {visibleDisputes.length > 0 && (
           <div className="space-y-3">
-            {[...orderDisputes]
-              .sort((a, b) => {
-                const aMine = Boolean(currentUserId && a.openedByUserId === currentUserId);
-                const bMine = Boolean(currentUserId && b.openedByUserId === currentUserId);
-                if (aMine !== bMine) return viewingOtherDispute ? (aMine ? 1 : -1) : (aMine ? -1 : 1);
-                return a.createdAt.localeCompare(b.createdAt);
-              })
+            {[...visibleDisputes]
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
               .map((d) => {
               const mine = Boolean(currentUserId && d.openedByUserId === currentUserId);
               return (
@@ -456,7 +467,9 @@ export const Dispute: React.FC = () => {
                         </div>
                       )}
                       {d.description && (
-                        <p className="text-gray-700 leading-relaxed pt-1">{d.description}</p>
+                        <div className="pt-1">
+                          <ExpandableText text={d.description} />
+                        </div>
                       )}
                     </div>
                   )}
@@ -587,11 +600,13 @@ export const Dispute: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('detailsLabel')} <span className="text-red-500">*</span>
+              <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+                <span>{t('detailsLabel')} <span className="text-red-500">*</span></span>
+                <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.disputeDetails}</span>
               </label>
               <textarea
                 value={description}
+                maxLength={TEXT_LIMIT.disputeDetails}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t('detailsPlaceholder')}
                 rows={5}
@@ -600,7 +615,9 @@ export const Dispute: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('evidence')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t('evidence')} {evidence.length}/{MAX_EVIDENCE_IMAGES}
+              </label>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 {evidence.map((img, idx) => (
                   <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-200">
@@ -618,18 +635,14 @@ export const Dispute: React.FC = () => {
                     </button>
                   </div>
                 ))}
-                <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </label>
+                {evidence.length < MAX_EVIDENCE_IMAGES && (
+                  <label className="relative aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
+                    <FilePickerInput multiple onChange={handleImageUpload} />
+                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </label>
+                )}
               </div>
             </div>
           </>
@@ -637,7 +650,7 @@ export const Dispute: React.FC = () => {
 
         {dispute && (
           <>
-            {orderDisputes.length === 0 && (
+            {visibleDisputes.length === 0 && (
               <>
                 <div className="p-4 border border-gray-200 rounded-lg space-y-3">
                   <h3 className="text-sm font-medium text-gray-700">{t('disputeSummary')}</h3>
@@ -655,7 +668,7 @@ export const Dispute: React.FC = () => {
                   </div>
                   {dispute.description && (
                     <div className="pt-3 border-t border-gray-100">
-                      <p className="text-sm text-gray-700 leading-relaxed">{dispute.description}</p>
+                      <ExpandableText text={dispute.description} />
                     </div>
                   )}
                 </div>

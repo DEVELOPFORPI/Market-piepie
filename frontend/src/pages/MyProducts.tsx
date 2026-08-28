@@ -113,7 +113,7 @@ export const MyProducts: React.FC = () => {
               <div key={product.id} className="border border-gray-200 rounded-lg overflow-hidden">
                 <div
                   onClick={() => {
-                    if (!product.adminHidden) navigate(`/product/${product.id}`);
+                    navigate(`/product/${product.id}`);
                   }}
                 >
                   <ListingCard

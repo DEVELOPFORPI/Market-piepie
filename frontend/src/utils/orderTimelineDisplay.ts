@@ -42,6 +42,12 @@ export function orderTimelineMessageMatch(
     '판매자 분쟁': 'tlSellerDisputeOpened',
     '구매자 분쟁 해결': 'tlBuyerDisputeResolved',
     '판매자 분쟁 해결': 'tlSellerDisputeResolved',
+    'Trade fell through': 'tlTradeFailed',
+    '거래 불발': 'tlTradeFailed',
+    'Buyer left the chat': 'tlBuyerLeftChat',
+    'Seller left the chat': 'tlSellerLeftChat',
+    '구매자가 채팅을 나갔습니다': 'tlBuyerLeftChat',
+    '판매자가 채팅을 나갔습니다': 'tlSellerLeftChat',
     // Legacy Korean (from pick())
     '나눔 요청': 'tlFreeShareRequest',
     '직거래 나눔': 'tlInPersonFreeShare',

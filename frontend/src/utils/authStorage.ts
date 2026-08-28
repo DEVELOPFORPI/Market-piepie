@@ -15,19 +15,114 @@ const GUEST_USER_STORAGE_KEY = 'marketpiepie_guest_user_id';
 /** Pi-verified user: persisted across sessions in localStorage */
 const PI_USER_KEY = 'marketpiepie_pi_user_id';
 const PI_SESSION_TOKEN_KEY = 'marketpiepie_pi_session_token';
+const SUSPENDED_ACCOUNT_KEY = 'marketpiepie_account_suspended';
+const SUSPENDED_USER_ID_KEY = 'marketpiepie_suspended_user_id';
+
+type SuspendedAccountState = {
+  reason?: string | null;
+  userId?: string | null;
+};
 
 /** Current logged-in user id */
 export const getCurrentUserId = (): string | null => {
   return sessionStorage.getItem(AUTH_KEY);
 };
 
+export function isSuspendedAccount(): boolean {
+  try {
+    return sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY) != null;
+  } catch {
+    return false;
+  }
+}
+
+export function getSuspensionReason(): string | null {
+  try {
+    const raw = sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SuspendedAccountState;
+    return parsed.reason?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getSuspendedUserId(): string | null {
+  try {
+    const raw = sessionStorage.getItem(SUSPENDED_ACCOUNT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as SuspendedAccountState;
+      if (parsed.userId && !parsed.userId.startsWith('guest_')) return parsed.userId;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const stored = localStorage.getItem(SUSPENDED_USER_ID_KEY);
+    return stored && !stored.startsWith('guest_') ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSuspendedAccount(reason?: string | null, userId?: string | null): void {
+  const resolvedId = userId || getSuspendedUserId();
+  try {
+    sessionStorage.setItem(
+      SUSPENDED_ACCOUNT_KEY,
+      JSON.stringify({ reason: reason || null, userId: resolvedId || null }),
+    );
+  } catch {
+    /* ignore */
+  }
+  if (resolvedId) {
+    try { localStorage.setItem(SUSPENDED_USER_ID_KEY, resolvedId); } catch { /* ignore */ }
+  }
+}
+
+export function clearSuspendedAccount(): void {
+  try {
+    sessionStorage.removeItem(SUSPENDED_ACCOUNT_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(SUSPENDED_USER_ID_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 정지 계정을 게스트 세션으로 내린다. */
+export async function enterSuspendedGuestSession(reason?: string | null): Promise<void> {
+  const currentId = getCurrentUserId();
+  const originalId =
+    (currentId && !currentId.startsWith('guest_') ? currentId : null) || getSuspendedUserId();
+  setSuspendedAccount(reason, originalId);
+  if (isGuestUser(getCurrentUserId())) {
+    if (!getSessionToken()) {
+      await ensureImplicitSession({ allowAutoGuest: true });
+    }
+    return;
+  }
+  logout();
+  clearImplicitSessionSkip();
+  await ensureImplicitSession({ allowAutoGuest: true });
+}
+
 /** Log in */
 export const login = (userId: string, isPiUser = false) => {
+  if (!userId.startsWith('guest_')) clearSuspendedAccount();
   sessionStorage.setItem(AUTH_KEY, userId);
   // Each successful login starts a new popup-viewing session.
   sessionStorage.removeItem(HOME_PROMO_SHOWN_SESSION_KEY);
   if (isPiUser) {
-    try { localStorage.setItem(PI_USER_KEY, userId); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(PI_USER_KEY, userId);
+      // A token stored before login() ran wasn't persisted yet.
+      const token = getSessionToken();
+      if (token) localStorage.setItem(PI_SESSION_TOKEN_KEY, token);
+    } catch { /* ignore */ }
   }
   if (!getSessionToken()) {
     requestDevSessionToken(userId);
@@ -90,6 +185,47 @@ export const isLoggedIn = (): boolean => {
   return !!sessionStorage.getItem(AUTH_KEY);
 };
 
+/**
+ * Reuse the Pi session saved on this device so reopening the app keeps the login.
+ * The token may already be expired or revoked server-side; the first rejected
+ * request clears it via handleExpiredSession().
+ */
+function restorePersistedPiSession(): boolean {
+  try {
+    const piUserId = localStorage.getItem(PI_USER_KEY);
+    const piToken = localStorage.getItem(PI_SESSION_TOKEN_KEY);
+    if (!piUserId || !piToken) return false;
+    sessionStorage.setItem(AUTH_KEY, piUserId);
+    sessionStorage.setItem(SESSION_TOKEN_KEY, piToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Called before the first render so a returning Pi user is already logged in and
+ * route guards don't bounce them to Welcome.
+ */
+export function restorePiSessionOnBoot(): boolean {
+  if (shouldSkipImplicitSession()) return false;
+  if (sessionStorage.getItem(AUTH_KEY)) return false;
+  return restorePersistedPiSession();
+}
+
+/** Server rejected our token (expired / revoked): drop it and send the user back to Welcome. */
+let expiredSessionHandled = false;
+export function handleExpiredSession(): void {
+  if (expiredSessionHandled) return;
+  expiredSessionHandled = true;
+  logout();
+  if (typeof window === 'undefined') return;
+  const path = window.location.pathname;
+  if (path.startsWith('/admin') || path === '/admin-auth') return;
+  if (path === '/welcome' || path === '/app-login') return;
+  window.location.replace('/welcome');
+}
+
 export type EnsureImplicitSessionOptions = {
   /**
    * When true: create or reuse device guest if no Pi session (Welcome / AppLogin "Continue as Guest").
@@ -99,8 +235,8 @@ export type EnsureImplicitSessionOptions = {
 };
 
 /**
- * Refresh session token for an existing tab session, or create/reuse guest when allowed.
- * Does not restore Pi into session automatically — user must pass through Welcome each load.
+ * Refresh session token for an existing tab session, reuse the device's saved Pi
+ * session, or create/reuse guest when allowed.
  */
 export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptions): Promise<void> => {
   const allowAutoGuest = options?.allowAutoGuest ?? false;
@@ -109,10 +245,25 @@ export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptio
   const existingUser = sessionStorage.getItem(AUTH_KEY);
   if (existingUser) {
     if (!getSessionToken()) {
-      await requestDevSessionToken(existingUser);
+      const piToken = (() => {
+        try {
+          return localStorage.getItem(PI_USER_KEY) === existingUser
+            ? localStorage.getItem(PI_SESSION_TOKEN_KEY)
+            : null;
+        } catch {
+          return null;
+        }
+      })();
+      if (piToken) {
+        sessionStorage.setItem(SESSION_TOKEN_KEY, piToken);
+      } else {
+        await requestDevSessionToken(existingUser);
+      }
     }
     return;
   }
+
+  if (restorePersistedPiSession()) return;
 
   if (!allowAutoGuest) return;
 
@@ -135,7 +286,10 @@ export const ensureImplicitSession = async (options?: EnsureImplicitSessionOptio
   await requestDevSessionToken(finalId);
 };
 
-async function requestDevSessionToken(userId: string): Promise<void> {
+export async function requestDevSessionToken(userId: string): Promise<{
+  accountStatus?: string;
+  suspensionReason?: string | null;
+}> {
   try {
     const isGuest = userId.startsWith('guest_');
     const preset = USER_PRESETS[userId];
@@ -153,8 +307,13 @@ async function requestDevSessionToken(userId: string): Promise<void> {
       setSessionToken(data.sessionToken);
       console.log('[auth] session token acquired for', userId);
     }
+    return {
+      accountStatus: data.accountStatus,
+      suspensionReason: data.suspensionReason ?? null,
+    };
   } catch {
     console.warn('[auth] session request failed');
+    return {};
   }
 }
 

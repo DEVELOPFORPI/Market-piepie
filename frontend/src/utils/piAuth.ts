@@ -178,6 +178,8 @@ export async function verifyPiAuth(
   username?: string;
   piVerified?: boolean;
   sessionToken?: string;
+  accountStatus?: string;
+  suspensionReason?: string | null;
 }> {
   const res = await withTimeout(
     fetch(API_BASE + '/api/auth/pi/verify', {

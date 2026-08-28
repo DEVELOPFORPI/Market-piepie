@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '@/utils/api';
 import { adminPasswordHeaders } from '@/utils/adminApi';
 import { broadcastProductChange } from '@/utils/chatSocket';
+import { AdminPagination, useAdminPage } from '@/components/admin/AdminPagination';
 
 interface Product {
   id: string;
@@ -39,6 +40,7 @@ export const AdminProducts: React.FC = () => {
   const [hiddenOnly, setHiddenOnly] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
+  const paged = useAdminPage(products, `${search}|${statusFilter}|${freeOnly}|${hiddenOnly}|${products.length}`);
 
   const load = async () => {
     setLoading(true);
@@ -62,8 +64,14 @@ export const AdminProducts: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(`상품 ${id}를 삭제할까요? 되돌릴 수 없습니다.`)) return;
-    const res = await api.delete(`/api/admin/products/${id}`, { headers: adminPasswordHeaders() });
+    const entered = window.prompt(
+      `상품 ${id}를 삭제합니다. 되돌릴 수 없습니다.\n삭제 사유를 입력하세요. (선택 — 판매자 알림에 표시됩니다)`,
+      '',
+    );
+    if (entered === null) return;
+    const reason = entered.trim();
+    const query = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+    const res = await api.delete(`/api/admin/products/${id}${query}`, { headers: adminPasswordHeaders() });
     if (!res.ok) {
       alert(`삭제 실패: ${res.error || `HTTP ${res.status}`}`);
       return;
@@ -164,7 +172,7 @@ export const AdminProducts: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => (
+              {paged.items.map((p) => (
                 <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
                   onClick={() => setSelected(p)}>
                   <td className="px-4 py-3">
@@ -220,6 +228,16 @@ export const AdminProducts: React.FC = () => {
               ))}
             </tbody>
           </table>
+          <div className="px-4 pb-3">
+            <AdminPagination
+              page={paged.page}
+              totalPages={paged.totalPages}
+              total={paged.total}
+              from={paged.from}
+              to={paged.to}
+              onPageChange={paged.setPage}
+            />
+          </div>
         </div>
       )}
 

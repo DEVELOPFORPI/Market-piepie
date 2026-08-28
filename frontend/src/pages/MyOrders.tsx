@@ -109,6 +109,7 @@ export const MyOrders: React.FC = () => {
             ORDER_STATUS_VALUE.RECEIVED,
             ORDER_STATUS_VALUE.COMPLETE,
             ORDER_STATUS_VALUE.DISPUTE,
+            ORDER_STATUS_VALUE.TRADE_FAILED,
           ] as DisplayOrderStatus[]
         ).map((status) => (
           <button

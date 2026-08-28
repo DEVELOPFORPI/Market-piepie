@@ -157,6 +157,9 @@ CREATE TABLE IF NOT EXISTS community_posts (
   longitude DECIMAL(11,8),
   order_id VARCHAR(191),
   attached_product_id VARCHAR(191),
+  admin_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_community_posts_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -187,6 +190,10 @@ CREATE TABLE IF NOT EXISTS comments (
   author_id VARCHAR(191),
   content TEXT NOT NULL,
   parent_id VARCHAR(191),
+  admin_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  admin_hidden_reason VARCHAR(500),
+  admin_hidden_at DATETIME(3),
+  admin_removed TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE,
   CONSTRAINT fk_comments_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL,
@@ -332,6 +339,7 @@ CREATE INDEX idx_post_likes_user ON post_likes(user_id);
 CREATE INDEX idx_dispute_post_votes_post ON dispute_post_votes(post_id);
 CREATE INDEX idx_dispute_post_votes_user ON dispute_post_votes(user_id);
 CREATE INDEX idx_comments_post ON comments(post_id);
+CREATE INDEX idx_comments_admin_removed ON comments(admin_removed);
 CREATE INDEX idx_reviews_reviewee ON reviews(reviewee_id);
 CREATE INDEX idx_notifications_target ON notifications(target_user_id);
 CREATE INDEX idx_notifications_read ON notifications(`read`);

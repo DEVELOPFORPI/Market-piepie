@@ -17,9 +17,16 @@ import {
   NOTIFY_TRADE_COMPLETE_CHECK,
   NOTIFY_TRADE_COMPLETED,
   NOTIFY_POST_COMMENT,
+  NOTIFY_POST_REPLY,
   NOTIFY_INQUIRY_REPLY,
   NOTIFY_DISPUTE_FILED,
   NOTIFY_DISPUTE_RESOLVED,
+  NOTIFY_LISTING_SUSPENDED,
+  NOTIFY_LISTING_REMOVED,
+  NOTIFY_POST_HIDDEN,
+  NOTIFY_POST_REMOVED,
+  NOTIFY_COMMENT_HIDDEN,
+  NOTIFY_COMMENT_REMOVED,
   normalizeNotificationTitle,
 } from '@/locale/enUI';
 
@@ -40,8 +47,15 @@ const TITLE_KEY: Record<string, NotifyMessageKey> = {
   [NOTIFY_DISPUTE_FILED]: 'titleDisputeFiled',
   'Dispute post published': 'titleDisputePost',
   [NOTIFY_POST_COMMENT]: 'titlePostComment',
+  [NOTIFY_POST_REPLY]: 'titlePostReply',
   [NOTIFY_INQUIRY_REPLY]: 'titleInquiryReply',
   [NOTIFY_DISPUTE_RESOLVED]: 'titleDisputeResolved',
+  [NOTIFY_LISTING_SUSPENDED]: 'titleListingSuspended',
+  [NOTIFY_LISTING_REMOVED]: 'titleListingRemoved',
+  [NOTIFY_POST_HIDDEN]: 'titlePostHidden',
+  [NOTIFY_POST_REMOVED]: 'titlePostRemoved',
+  [NOTIFY_COMMENT_HIDDEN]: 'titleCommentHidden',
+  [NOTIFY_COMMENT_REMOVED]: 'titleCommentRemoved',
 };
 
 const BADGE_KEY: Record<string, NotifyMessageKey> = {
@@ -180,6 +194,11 @@ const BODY_RULES: BodyRule[] = [
     map: (m) => ({ name: m[1], title: m[2] }),
   },
   {
+    re: /^(.+?) replied to your comment on "(.+?)"\.$/,
+    key: 'bodyPostReply',
+    map: (m) => ({ name: m[1], title: m[2] }),
+  },
+  {
     re: /^We replied to your inquiry "(.+?)"\.$/,
     key: 'bodyInquiryReply',
     map: (m) => ({ title: m[1] }),
@@ -187,6 +206,66 @@ const BODY_RULES: BodyRule[] = [
   {
     re: /^The dispute for "(.+?)" has been resolved\.$/,
     key: 'bodyDisputeResolved',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your listing "(.+?)" was suspended by an admin\. Reason: (.+)$/,
+    key: 'bodyListingSuspendedReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your listing "(.+?)" was suspended by an admin\.$/,
+    key: 'bodyListingSuspended',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your listing "(.+?)" was removed by an admin\. Reason: (.+)$/,
+    key: 'bodyListingRemovedReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your listing "(.+?)" was removed by an admin\.$/,
+    key: 'bodyListingRemoved',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your post "(.+?)" was hidden by an admin\. Reason: (.+)$/,
+    key: 'bodyPostHiddenReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your post "(.+?)" was hidden by an admin\.$/,
+    key: 'bodyPostHidden',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your post "(.+?)" was removed by an admin\. Reason: (.+)$/,
+    key: 'bodyPostRemovedReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your post "(.+?)" was removed by an admin\.$/,
+    key: 'bodyPostRemoved',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your comment on "(.+?)" was hidden by an admin\. Reason: (.+)$/,
+    key: 'bodyCommentHiddenReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your comment on "(.+?)" was hidden by an admin\.$/,
+    key: 'bodyCommentHidden',
+    map: (m) => ({ title: m[1] }),
+  },
+  {
+    re: /^Your comment on "(.+?)" was removed by an admin\. Reason: (.+)$/,
+    key: 'bodyCommentRemovedReason',
+    map: (m) => ({ title: m[1], reason: m[2] }),
+  },
+  {
+    re: /^Your comment on "(.+?)" was removed by an admin\.$/,
+    key: 'bodyCommentRemoved',
     map: (m) => ({ title: m[1] }),
   },
 ];

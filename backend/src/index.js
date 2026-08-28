@@ -47,6 +47,41 @@ function sanitize(val) {
   return val;
 }
 
+const TEXT_LIMIT = {
+  listingTitle: 40,
+  listingDescription: 2000,
+  postTitle: 40,
+  postBody: 2000,
+  inquiryTitle: 40,
+  inquiryContent: 1000,
+  inquiryEmail: 255,
+  meetupPlace: 50,
+  comment: 300,
+  receiptNotes: 200,
+  reviewComment: 500,
+  reportDetails: 500,
+  chatMessage: 1000,
+  disputeDetails: 1000,
+};
+
+function clipText(value, max) {
+  if (value == null) return value;
+  const s = String(value);
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+function clipUserChatContent(content, type) {
+  const kind = type || "text";
+  if (kind !== "text" && kind !== "user") return content;
+  return clipText(content, TEXT_LIMIT.chatMessage);
+}
+
+const MAX_CHAT_IMAGES = 4;
+function clipChatImages(images) {
+  if (!Array.isArray(images)) return [];
+  return images.map(String).filter(Boolean).slice(0, MAX_CHAT_IMAGES);
+}
+
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 // Browser -> Vercel rewrite -> Nginx -> Express.
@@ -59,6 +94,8 @@ const R2_MAX_UPLOAD_BYTES = Math.max(1, R2_MAX_UPLOAD_MB) * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/avif",
   "image/gif",
+  "image/heic",
+  "image/heif",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -110,11 +147,13 @@ function safePathSegment(value, fallback) {
 }
 
 function extensionForMime(mimeType, originalName = "") {
-  const fromName = String(originalName).toLowerCase().match(/\.(avif|gif|jpe?g|png|webp)$/);
+  const fromName = String(originalName).toLowerCase().match(/\.(avif|gif|heic|heif|jpe?g|png|webp)$/);
   if (fromName) return fromName[0] === ".jpeg" ? ".jpg" : fromName[0];
   const map = {
     "image/avif": ".avif",
     "image/gif": ".gif",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
@@ -187,6 +226,24 @@ function getR2Client() {
 // ????????? ?????? ???????? (DB ???, ????? ???? ?????) ??????????????????????????????????????????
 const sessionCache = new Map();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7?
+/**
+ * 사용 중인 세션은 만료 시각을 뒤로 미뤄 재로그인을 요구하지 않는다.
+ * 매 요청마다 쓰지 않도록 발급/갱신 후 하루가 지난 세션만 갱신한다.
+ */
+const SESSION_TOUCH_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function touchSession(token, session) {
+  if (Date.now() - session.createdAt < SESSION_TOUCH_AFTER_MS) return;
+  session.createdAt = Date.now();
+  if (pool) {
+    pool
+      .query(
+        "UPDATE sessions SET created_at = CURRENT_TIMESTAMP(3) WHERE token = $1",
+        [token],
+      )
+      .catch(() => {});
+  }
+}
 
 function purgeSessionCacheForUser(userId) {
   for (const [token, session] of sessionCache) {
@@ -208,6 +265,27 @@ async function createSession(userId) {
   }
   sessionCache.set(token, { userId, createdAt: Date.now() });
   return token;
+}
+
+async function getAccountStatus(userId) {
+  if (!pool || !userId) return { accountStatus: "active", suspensionReason: null };
+  try {
+    const { rows } = await pool.query(
+      "SELECT account_status, suspension_reason FROM users WHERE id = $1 LIMIT 1",
+      [userId],
+    );
+    const accountStatus = rows[0]?.account_status || "active";
+    return {
+      accountStatus,
+      suspensionReason:
+        accountStatus === "suspended" ? rows[0]?.suspension_reason || null : null,
+    };
+  } catch (e) {
+    if (/account_status|Unknown column/i.test(String(e.message))) {
+      return { accountStatus: "active", suspensionReason: null };
+    }
+    return { accountStatus: "active", suspensionReason: null };
+  }
 }
 
 /** Pi @username — admin/DB only; users row is created on verification payment */
@@ -315,6 +393,7 @@ async function getUserIdFromToken(token) {
           .catch(() => {});
       return null;
     }
+    touchSession(token, cached);
     return cached.userId;
   }
   if (!pool) return null;
@@ -331,11 +410,13 @@ async function getUserIdFromToken(token) {
         .catch(() => {});
       return null;
     }
-    sessionCache.set(token, {
+    const session = {
       userId: rows[0].user_id,
       createdAt: new Date(rows[0].created_at).getTime(),
-    });
-    return rows[0].user_id;
+    };
+    sessionCache.set(token, session);
+    touchSession(token, session);
+    return session.userId;
   } catch {
     return null;
   }
@@ -493,12 +574,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: logRateLimited,
 });
+// The tight budget here is meant for money-moving calls. Read-only lookups
+// (e.g. which badges the user already paid for) run on every app start, so
+// they stay on the general limiter instead of burning the payment budget.
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: perUserKey,
   handler: logRateLimited,
+  skip: (req) => req.method === "GET",
 });
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -535,7 +621,7 @@ const imageUpload = multer({
       cb(null, true);
       return;
     }
-    cb(new Error("Only JPG, PNG, WebP, GIF, or AVIF images are allowed"));
+    cb(new Error("Only JPG, PNG, WebP, GIF, AVIF, or HEIC images are allowed"));
   },
 });
 
@@ -897,6 +983,17 @@ if (process.env.NODE_ENV !== "production") {
         }
       }
     }
+    const account = await getAccountStatus(userId);
+    if (account.accountStatus === "suspended") {
+      console.log(`[dev-login] suspended userId=${userId}`);
+      return res.json({
+        uid: userId,
+        username: nickname,
+        piVerified: true,
+        sessionToken: null,
+        ...account,
+      });
+    }
     const sessionToken = await createSession(userId);
     console.log(`[dev-login] userId=${userId} nickname=${nickname}`);
     res.json({
@@ -904,6 +1001,7 @@ if (process.env.NODE_ENV !== "production") {
       username: nickname,
       piVerified: true,
       sessionToken,
+      ...account,
     });
   });
 }
@@ -1498,12 +1596,23 @@ app.post("/api/auth/pi/verify", async (req, res) => {
     if (!piVerified && isGuestId(guestId)) {
       await linkGuestToPi(guestId, piRes.uid, piRes.username);
     }
+    const account = await getAccountStatus(piRes.uid);
+    if (account.accountStatus === "suspended") {
+      return res.json({
+        uid: piRes.uid,
+        username: piRes.username,
+        piVerified,
+        sessionToken: null,
+        ...account,
+      });
+    }
     const sessionToken = await createSession(piRes.uid);
     res.json({
       uid: piRes.uid,
       username: piRes.username,
       piVerified,
       sessionToken,
+      ...account,
     });
   } catch (e) {
     res
@@ -1581,7 +1690,7 @@ function productListingStatusSql(alias = "p") {
       WHEN EXISTS (
         SELECT 1 FROM orders o
          WHERE o.product_id = ${alias}.id
-           AND o.status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+           AND o.status NOT IN ('완료','수령완료','분쟁','거래불발','completed','complete','received','dispute','trade_failed')
            AND (
              o.status IN ('약속확정','meetup_set')
              OR (NULLIF(o.meetup_location, '') IS NOT NULL AND NULLIF(o.meetup_time, '') IS NOT NULL)
@@ -1599,7 +1708,7 @@ function orderDisplayStatusSql(alias = "o") {
         SELECT 1 FROM disputes d
          WHERE d.order_id = ${alias}.id AND d.status <> 'RESOLVED'
       ) THEN '${ORDER_STATUS_DISPUTE}'
-      WHEN ${alias}.status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+      WHEN ${alias}.status NOT IN ('완료','수령완료','분쟁','거래불발','completed','complete','received','dispute','trade_failed')
         AND (
           ${alias}.status IN ('약속확정','meetup_set')
           OR (NULLIF(${alias}.meetup_location, '') IS NOT NULL AND NULLIF(${alias}.meetup_time, '') IS NOT NULL)
@@ -1663,7 +1772,7 @@ async function syncProductListingStatusFromOrders(productId) {
     const { rows: reserved } = await pool.query(
       `SELECT id FROM orders
         WHERE product_id=$1
-          AND status NOT IN ('완료','수령완료','분쟁','completed','complete','received','dispute')
+          AND status NOT IN ('완료','수령완료','분쟁','거래불발','completed','complete','received','dispute','trade_failed')
           AND (
             status IN ('약속확정','meetup_set')
             OR (
@@ -1950,11 +2059,15 @@ app.get("/api/products", requireDb, async (req, res) => {
       params.push(seller_id);
       query += ` AND p.seller_id=$${params.length}`;
     }
+    // 정지된 판매자의 상품은 목록에서 내린다 — 정지 해제되면 다시 보인다.
     if (req.authUserId) {
       params.push(req.authUserId);
-      query += ` AND (p.admin_hidden = false OR p.seller_id = $${params.length})`;
+      const me = `$${params.length}`;
+      query += ` AND (p.admin_hidden = false OR p.seller_id = ${me})`;
+      query += ` AND (COALESCE(u.account_status, 'active') <> 'suspended' OR p.seller_id = ${me})`;
     } else {
       query += ` AND p.admin_hidden = false`;
+      query += ` AND COALESCE(u.account_status, 'active') <> 'suspended'`;
     }
     params.push(limit, offset);
     query += ` ORDER BY p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
@@ -1996,13 +2109,17 @@ app.get("/api/products/:id/open-buyer-dispute", requireDb, async (req, res) => {
 app.get("/api/products/:id", requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, ${jsonObjectSql("u", "users")} AS seller FROM products p
+      `SELECT p.*, u.account_status AS seller_account_status,
+              ${jsonObjectSql("u", "users")} AS seller FROM products p
        LEFT JOIN users u ON p.seller_id = u.id WHERE p.id=$1`,
       [req.params.id],
     );
     if (!rows.length)
       return res.status(404).json({ error: "Product not found" });
-    if (rows[0].admin_hidden && rows[0].seller_id !== req.authUserId) {
+    // 정지된 판매자의 상품도 숨긴 상품과 같게 다룬다 — 기존 거래 당사자만 볼 수 있다.
+    const listingBlocked =
+      rows[0].admin_hidden || rows[0].seller_account_status === "suspended";
+    if (listingBlocked && rows[0].seller_id !== req.authUserId) {
       if (!req.authUserId) {
         return res.status(404).json({ error: "Product not found" });
       }
@@ -2076,8 +2193,8 @@ app.post("/api/products", requireDb, requireAuth, async (req, res) => {
          is_free_share=VALUES(is_free_share), allow_offer=VALUES(allow_offer)`,
       [
         id,
-        title,
-        description,
+        clipText(title, TEXT_LIMIT.listingTitle),
+        clipText(description, TEXT_LIMIT.listingDescription),
         price,
         category,
         region,
@@ -2131,8 +2248,8 @@ app.put("/api/products/:id", requireDb, requireAuth, async (req, res) => {
        is_free_share=$11, allow_offer=$12 WHERE id=$1`,
       [
         req.params.id,
-        title,
-        description,
+        clipText(title, TEXT_LIMIT.listingTitle),
+        clipText(description, TEXT_LIMIT.listingDescription),
         price,
         category,
         region,
@@ -2431,10 +2548,15 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
     );
     if (!existingOrder.rows.length && product_id) {
       const product = await pool.query(
-        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        `SELECT p.admin_hidden, u.account_status AS seller_account_status
+           FROM products p LEFT JOIN users u ON p.seller_id = u.id
+          WHERE p.id = $1 LIMIT 1`,
         [product_id],
       );
-      if (product.rows[0]?.admin_hidden) {
+      if (
+        product.rows[0]?.admin_hidden ||
+        product.rows[0]?.seller_account_status === "suspended"
+      ) {
         return res.status(409).json({ error: "This listing is hidden by admin" });
       }
     }
@@ -2460,11 +2582,11 @@ app.post("/api/orders", requireDb, requireAuth, async (req, res) => {
         status || "PENDING_OFFER",
         proposed_price || 0,
         trade_method,
-        meetupLocation,
+        clipText(meetupLocation, TEXT_LIMIT.meetupPlace),
         meetupDateTime,
         memo,
         receipt_condition || null,
-        receipt_notes || null,
+        clipText(receipt_notes, TEXT_LIMIT.receiptNotes) || null,
         buyer_completed || false,
         seller_completed || false,
         meetup_accepted || false,
@@ -2538,7 +2660,10 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
     const vals = [req.params.id];
     const fields = {
       status: req.body.status,
-      meetup_location: meetupLocation,
+      meetup_location:
+        meetupLocation !== undefined
+          ? clipText(meetupLocation, TEXT_LIMIT.meetupPlace)
+          : undefined,
       meetup_time: meetupTimeCombined,
       tracking_number: req.body.tracking_number,
       shipping_company: req.body.shipping_company,
@@ -2553,7 +2678,10 @@ app.put("/api/orders/:id", requireDb, requireAuth, async (req, res) => {
       shipping_proof_images: req.body.shipping_proof_images,
       memo: req.body.memo,
       receipt_condition: req.body.receipt_condition,
-      receipt_notes: req.body.receipt_notes,
+      receipt_notes:
+        req.body.receipt_notes !== undefined
+          ? clipText(req.body.receipt_notes, TEXT_LIMIT.receiptNotes)
+          : undefined,
     };
     for (const [col, val] of Object.entries(fields)) {
       if (val !== undefined) {
@@ -2649,6 +2777,11 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
   const user_id = req.query.user_id || req.authUserId;
   try {
     let query = `SELECT cr.*,
+      CASE WHEN COALESCE(p.admin_hidden, 0) = 1
+                OR su.account_status = 'suspended'
+           THEN 1 ELSE 0 END AS product_admin_hidden,
+      CASE WHEN cr.product_id IS NOT NULL AND p.id IS NULL
+           THEN 1 ELSE 0 END AS product_deleted,
       ${jsonObjectSql("bu", "users")} AS buyer_user,
       ${jsonObjectSql("su", "users")} AS seller_user,
       ${jsonObjectSql("p", "products")} AS product_data
@@ -2677,6 +2810,30 @@ app.get("/api/chat-rooms", requireDb, async (req, res) => {
       };
     });
     res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * 로컬에만 남은 채팅방이 "아직 저장 전"인지 "서버에서 사라진(숨김·삭제) 방"인지 구분한다.
+ * 서버가 아는 방 id만 돌려주므로, 목록에 없는데 여기 들어오면 로컬에서 지우면 된다.
+ */
+app.post("/api/chat-rooms/known", requireDb, requireAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.slice(0, 200).map(String).filter(Boolean)
+    : [];
+  if (!ids.length) return res.json({ ids: [] });
+  try {
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const userParam = `$${ids.length + 1}`;
+    const { rows } = await pool.query(
+      `SELECT id FROM chat_rooms
+        WHERE id IN (${placeholders})
+          AND (buyer_id = ${userParam} OR seller_id = ${userParam})`,
+      [...ids, req.authUserId],
+    );
+    res.json({ ids: rows.map((r) => String(r.id)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2763,10 +2920,15 @@ app.post("/api/chat-rooms", requireDb, requireAuth, async (req, res) => {
     );
     if (!existingRoom.rows.length && product_id) {
       const product = await pool.query(
-        "SELECT admin_hidden FROM products WHERE id = $1 LIMIT 1",
+        `SELECT p.admin_hidden, u.account_status AS seller_account_status
+           FROM products p LEFT JOIN users u ON p.seller_id = u.id
+          WHERE p.id = $1 LIMIT 1`,
         [product_id],
       );
-      if (product.rows[0]?.admin_hidden) {
+      if (
+        product.rows[0]?.admin_hidden ||
+        product.rows[0]?.seller_account_status === "suspended"
+      ) {
         return res.status(409).json({ error: "This listing is hidden by admin" });
       }
     }
@@ -2878,7 +3040,7 @@ app.post(
     }
     try {
       const { rows: roomCheck } = await pool.query(
-        "SELECT buyer_id, seller_id, admin_hidden FROM chat_rooms WHERE id=$1",
+        "SELECT buyer_id, seller_id, admin_hidden, product_id FROM chat_rooms WHERE id=$1",
         [req.params.id],
       );
       if (!roomCheck.length)
@@ -2891,6 +3053,21 @@ app.post(
       }
       if (roomCheck[0].admin_hidden) {
         return res.status(409).json({ error: "This chat was hidden by an admin" });
+      }
+      // 숨긴 상품·정지된 판매자는 대화만 남기고 새 거래(가격 제안)는 막는다.
+      if (type === "price_offer" && roomCheck[0].product_id) {
+        const { rows: productRows } = await pool.query(
+          `SELECT p.admin_hidden, u.account_status AS seller_account_status
+             FROM products p LEFT JOIN users u ON p.seller_id = u.id
+            WHERE p.id = $1 LIMIT 1`,
+          [roomCheck[0].product_id],
+        );
+        if (
+          productRows[0]?.admin_hidden ||
+          productRows[0]?.seller_account_status === "suspended"
+        ) {
+          return res.status(409).json({ error: "This listing is hidden by admin" });
+        }
       }
       const effectiveSenderId =
         sender_id === "system" ? "system" : req.authUserId;
@@ -2907,14 +3084,14 @@ app.post(
           id,
           req.params.id,
           effectiveSenderId,
-          content,
+          clipUserChatContent(content, type),
           type || "text",
-          images || [],
+          clipChatImages(images),
           order_id,
           original_price,
           proposed_price,
           offer_result,
-          meetupLocation,
+          clipText(meetupLocation, TEXT_LIMIT.meetupPlace),
           meetupTimeCombined,
         ],
         "chat_messages",
@@ -2979,6 +3156,12 @@ app.get("/api/posts", requireDb, async (req, res) => {
       params.push(author_id);
       query += ` AND p.author_id=$${params.length}`;
     }
+    if (req.authUserId) {
+      params.push(req.authUserId);
+      query += ` AND (COALESCE(p.admin_hidden, 0) = 0 OR p.author_id = $${params.length})`;
+    } else {
+      query += ` AND COALESCE(p.admin_hidden, 0) = 0`;
+    }
     params.push(limit, offset);
     query += ` ORDER BY p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
     const { rows } = await pool.query(query, params);
@@ -3000,6 +3183,9 @@ app.get("/api/posts/:id", requireDb, async (req, res) => {
       [req.params.id],
     );
     if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+    if (rows[0].admin_hidden && rows[0].author_id !== req.authUserId) {
+      return res.status(404).json({ error: "Not found" });
+    }
     res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3045,8 +3231,8 @@ app.post("/api/posts", requireDb, requireAuth, async (req, res) => {
          images=VALUES(images), tags=VALUES(tags), region=VALUES(region)`,
       [
         id,
-        title,
-        content,
+        clipText(title, TEXT_LIMIT.postTitle),
+        clipText(content, TEXT_LIMIT.postBody),
         category,
         effectiveAuthorId,
         images || [],
@@ -3084,16 +3270,54 @@ app.delete("/api/posts/:id", requireDb, requireAuth, async (req, res) => {
   }
 });
 
-// ?????
+app.get("/api/comments", requireDb, async (req, res) => {
+  const authorId = String(req.query.author_id || "").trim();
+  if (!authorId) return res.status(400).json({ error: "author_id required" });
+  const viewerId = req.authUserId || null;
+  const isOwner = viewerId === authorId;
+  try {
+    let query = `SELECT c.id, c.content, c.parent_id, c.created_at, c.admin_hidden,
+                        c.admin_hidden_reason, c.post_id, p.title AS post_title,
+                        p.category AS post_category
+                   FROM comments c
+                   INNER JOIN community_posts p ON p.id = c.post_id
+                  WHERE c.author_id = $1
+                    AND COALESCE(c.admin_removed, 0) = 0`;
+    const params = [authorId];
+    if (isOwner) {
+      query += ` AND (COALESCE(p.admin_hidden, 0) = 0 OR p.author_id = $1)`;
+    } else {
+      query += ` AND COALESCE(c.admin_hidden, 0) = 0
+                 AND COALESCE(p.admin_hidden, 0) = 0`;
+    }
+    query += ` ORDER BY c.created_at DESC LIMIT 200`;
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/posts/:id/comments", requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT c.*, ${jsonObjectSql("u", "users")} AS author FROM comments c
        LEFT JOIN users u ON c.author_id = u.id
-       WHERE c.post_id=$1 ORDER BY c.created_at ASC`,
+       WHERE c.post_id=$1
+       ORDER BY c.created_at ASC`,
       [req.params.id],
     );
-    res.json(rows);
+    const viewerId = req.authUserId || null;
+    const visible = rows.map((row) => {
+      const hidden = Boolean(Number(row.admin_hidden));
+      const removed = Boolean(Number(row.admin_removed));
+      const isOwner = viewerId && row.author_id === viewerId;
+      if (removed || (hidden && !isOwner)) {
+        return { ...row, content: "" };
+      }
+      return row;
+    });
+    res.json(visible);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3112,7 +3336,7 @@ app.post(
         `INSERT INTO comments (id, post_id, author_id, content, parent_id)
        VALUES ($1,$2,$3,$4,$5)
        ON DUPLICATE KEY UPDATE id=id`,
-        [id, req.params.id, author_id, content, parent_id],
+        [id, req.params.id, author_id, clipText(content, TEXT_LIMIT.comment), parent_id],
         "comments",
         "id=$1",
         [id],
@@ -3136,6 +3360,34 @@ app.post(
     }
   },
 );
+
+app.patch("/api/comments/:id", requireDb, requireAuth, async (req, res) => {
+  const content = clipText(String(req.body.content || "").trim(), TEXT_LIMIT.comment);
+  if (!content) return res.status(400).json({ error: "Content required" });
+  try {
+    const { rows: existing } = await pool.query(
+      "SELECT author_id, admin_hidden, admin_removed FROM comments WHERE id=$1",
+      [req.params.id],
+    );
+    if (!existing.length) return res.status(404).json({ error: "Comment not found" });
+    if (existing[0].author_id !== req.authUserId)
+      return res.status(403).json({ error: "Forbidden" });
+    if (Boolean(Number(existing[0].admin_hidden)) || Boolean(Number(existing[0].admin_removed))) {
+      return res.status(403).json({ error: "Hidden comments cannot be edited" });
+    }
+    const { rows } = await queryReturning(
+      `UPDATE comments SET content=$1 WHERE id=$2`,
+      [content, req.params.id],
+      "comments",
+      "id=$1",
+      [req.params.id],
+    );
+    if (!rows.length) return res.status(404).json({ error: "Comment not found" });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.delete("/api/comments/:id", requireDb, requireAuth, async (req, res) => {
   try {
@@ -3519,7 +3771,7 @@ app.post("/api/reviews", requireDb, requireAuth, async (req, res) => {
         order_id,
         rating,
         tags || [],
-        comment,
+        clipText(comment, TEXT_LIMIT.reviewComment),
         product_title,
         product_image,
       ],
@@ -3745,8 +3997,8 @@ app.post("/api/disputes", requireDb, requireAuth, async (req, res) => {
         req.authUserId,
         reason,
         action,
-        description,
-        evidence || [],
+        clipText(description, TEXT_LIMIT.disputeDetails),
+        Array.isArray(evidence) ? evidence.slice(0, 5) : [],
       ],
       "disputes",
       "order_id=$1 AND opened_by_user_id=$2",
@@ -3868,10 +4120,10 @@ app.post("/api/inquiries", requireDb, async (req, res) => {
       [
         id,
         req.authUserId,
-        email || null,
+        email ? clipText(String(email).trim(), TEXT_LIMIT.inquiryEmail) : null,
         cat,
-        String(title).trim(),
-        String(content).trim(),
+        clipText(String(title).trim(), TEXT_LIMIT.inquiryTitle),
+        clipText(String(content).trim(), TEXT_LIMIT.inquiryContent),
         imgs,
       ],
       "inquiries",
@@ -4003,7 +4255,7 @@ app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
       pool
         .query(
           `SELECT COUNT(*) FROM orders o
-            WHERE ${orderDisplayStatusSql("o")} NOT IN ('completed','complete','완료','수령완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute','관리자해결')
+            WHERE ${orderDisplayStatusSql("o")} NOT IN ('completed','complete','완료','수령완료','제안중','pending_offer','제안거절','offer_declined','분쟁','dispute','관리자해결','거래불발','trade_failed')
               AND NOT (o.buyer_completed = true AND o.seller_completed = true)`,
         )
         .catch(zero),
@@ -4211,7 +4463,25 @@ app.patch(
     const reason = suspended
       ? String(req.body.reason || "").trim().slice(0, 500)
       : null;
+    const expectedStatus = req.body.expectedStatus
+      ? String(req.body.expectedStatus)
+      : null;
     try {
+      if (expectedStatus) {
+        const current = await pool.query(
+          "SELECT account_status FROM users WHERE id = $1 LIMIT 1",
+          [req.params.id],
+        );
+        if (!current.rows.length)
+          return res.status(404).json({ error: "Not found" });
+        const currentStatus = current.rows[0].account_status || "active";
+        if (currentStatus !== expectedStatus) {
+          return res.status(409).json({
+            error: "Account status changed",
+            account_status: currentStatus,
+          });
+        }
+      }
       const { rows } = await queryReturning(
         `UPDATE users
             SET account_status = $1,
@@ -4444,14 +4714,57 @@ app.put(
   },
 );
 
+/** Tell a content owner that an admin hid or removed their content. */
+async function notifyModeration({ userId, title, body, link, idSeed }) {
+  if (!userId) return;
+  try {
+    await pool.query(
+      `INSERT INTO notifications (id, target_user_id, type, title, content, link)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON DUPLICATE KEY UPDATE id=id`,
+      [`notif_mod_${idSeed}_${Date.now()}`, userId, "order", title, body, link],
+    );
+  } catch (err) {
+    console.warn("[moderation] notification failed:", err.message);
+  }
+}
+
+/** DELETE requests carry the moderation reason in the query string. */
+function moderationReason(req) {
+  const raw = req.query?.reason ?? req.body?.reason ?? "";
+  return String(raw).trim().slice(0, 500);
+}
+
+function withReason(sentence, reason) {
+  return reason ? `${sentence} Reason: ${reason}` : sentence;
+}
+
 // ?????? ????? (??????)
 app.delete(
   "/api/admin/products/:id",
   requireDb,
   requireAdmin,
   async (req, res) => {
+    const reason = moderationReason(req);
     try {
+      const prev = await pool.query(
+        "SELECT seller_id, title FROM products WHERE id=$1",
+        [req.params.id],
+      );
       await pool.query("DELETE FROM products WHERE id=$1", [req.params.id]);
+      const owner = prev.rows[0];
+      if (owner?.seller_id) {
+        await notifyModeration({
+          userId: owner.seller_id,
+          title: "Listing removed",
+          body: withReason(
+            `Your listing "${String(owner.title || "Listing")}" was removed by an admin.`,
+            reason,
+          ),
+          link: "/my/products",
+          idSeed: `prod_del_${req.params.id}`,
+        });
+      }
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -4503,6 +4816,11 @@ app.patch(
     const hidden = Boolean(req.body.hidden);
     const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
     try {
+      const prev = await pool.query(
+        "SELECT seller_id, title, admin_hidden FROM products WHERE id=$1",
+        [req.params.id],
+      );
+      if (!prev.rows.length) return res.status(404).json({ error: "Not found" });
       const { rows } = await queryReturning(
         `UPDATE products
             SET admin_hidden = $1,
@@ -4515,7 +4833,33 @@ app.patch(
         [req.params.id],
       );
       if (!rows.length) return res.status(404).json({ error: "Not found" });
-      res.json(rows[0]);
+      const product = rows[0];
+      const sellerId = product.seller_id || prev.rows[0].seller_id;
+      const wasHidden = Boolean(prev.rows[0].admin_hidden);
+      if (hidden && !wasHidden && sellerId) {
+        const listingTitle = String(product.title || prev.rows[0].title || "Listing");
+        const content = reason
+          ? `Your listing "${listingTitle}" was suspended by an admin. Reason: ${reason}`
+          : `Your listing "${listingTitle}" was suspended by an admin.`;
+        try {
+          await pool.query(
+            `INSERT INTO notifications (id, target_user_id, type, title, content, link)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON DUPLICATE KEY UPDATE id=id`,
+            [
+              `notif_hide_${product.id}_${Date.now()}`,
+              sellerId,
+              "order",
+              "Listing suspended",
+              content,
+              `/product/${product.id}`,
+            ],
+          );
+        } catch (notifyErr) {
+          console.warn("[admin/products] hide notification failed:", notifyErr.message);
+        }
+      }
+      res.json(product);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -4553,11 +4897,171 @@ app.delete(
   requireDb,
   requireAdmin,
   async (req, res) => {
+    const reason = moderationReason(req);
     try {
+      const prev = await pool.query(
+        "SELECT author_id, title FROM community_posts WHERE id=$1",
+        [req.params.id],
+      );
       await pool.query("DELETE FROM community_posts WHERE id=$1", [
         req.params.id,
       ]);
+      const owner = prev.rows[0];
+      if (owner?.author_id) {
+        await notifyModeration({
+          userId: owner.author_id,
+          title: "Post removed",
+          body: withReason(
+            `Your post "${String(owner.title || "Post")}" was removed by an admin.`,
+            reason,
+          ),
+          link: "/my/posts",
+          idSeed: `post_del_${req.params.id}`,
+        });
+      }
       res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/posts/:id/visibility",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const hidden = Boolean(req.body.hidden);
+    const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
+    try {
+      const prev = await pool.query(
+        "SELECT author_id, title, admin_hidden FROM community_posts WHERE id=$1",
+        [req.params.id],
+      );
+      if (!prev.rows.length) return res.status(404).json({ error: "Not found" });
+      const { rows } = await queryReturning(
+        `UPDATE community_posts
+            SET admin_hidden = $1,
+                admin_hidden_reason = $2,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hidden, reason, req.params.id],
+        "community_posts",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      const post = rows[0];
+      const wasHidden = Boolean(Number(prev.rows[0].admin_hidden));
+      if (hidden && !wasHidden) {
+        await notifyModeration({
+          userId: post.author_id || prev.rows[0].author_id,
+          title: "Post hidden",
+          body: withReason(
+            `Your post "${String(post.title || prev.rows[0].title || "Post")}" was hidden by an admin.`,
+            reason,
+          ),
+          link: `/community/post/${req.params.id}`,
+          idSeed: `post_hide_${req.params.id}`,
+        });
+      }
+      res.json(post);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/comments/:id/visibility",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const hidden = Boolean(req.body.hidden);
+    const reason = hidden ? String(req.body.reason || "").trim().slice(0, 500) : null;
+    try {
+      const prev = await pool.query(
+        `SELECT c.author_id, c.post_id, c.admin_hidden, p.title AS post_title
+           FROM comments c
+           LEFT JOIN community_posts p ON p.id = c.post_id
+          WHERE c.id=$1`,
+        [req.params.id],
+      );
+      if (!prev.rows.length) return res.status(404).json({ error: "Not found" });
+      const { rows } = await queryReturning(
+        `UPDATE comments
+            SET admin_hidden = $1,
+                admin_hidden_reason = $2,
+                admin_hidden_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+          WHERE id = $3`,
+        [hidden, reason, req.params.id],
+        "comments",
+        "id=$1",
+        [req.params.id],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Not found" });
+      const before = prev.rows[0];
+      if (hidden && !Boolean(Number(before.admin_hidden))) {
+        await notifyModeration({
+          userId: before.author_id,
+          title: "Comment hidden",
+          body: withReason(
+            `Your comment on "${String(before.post_title || "Post")}" was hidden by an admin.`,
+            reason,
+          ),
+          link: before.post_id ? `/community/post/${before.post_id}` : "/community",
+          idSeed: `cmt_hide_${req.params.id}`,
+        });
+      }
+      res.json(rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/admin/comments/:id",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    const reason = moderationReason(req);
+    try {
+      const { rows: existing } = await pool.query(
+        `SELECT c.post_id, c.author_id, p.title AS post_title
+           FROM comments c
+           LEFT JOIN community_posts p ON p.id = c.post_id
+          WHERE c.id=$1`,
+        [req.params.id],
+      );
+      if (!existing.length) return res.status(404).json({ error: "Not found" });
+      const comment = existing[0];
+      await pool.query(
+        `UPDATE comments
+            SET admin_removed = 1,
+                admin_hidden = 0,
+                admin_hidden_reason = $1,
+                admin_hidden_at = NOW()
+          WHERE id = $2`,
+        [reason || null, req.params.id],
+      );
+      if (comment.post_id) {
+        await pool.query(
+          `UPDATE community_posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id=$1`,
+          [comment.post_id],
+        );
+      }
+      await notifyModeration({
+        userId: comment.author_id,
+        title: "Comment removed",
+        body: withReason(
+          `Your comment on "${String(comment.post_title || "Post")}" was removed by an admin.`,
+          reason,
+        ),
+        link: comment.post_id ? `/community/post/${comment.post_id}` : "/community",
+        idSeed: `cmt_del_${req.params.id}`,
+      });
+      res.json({ ok: true, tombstoned: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -4571,6 +5075,7 @@ const VALID_REPORT_TARGETS = new Set([
   "review",
   "user",
   "comment",
+  "chat",
 ]);
 
 // User submits a report
@@ -4581,6 +5086,23 @@ app.post("/api/reports", requireDb, requireAuth, async (req, res) => {
   }
   if (!target_id || !reason || !String(reason).trim()) {
     return res.status(400).json({ error: "target_id and reason are required" });
+  }
+  if (target_type === "chat") {
+    try {
+      const { rows: roomRows } = await pool.query(
+        "SELECT buyer_id, seller_id FROM chat_rooms WHERE id=$1",
+        [target_id],
+      );
+      if (!roomRows.length) return res.status(404).json({ error: "Room not found" });
+      if (
+        req.authUserId !== roomRows[0].buyer_id &&
+        req.authUserId !== roomRows[0].seller_id
+      ) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
   const id = `rpt_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   try {
@@ -4606,7 +5128,9 @@ app.post("/api/reports", requireDb, requireAuth, async (req, res) => {
         target_type,
         target_id,
         String(reason).trim(),
-        description ? String(description).trim() : null,
+        description
+          ? clipText(String(description).trim(), TEXT_LIMIT.reportDetails)
+          : null,
       ],
       "reports",
     );
@@ -4635,10 +5159,87 @@ app.get("/api/admin/reports", requireDb, requireAdmin, async (req, res) => {
   try {
     let query = `SELECT r.*,
                         rep.nickname AS reporter_nickname,
-                        rsv.nickname AS resolved_by_nickname
+                        rep.kyc_status AS reporter_kyc_status,
+                        rep.account_status AS reporter_account_status,
+                        rep.pi_username AS reporter_pi_username,
+                        rep.activity_region AS reporter_activity_region,
+                        rsv.nickname AS resolved_by_nickname,
+                        owner.id AS owner_id,
+                        owner.nickname AS owner_nickname,
+                        owner.kyc_status AS owner_kyc_status,
+                        owner.account_status AS owner_account_status,
+                        owner.pi_username AS owner_pi_username,
+                        owner.activity_region AS owner_activity_region,
+                        c.post_id AS comment_post_id,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.title
+                          WHEN 'post' THEN cp.title
+                          WHEN 'comment' THEN LEFT(c.content, 80)
+                          WHEN 'review' THEN COALESCE(rv.product_title, LEFT(rv.comment, 80))
+                          WHEN 'user' THEN owner.nickname
+                          WHEN 'chat' THEN pchat.title
+                          ELSE NULL
+                        END AS target_title,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.description
+                          WHEN 'post' THEN cp.content
+                          WHEN 'comment' THEN c.content
+                          WHEN 'review' THEN rv.comment
+                          WHEN 'chat' THEN CONCAT(COALESCE(cr_buyer.nickname, ''), ' / ', COALESCE(cr_seller.nickname, ''))
+                          ELSE NULL
+                        END AS target_body,
+                        CASE r.target_type WHEN 'product' THEN p.price ELSE NULL END AS target_price,
+                        CASE r.target_type WHEN 'product' THEN p.is_free_share ELSE NULL END AS target_is_free_share,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.images
+                          WHEN 'post' THEN cp.images
+                          WHEN 'chat' THEN pchat.images
+                          ELSE NULL
+                        END AS target_images,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.id
+                          WHEN 'post' THEN cp.id
+                          WHEN 'comment' THEN c.id
+                          WHEN 'review' THEN rv.id
+                          WHEN 'user' THEN owner.id
+                          WHEN 'chat' THEN cr.id
+                          ELSE NULL
+                        END AS target_row_id,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.admin_hidden
+                          WHEN 'post' THEN cp.admin_hidden
+                          WHEN 'comment' THEN c.admin_hidden
+                          WHEN 'chat' THEN cr.admin_hidden
+                          ELSE 0
+                        END AS target_hidden,
+                        CASE r.target_type
+                          WHEN 'product' THEN p.admin_hidden_reason
+                          WHEN 'post' THEN cp.admin_hidden_reason
+                          WHEN 'comment' THEN c.admin_hidden_reason
+                          WHEN 'chat' THEN cr.admin_hidden_reason
+                          ELSE NULL
+                        END AS target_hidden_reason
                  FROM reports r
                  LEFT JOIN users rep ON r.reporter_id = rep.id
                  LEFT JOIN users rsv ON r.resolved_by = rsv.id
+                 LEFT JOIN products p ON r.target_type = 'product' AND r.target_id = p.id
+                 LEFT JOIN community_posts cp ON r.target_type = 'post' AND r.target_id = cp.id
+                 LEFT JOIN comments c ON r.target_type = 'comment' AND r.target_id = c.id
+                 LEFT JOIN reviews rv ON r.target_type = 'review' AND r.target_id = rv.id
+                 LEFT JOIN chat_rooms cr ON r.target_type IN ('chat','chat_room') AND r.target_id = cr.id
+                 LEFT JOIN products pchat ON r.target_type IN ('chat','chat_room') AND cr.product_id = pchat.id
+                 LEFT JOIN users cr_buyer ON cr.buyer_id = cr_buyer.id
+                 LEFT JOIN users cr_seller ON cr.seller_id = cr_seller.id
+                 LEFT JOIN users owner ON owner.id = CASE r.target_type
+                   WHEN 'product' THEN p.seller_id
+                   WHEN 'post' THEN cp.author_id
+                   WHEN 'comment' THEN c.author_id
+                   WHEN 'review' THEN rv.reviewer_id
+                   WHEN 'user' THEN r.target_id
+                   WHEN 'chat' THEN CASE WHEN r.reporter_id = cr.buyer_id THEN cr.seller_id ELSE cr.buyer_id END
+                   WHEN 'chat_room' THEN CASE WHEN r.reporter_id = cr.buyer_id THEN cr.seller_id ELSE cr.buyer_id END
+                   ELSE NULL
+                 END
                  WHERE 1=1`;
     const params = [];
     if (status) {
@@ -5314,14 +5915,17 @@ io.on("connection", async (socket) => {
             message.id,
             roomId,
             claimedSender === "system" ? "system" : userId,
-            message.content,
+            clipUserChatContent(message.content, message.type),
             message.type || "text",
-            message.images || [],
+            clipChatImages(message.images),
             message.orderId || null,
             message.originalPrice ?? null,
             message.proposedPrice ?? null,
             message.offerResult || null,
-            message.meetupPlace || message.meetupLocation || null,
+            clipText(
+              message.meetupPlace || message.meetupLocation || null,
+              TEXT_LIMIT.meetupPlace,
+            ),
             message.meetupDate && message.meetupTime
               ? `${message.meetupDate} ${message.meetupTime}`
               : message.meetupTime || null,

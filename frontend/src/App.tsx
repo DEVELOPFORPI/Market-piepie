@@ -28,6 +28,7 @@ import { MyOrders } from './pages/MyOrders';
 import { MyDisputes } from './pages/MyDisputes';
 import { MyReviews } from './pages/MyReviews';
 import { MyPosts } from './pages/MyPosts';
+import { MyComments } from './pages/MyComments';
 import { MyInquiries } from './pages/MyInquiries';
 import { Settings } from './pages/Settings';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -58,6 +59,7 @@ import { AppLogin } from './pages/AppLogin';
 import { isLoggedIn, getCurrentUserId, ensureImplicitSession, isTestPresetUser } from './utils/authStorage';
 import { isTestLoginEnabled } from './config/features';
 import { api } from './utils/api';
+import { applySuspendedAccess, refreshSuspendedAccountStatus } from './utils/guestGate';
 import { checkMyProfileInDB, initDBSync, resetLocalCacheForIncompleteProfile, syncProductsFromDB, syncNotificationsFromDB, syncChatRoomsFromDB } from './utils/dbSync';
 import { isApiRateLimited } from './utils/api';
 import { connectChatSocket, disconnectChatSocket, onRoomUpdated, onNewRoom, onNewMessage, onOrderUpdated, onProductFeedChange, onNotification } from './utils/chatSocket';
@@ -108,6 +110,7 @@ const HIDE_NAV_PREFIXES = [
   '/my/disputes',
   '/my/reviews',
   '/my/posts',
+  '/my/comments',
   '/my/inquiries',
   '/review/',
   '/region/',
@@ -163,7 +166,6 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     if (testModeEnabled) return;
     if (location.pathname.startsWith('/admin') || location.pathname === '/admin-auth') return;
     if (location.pathname === "/app-login" || location.pathname === "/welcome") return;
-    if (typeof window !== "undefined" && /PiBrowser/i.test(navigator.userAgent) && !sessionStorage.getItem("currentUserId")) return;
     ensureImplicitSession();
   }, [testModeEnabled, location.pathname]);
 
@@ -171,7 +173,17 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     if (!heavyReady) return;
     const kick = async () => {
       await ensureImplicitSession();
+      await refreshSuspendedAccountStatus();
       const userId = getCurrentUserId() || undefined;
+      if (userId && !userId.startsWith('guest_')) {
+        const accountRes = await api.get<{ account_status?: string; suspension_reason?: string | null }>(`/api/users/${userId}`);
+        if (accountRes.ok && accountRes.data?.account_status === 'suspended') {
+          await applySuspendedAccess(accountRes.data.suspension_reason);
+          initDBSync(undefined);
+          connectChatSocket();
+          return;
+        }
+      }
       if (userId && !userId.startsWith('guest_') && !isTestLoginEnabled()) {
         const profileStatus = await checkMyProfileInDB(userId);
         if (profileStatus === 'incomplete' && !isOnboardingExemptPath(window.location.pathname)) {
@@ -476,6 +488,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/my/disputes" element={<MyDisputes />} />
           <Route path="/my/reviews" element={<MyReviews />} />
           <Route path="/my/posts" element={<MyPosts />} />
+          <Route path="/my/comments" element={<MyComments />} />
           <Route path="/my/inquiries" element={<MyInquiries />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/inquiry" element={<InquiryWrite />} />

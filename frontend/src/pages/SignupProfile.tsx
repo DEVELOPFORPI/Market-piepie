@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { saveProfile } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
@@ -187,13 +188,7 @@ export const SignupProfile: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
             </span>
-            <input
-              id="signup-profile-file"
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImage}
-            />
+            <FilePickerInput id="signup-profile-file" onChange={handleImage} />
           </label>
           <span className="text-xs text-gray-400 mt-3">{t('profilePhotoOptional')}</span>
         </div>

@@ -137,7 +137,7 @@ export const ActivityBadgesPanel: React.FC = () => {
                 )}
                 {isProfilePick && (
                   <span
-                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow"
+                    className="absolute top-0 right-0 w-6 h-6 rounded-full flex items-center justify-center shadow pointer-events-none"
                     style={{ backgroundColor: TEAL }}
                     aria-hidden
                   >

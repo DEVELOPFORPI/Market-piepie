@@ -1,5 +1,5 @@
 import { API_BASE } from '@/utils/apiConfig';
-import { ensureImplicitSession, getSessionToken } from '@/utils/authStorage';
+import { ensureImplicitSession, getSessionToken, handleExpiredSession } from '@/utils/authStorage';
 import { getAdminToken } from '@/utils/adminAccessStorage';
 
 type UploadImageOptions = {
@@ -41,6 +41,13 @@ async function blobUrlToFile(blobUrl: string): Promise<File> {
   if (!res.ok) throw new Error('Could not load local image');
   const blob = await res.blob();
   return new File([blob], fileNameForMime(blob.type), { type: blob.type || 'image/jpeg' });
+}
+
+/** Files kept with their preview URL so submit does not have to re-read a blob:. */
+const previewFiles = new Map<string, File>();
+
+function fileForPreview(url: string): File | undefined {
+  return previewFiles.get(url);
 }
 
 const MAX_IMAGE_EDGE = 1920;
@@ -107,9 +114,15 @@ async function prepareImageForUpload(file: File): Promise<File> {
   }
 
   if (!blob) {
-    const img = await loadHtmlImage(file);
-    ({ width, height } = scaledSize(img.naturalWidth || img.width, img.naturalHeight || img.height));
-    blob = await canvasToJpegBlob(img, width, height);
+    try {
+      const img = await loadHtmlImage(file);
+      ({ width, height } = scaledSize(img.naturalWidth || img.width, img.naturalHeight || img.height));
+      blob = await canvasToJpegBlob(img, width, height);
+    } catch {
+      // Phone ran out of memory or could not transcode (HEIC, huge photo).
+      // Send the original so Publish still has a chance.
+      return file;
+    }
   }
 
   return new File([blob], fileNameForMime('image/jpeg'), { type: 'image/jpeg' });
@@ -130,6 +143,16 @@ async function authHeaders(options?: UploadImageOptions): Promise<Record<string,
   return headers;
 }
 
+const UPLOAD_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 600;
+
+const wait = (ms: number) => new Promise((resolve) => { window.setTimeout(resolve, ms); });
+
+/** Worth another try: the request never got a real answer, or the server was busy. */
+function isRetriableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
 export async function uploadImageToR2(
   file: File,
   options?: UploadImageOptions,
@@ -138,34 +161,85 @@ export async function uploadImageToR2(
     throw new Error('Only image files can be uploaded');
   }
 
-  const prepared = await prepareImageForUpload(file);
-
-  const formData = new FormData();
-  formData.append('image', prepared);
-  if (options?.folder) formData.append('folder', options.folder);
-
-  const res = await fetch(`${API_BASE}/api/uploads/image`, {
-    method: 'POST',
-    headers: await authHeaders(options),
-    body: formData,
-  });
-  const data = await res.json().catch(() => null) as UploadImageResponse | null;
-
-  if (!res.ok || !data?.url) {
-    throw new Error(data?.error || `Image upload failed (${res.status})`);
+  let prepared: File;
+  try {
+    prepared = await prepareImageForUpload(file);
+  } catch {
+    prepared = file;
   }
 
-  return data.url;
+  const send = async () => {
+    const formData = new FormData();
+    formData.append('image', prepared);
+    if (options?.folder) formData.append('folder', options.folder);
+
+    const res = await fetch(`${API_BASE}/api/uploads/image`, {
+      method: 'POST',
+      headers: await authHeaders(options),
+      body: formData,
+    });
+    const data = await res.json().catch(() => null) as UploadImageResponse | null;
+    return { res, data };
+  };
+
+  let lastError = 'Image upload failed';
+  let sessionRefreshed = false;
+
+  // A single dropped request used to fail the whole post / listing / message.
+  // On mobile the connection often dies mid-flight (webview backgrounded, cell
+  // handover), so give the same photo a couple more tries before giving up.
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
+    let res: Response;
+    let data: UploadImageResponse | null;
+    try {
+      ({ res, data } = await send());
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : 'Network error';
+      if (attempt < UPLOAD_ATTEMPTS) {
+        await wait(RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+      break;
+    }
+
+    if (res.ok && data?.url) return data.url;
+
+    lastError = data?.error || `Image upload failed (${res.status})`;
+
+    // Uploads need a session token. A token that never got issued (offline /
+    // rate limited at login) is retried once; one the server rejects is dropped.
+    if (res.status === 401) {
+      if (data?.error === 'Invalid or expired session') {
+        handleExpiredSession();
+        break;
+      }
+      if (sessionRefreshed) break;
+      sessionRefreshed = true;
+      await ensureImplicitSession();
+      continue;
+    }
+
+    if (!isRetriableStatus(res.status) || attempt === UPLOAD_ATTEMPTS) break;
+    await wait(RETRY_BASE_DELAY_MS * attempt);
+  }
+
+  throw new Error(lastError);
 }
 
 export function createLocalPreviewUrls(files: File[]): string[] {
   return files
     .filter((file) => !file.type || file.type.startsWith('image/'))
-    .map((file) => URL.createObjectURL(file));
+    .map((file) => {
+      const url = URL.createObjectURL(file);
+      previewFiles.set(url, file);
+      return url;
+    });
 }
 
 export function revokeLocalPreviewUrl(url: string | undefined): void {
-  if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+  if (!url?.startsWith('blob:')) return;
+  previewFiles.delete(url);
+  URL.revokeObjectURL(url);
 }
 
 export async function uploadImagesToR2(
@@ -186,7 +260,8 @@ export async function uploadImageReferenceToR2(
     return uploadImageToR2(dataUrlToFile(image), options);
   }
   if (image.startsWith('blob:')) {
-    return uploadImageToR2(await blobUrlToFile(image), options);
+    const kept = fileForPreview(image);
+    return uploadImageToR2(kept ?? await blobUrlToFile(image), options);
   }
   return image;
 }
@@ -195,6 +270,12 @@ export async function uploadImageReferencesToR2(
   images: string[],
   options?: UploadImageOptions,
 ): Promise<string[]> {
-  const uploaded = await Promise.all(images.map((image) => uploadImageReferenceToR2(image, options)));
-  return uploaded.filter((image) => image.length > 0);
+  // One at a time: four large photos compressed together routinely crash the
+  // phone WebView, which looks like an instant "could not upload" on Publish.
+  const uploaded: string[] = [];
+  for (const image of images) {
+    const url = await uploadImageReferenceToR2(image, options);
+    if (url) uploaded.push(url);
+  }
+  return uploaded;
 }

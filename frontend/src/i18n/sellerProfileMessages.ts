@@ -3,6 +3,9 @@ import type { AppLanguage } from '@/utils/languageStorage';
 
 export type SellerProfileMessageKey =
   | 'listingsTab'
+  | 'commentsTab'
+  | 'noProfileComments'
+  | 'commentOnPost'
   | 'postsTab'
   | 'userNotFound'
   | 'sellerNoListings'
@@ -16,6 +19,9 @@ export type SellerProfileMessageKey =
 const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKey, string>> = {
   en: {
     listingsTab: 'Listings',
+    commentsTab: 'Comments',
+    noProfileComments: 'No comments yet.',
+    commentOnPost: 'On "{title}"',
     postsTab: 'Posts',
     userNotFound: 'User not found.',
     sellerNoListings: 'No listings.',
@@ -28,6 +34,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ko: {
     listingsTab: '상품',
+    commentsTab: '댓글',
+    noProfileComments: '작성한 댓글이 없습니다.',
+    commentOnPost: '"{title}"에 남긴 댓글',
     postsTab: '게시글',
     userNotFound: '사용자를 찾을 수 없습니다.',
     sellerNoListings: '등록된 상품이 없습니다.',
@@ -40,6 +49,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   zh: {
     listingsTab: '商品',
+    commentsTab: '评论',
+    noProfileComments: '暂无评论。',
+    commentOnPost: '发表于“{title}”',
     postsTab: '帖子',
     userNotFound: '未找到用户。',
     sellerNoListings: '暂无商品。',
@@ -52,6 +64,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ja: {
     listingsTab: '出品',
+    commentsTab: 'コメント',
+    noProfileComments: 'コメントはまだありません。',
+    commentOnPost: '「{title}」へのコメント',
     postsTab: '投稿',
     userNotFound: 'ユーザーが見つかりません。',
     sellerNoListings: '出品がありません。',
@@ -64,6 +79,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   es: {
     listingsTab: 'Anuncios',
+    commentsTab: 'Comentarios',
+    noProfileComments: 'Aún no hay comentarios.',
+    commentOnPost: 'En "{title}"',
     postsTab: 'Publicaciones',
     userNotFound: 'Usuario no encontrado.',
     sellerNoListings: 'Sin anuncios.',
@@ -76,6 +94,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   pt: {
     listingsTab: 'Anúncios',
+    commentsTab: 'Comentários',
+    noProfileComments: 'Ainda sem comentários.',
+    commentOnPost: 'Em "{title}"',
     postsTab: 'Posts',
     userNotFound: 'Usuário não encontrado.',
     sellerNoListings: 'Sem anúncios.',
@@ -88,6 +109,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   fr: {
     listingsTab: 'Annonces',
+    commentsTab: 'Commentaires',
+    noProfileComments: 'Pas encore de commentaires.',
+    commentOnPost: 'Sur « {title} »',
     postsTab: 'Publications',
     userNotFound: 'Utilisateur introuvable.',
     sellerNoListings: 'Aucune annonce.',
@@ -100,6 +124,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   de: {
     listingsTab: 'Anzeigen',
+    commentsTab: 'Kommentare',
+    noProfileComments: 'Noch keine Kommentare.',
+    commentOnPost: 'Zu „{title}“',
     postsTab: 'Beiträge',
     userNotFound: 'Benutzer nicht gefunden.',
     sellerNoListings: 'Keine Anzeigen.',
@@ -112,6 +139,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   id: {
     listingsTab: 'Listing',
+    commentsTab: 'Komentar',
+    noProfileComments: 'Belum ada komentar.',
+    commentOnPost: 'Di "{title}"',
     postsTab: 'Postingan',
     userNotFound: 'Pengguna tidak ditemukan.',
     sellerNoListings: 'Tidak ada listing.',
@@ -124,6 +154,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   vi: {
     listingsTab: 'Tin đăng',
+    commentsTab: 'Bình luận',
+    noProfileComments: 'Chưa có bình luận.',
+    commentOnPost: 'Trên "{title}"',
     postsTab: 'Bài viết',
     userNotFound: 'Không tìm thấy người dùng.',
     sellerNoListings: 'Không có tin đăng.',
@@ -136,6 +169,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   th: {
     listingsTab: 'ประกาศ',
+    commentsTab: 'ความคิดเห็น',
+    noProfileComments: 'ยังไม่มีความคิดเห็น',
+    commentOnPost: 'ใน "{title}"',
     postsTab: 'โพสต์',
     userNotFound: 'ไม่พบผู้ใช้',
     sellerNoListings: 'ไม่มีประกาศ',
@@ -148,6 +184,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   hi: {
     listingsTab: 'लिस्टिंग',
+    commentsTab: 'टिप्पणियाँ',
+    noProfileComments: 'अभी कोई टिप्पणी नहीं।',
+    commentOnPost: '"{title}" पर',
     postsTab: 'पोस्ट',
     userNotFound: 'उपयोगकर्ता नहीं मिला।',
     sellerNoListings: 'कोई लिस्टिंग नहीं।',
@@ -160,6 +199,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ar: {
     listingsTab: 'الإعلانات',
+    commentsTab: 'التعليقات',
+    noProfileComments: 'لا تعليقات بعد.',
+    commentOnPost: 'على "{title}"',
     postsTab: 'المنشورات',
     userNotFound: 'المستخدم غير موجود.',
     sellerNoListings: 'لا إعلانات.',
@@ -172,6 +214,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ru: {
     listingsTab: 'Объявления',
+    commentsTab: 'Комментарии',
+    noProfileComments: 'Пока нет комментариев.',
+    commentOnPost: 'К «{title}»',
     postsTab: 'Посты',
     userNotFound: 'Пользователь не найден.',
     sellerNoListings: 'Нет объявлений.',
@@ -184,6 +229,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   tr: {
     listingsTab: 'İlanlar',
+    commentsTab: 'Yorumlar',
+    noProfileComments: 'Henüz yorum yok.',
+    commentOnPost: '"{title}" üzerinde',
     postsTab: 'Gönderiler',
     userNotFound: 'Kullanıcı bulunamadı.',
     sellerNoListings: 'İlan yok.',
@@ -196,6 +244,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   it: {
     listingsTab: 'Annunci',
+    commentsTab: 'Commenti',
+    noProfileComments: 'Nessun commento ancora.',
+    commentOnPost: 'Su "{title}"',
     postsTab: 'Post',
     userNotFound: 'Utente non trovato.',
     sellerNoListings: 'Nessun annuncio.',
@@ -208,6 +259,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   pl: {
     listingsTab: 'Ogłoszenia',
+    commentsTab: 'Komentarze',
+    noProfileComments: 'Brak komentarzy.',
+    commentOnPost: 'W „{title}”',
     postsTab: 'Posty',
     userNotFound: 'Nie znaleziono użytkownika.',
     sellerNoListings: 'Brak ogłoszeń.',
@@ -220,6 +274,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   nl: {
     listingsTab: 'Advertenties',
+    commentsTab: 'Reacties',
+    noProfileComments: 'Nog geen reacties.',
+    commentOnPost: 'Op "{title}"',
     postsTab: 'Berichten',
     userNotFound: 'Gebruiker niet gevonden.',
     sellerNoListings: 'Geen advertenties.',
@@ -232,6 +289,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   fil: {
     listingsTab: 'Mga listing',
+    commentsTab: 'Mga komento',
+    noProfileComments: 'Wala pang komento.',
+    commentOnPost: 'Sa "{title}"',
     postsTab: 'Mga post',
     userNotFound: 'Hindi nahanap ang user.',
     sellerNoListings: 'Walang listing.',
@@ -244,6 +304,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   uk: {
     listingsTab: 'Оголошення',
+    commentsTab: 'Коментарі',
+    noProfileComments: 'Поки немає коментарів.',
+    commentOnPost: 'До «{title}»',
     postsTab: 'Пости',
     userNotFound: 'Користувача не знайдено.',
     sellerNoListings: 'Немає оголошень.',
@@ -256,6 +319,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   bn: {
     listingsTab: 'লিস্টিং',
+    commentsTab: 'মন্তব্য',
+    noProfileComments: 'এখনও কোনো মন্তব্য নেই।',
+    commentOnPost: '"{title}"-এ',
     postsTab: 'পোস্ট',
     userNotFound: 'ব্যবহারকারী পাওয়া যায়নি।',
     sellerNoListings: 'কোনো লিস্টিং নেই।',
@@ -268,6 +334,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ms: {
     listingsTab: 'Listing',
+    commentsTab: 'Komen',
+    noProfileComments: 'Belum ada komen.',
+    commentOnPost: 'Pada "{title}"',
     postsTab: 'Siaran',
     userNotFound: 'Pengguna tidak dijumpai.',
     sellerNoListings: 'Tiada listing.',
@@ -280,6 +349,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   sw: {
     listingsTab: 'Matangazo',
+    commentsTab: 'Maoni',
+    noProfileComments: 'Bado hakuna maoni.',
+    commentOnPost: 'Kwenye "{title}"',
     postsTab: 'Machapisho',
     userNotFound: 'Mtumiaji hajapatikana.',
     sellerNoListings: 'Hakuna matangazo.',
@@ -292,6 +364,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   fa: {
     listingsTab: 'آگهی‌ها',
+    commentsTab: 'نظرها',
+    noProfileComments: 'هنوز نظری نیست.',
+    commentOnPost: 'در «{title}»',
     postsTab: 'پست‌ها',
     userNotFound: 'کاربر پیدا نشد.',
     sellerNoListings: 'آگهی نیست.',
@@ -304,6 +379,9 @@ const SELLER_PROFILE_MESSAGES: Record<AppLanguage, Record<SellerProfileMessageKe
   },
   ur: {
     listingsTab: 'لسٹنگز',
+    commentsTab: 'تبصرے',
+    noProfileComments: 'ابھی کوئی تبصرہ نہیں۔',
+    commentOnPost: '"{title}" پر',
     postsTab: 'پوسٹس',
     userNotFound: 'صارف نہیں ملا۔',
     sellerNoListings: 'کوئی لسٹنگ نہیں۔',

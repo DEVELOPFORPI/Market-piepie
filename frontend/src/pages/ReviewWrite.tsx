@@ -12,6 +12,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { labelReviewTag } from '@/utils/reviewTagLabels';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const reviewTags = ['Quick response', 'On time', 'Kind', 'As described', 'Recommend'];
 
@@ -236,9 +237,13 @@ export const ReviewWrite: React.FC = () => {
         </div>
 
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">{t('commentLabel')}</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">{t('commentLabel')}</h2>
+            <span className="text-xs text-gray-400">{comment.length}/{TEXT_LIMIT.reviewComment}</span>
+          </div>
           <textarea
             value={comment}
+            maxLength={TEXT_LIMIT.reviewComment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={t('shareExperiencePh')}
             rows={6}

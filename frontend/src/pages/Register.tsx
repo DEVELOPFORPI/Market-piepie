@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { Product, PRODUCT_STATUS_VALUE, TRADE_METHOD_VALUE } from '@/types';
 import { saveProduct, getAllProducts } from '@/utils/productStorage';
 import { getRegion } from '@/utils/regionStorage';
@@ -11,6 +12,7 @@ import { hasProductActiveDispute } from '@/utils/disputeStorage';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { useLanguage } from '@/hooks/useLanguage';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const MAX_IMAGES = 5;
 const REGISTER_DRAFT_KEY_PREFIX = 'pipi_register_draft_v1_';
@@ -293,15 +295,9 @@ export const Register: React.FC = () => {
             {Array.from({ length: Math.max(1, MAX_IMAGES - images.length) }).map((_, i) => (
               <label
                 key={`slot-${i}`}
-                className="flex-shrink-0 w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#00A8A3] transition-colors"
+                className="relative flex-shrink-0 w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#00A8A3] transition-colors"
               >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
+                <FilePickerInput multiple onChange={handleImageUpload} />
                 <svg className="w-8 h-8 text-gray-400 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
@@ -312,12 +308,14 @@ export const Register: React.FC = () => {
         </section>
 
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">
-            {t('listingTitle')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-base font-semibold text-gray-900 mb-2">
+            <span>{t('listingTitle')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.listingTitle}</span>
           </label>
           <input
             type="text"
             value={title}
+            maxLength={TEXT_LIMIT.listingTitle}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t('listingTitlePlaceholder')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
@@ -364,11 +362,13 @@ export const Register: React.FC = () => {
         )}
 
         <section>
-          <label className="block text-base font-semibold text-gray-900 mb-2">
-            {t('description')} <span className="text-sm text-gray-500">{t('optional')}</span>
+          <label className="flex items-center justify-between text-base font-semibold text-gray-900 mb-2">
+            <span>{t('description')} <span className="text-sm font-normal text-gray-500">{t('optional')}</span></span>
+            <span className="text-xs font-normal text-gray-400">{description.length}/{TEXT_LIMIT.listingDescription}</span>
           </label>
           <textarea
             value={description}
+            maxLength={TEXT_LIMIT.listingDescription}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={t('describeItem')}
             rows={4}

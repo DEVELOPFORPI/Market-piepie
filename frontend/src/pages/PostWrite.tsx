@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/common/TopBar';
+import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { ListingCard } from '@/components/common/ListingCard';
 import { Post, PostCategory, Product, POST_CATEGORY_VALUE } from '@/types';
 import { useConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -17,6 +18,7 @@ import { hasSensitiveContent } from '@/utils/contentFilter';
 import { useGuestPageGuard } from '@/hooks/useGuestPageGuard';
 import { BottomSheet } from '@/components/common/BottomSheet';
 import { showToast } from '@/utils/toast';
+import { TEXT_LIMIT } from '@/constants/textLimits';
 
 const CAT_KEY: Record<PostCategory, AppMessageKey> = {
   [POST_CATEGORY_VALUE.QUESTION]: 'catQuestion',
@@ -67,6 +69,11 @@ export const PostWrite: React.FC = () => {
         if (existing.category === POST_CATEGORY_VALUE.DISPUTE && existing.orderId) {
           showToast(t('cannotEditDispute'));
           navigate('/community', { replace: true });
+          return;
+        }
+        if (existing.adminHidden) {
+          showToast(t('postAdminHiddenCannotEdit'));
+          navigate('/my/posts', { replace: true });
           return;
         }
         setCategory(existing.category);
@@ -135,6 +142,9 @@ export const PostWrite: React.FC = () => {
         setUploadingImages(true);
         try {
           imagesToSave = await uploadImageReferencesToR2(images, { folder: 'posts' });
+        } catch {
+          showToast(t('couldNotUpload'));
+          return;
         } finally {
           setUploadingImages(false);
         }
@@ -229,12 +239,14 @@ export const PostWrite: React.FC = () => {
 
         {/* Title */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            {t('titleLabel')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+            <span>{t('titleLabel')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{title.length}/{TEXT_LIMIT.postTitle}</span>
           </label>
           <input
             type="text"
             value={title}
+            maxLength={TEXT_LIMIT.postTitle}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t('titlePlaceholder')}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A8A3]"
@@ -243,11 +255,13 @@ export const PostWrite: React.FC = () => {
 
         {/* Content */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            {t('bodyLabel')} <span className="text-red-500">*</span>
+          <label className="flex items-center justify-between text-sm font-medium text-gray-700 mb-2">
+            <span>{t('bodyLabel')} <span className="text-red-500">*</span></span>
+            <span className="text-xs font-normal text-gray-400">{content.length}/{TEXT_LIMIT.postBody}</span>
           </label>
           <textarea
             value={content}
+            maxLength={TEXT_LIMIT.postBody}
             onChange={(e) => setContent(e.target.value)}
             placeholder={t('bodyPlaceholder')}
             rows={8}
@@ -273,14 +287,8 @@ export const PostWrite: React.FC = () => {
               </div>
             ))}
             {images.length < 5 && (
-              <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
+              <label className="relative aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-[#00A8A3]">
+                <FilePickerInput multiple onChange={handleImageUpload} />
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
