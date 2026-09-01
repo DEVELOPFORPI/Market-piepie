@@ -5,10 +5,10 @@ import { FilePickerInput } from '@/components/common/FilePickerInput';
 import { saveProfile } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
-import { isDeviceProfileOnce, setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
+import { setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
 import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
 import { suggestPiePieNickname } from '@/utils/nickname';
-import { saveMyProfileToDB } from '@/utils/dbSync';
+import { checkMyProfileInDB, saveMyProfileToDB } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
 import { showToast } from '@/utils/toast';
 
@@ -43,10 +43,11 @@ export const SignupProfile: React.FC = () => {
   const [activityRegion, setActivityRegion] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [paidReady, setPaidReady] = useState(false);
 
   useEffect(() => {
     const uid = getCurrentUserId();
-    if (!uid) {
+    if (!uid || uid.startsWith('guest_')) {
       navigate('/welcome', { replace: true });
       return;
     }
@@ -54,9 +55,27 @@ export const SignupProfile: React.FC = () => {
       navigate('/', { replace: true });
       return;
     }
-    if (isDeviceProfileOnce()) {
-      navigate('/login-app', { replace: true });
-    }
+    let cancelled = false;
+    void checkMyProfileInDB(uid).then((status) => {
+      if (cancelled) return;
+      if (status === 'complete') {
+        navigate('/', { replace: true });
+        return;
+      }
+      if (status === 'unpaid') {
+        let justPaid = false;
+        try { justPaid = sessionStorage.getItem('signup_after_payment') === '1'; } catch { /* ignore */ }
+        if (justPaid) {
+          try { sessionStorage.removeItem('signup_after_payment'); } catch { /* ignore */ }
+          setPaidReady(true);
+          return;
+        }
+        navigate('/welcome', { replace: true });
+        return;
+      }
+      setPaidReady(true);
+    });
+    return () => { cancelled = true; };
   }, [navigate]);
 
   // 닉네임 비어 있으면 PiePie + 랜덤 7자리 (서버에서 중복 제거)
@@ -140,6 +159,14 @@ export const SignupProfile: React.FC = () => {
     setOnboardingComplete();
     navigate('/', { replace: true });
   };
+
+  if (!paidReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white pb-28">

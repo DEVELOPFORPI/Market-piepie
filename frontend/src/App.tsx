@@ -186,7 +186,13 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
       }
       if (userId && !userId.startsWith('guest_') && !isTestLoginEnabled()) {
         const profileStatus = await checkMyProfileInDB(userId);
-        if (profileStatus === 'incomplete' && !isOnboardingExemptPath(window.location.pathname)) {
+        const path = window.location.pathname;
+        if (profileStatus === 'unpaid') {
+          if (path !== '/login-app' && path !== '/welcome' && path !== '/signup') {
+            resetLocalCacheForIncompleteProfile(userId);
+            navigate('/welcome', { replace: true });
+          }
+        } else if (profileStatus === 'incomplete' && !isOnboardingExemptPath(path)) {
           resetLocalCacheForIncompleteProfile(userId);
           navigate('/signup', { replace: true });
         }
@@ -360,14 +366,14 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     return <Navigate to="/welcome" replace />;
   }
 
-  // Production: logged in but no profile yet → signup (not welcome)
+  // Production: logged in but no profile yet → first login screen, never skip to signup
   if (
     !testModeEnabled &&
     loggedIn &&
     !isOnboardingComplete() &&
     !isOnboardingExemptPath(location.pathname)
   ) {
-    return <Navigate to="/signup" replace />;
+    return <Navigate to="/welcome" replace />;
   }
 
   if (isAdminPath && !isAdminVerified()) {

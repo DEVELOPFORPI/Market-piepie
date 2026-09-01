@@ -60,9 +60,14 @@ export const Welcome: React.FC = () => {
       if (verified.sessionToken) setSessionToken(verified.sessionToken);
       try { sessionStorage.setItem('pi_suggested_nickname', verified.username || ''); } catch {}
 
-      // DB가 원본: 서버에 프로필이 있어야 온보딩 완료로 인정
+      // DB가 원본: 결제 후에만 프로필, 프로필이 있어야 온보딩 완료
       setPiStep('Loading profile...');
       const profileStatus = await checkMyProfileInDB(verified.uid);
+      if (profileStatus === 'unpaid') {
+        setPendingVerified(verified);
+        setShowPaymentNotice(true);
+        return;
+      }
       if (profileStatus === 'incomplete') {
         resetLocalCacheForIncompleteProfile(verified.uid);
         navigate('/signup', { replace: true });
@@ -96,6 +101,7 @@ export const Welcome: React.FC = () => {
       }
       login(pendingVerified.uid, true);
       try { sessionStorage.setItem('pi_suggested_nickname', pendingVerified.username || ''); } catch {}
+      try { sessionStorage.setItem('signup_after_payment', '1'); } catch {}
       resetLocalCacheForIncompleteProfile(pendingVerified.uid);
       navigate('/signup', { replace: true });
     } catch (e: any) {

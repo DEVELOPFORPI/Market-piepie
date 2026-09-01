@@ -1748,17 +1748,19 @@ export function resetLocalCacheForIncompleteProfile(userId: string): void {
 
 /**
  * DB 프로필 상태 확인 (로그인 라우팅용).
- * - complete: users에 실제 닉네임 있음 → 홈으로
- * - incomplete: 없거나 미완성 → /signup 으로
+ * - complete: 결제됨 + 실제 닉네임 → 홈
+ * - incomplete: 결제됨 + 닉네임 미완성 → /signup
+ * - unpaid: users 없음 또는 미결제 → 로그인/결제
  * - unknown: 네트워크 오류 → 로컬 기준으로 폴백
  */
 export async function checkMyProfileInDB(
   userId: string,
-): Promise<'complete' | 'incomplete' | 'unknown'> {
+): Promise<'complete' | 'incomplete' | 'unpaid' | 'unknown'> {
   try {
     const res = await api.get<Record<string, unknown>>(`/api/users/${userId}`);
-    if (res.status === 404) return 'incomplete';
+    if (res.status === 404) return 'unpaid';
     if (!res.ok || !res.data) return 'unknown';
+    if (!res.data.pi_verified) return 'unpaid';
     return isRealDbNickname(String(res.data.nickname || ''), userId)
       ? 'complete'
       : 'incomplete';
