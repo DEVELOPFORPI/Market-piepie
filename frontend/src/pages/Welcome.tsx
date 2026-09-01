@@ -10,6 +10,7 @@ import { useAppPrices } from '@/utils/appPrices';
 import { checkMyProfileInDB, resetLocalCacheForIncompleteProfile } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
 import { legalUi } from '@/i18n/legalUiMessages';
+import { fetchMaintenanceStatus } from '@/utils/maintenanceStatus';
 import { ModalShell } from '@/components/common/ModalShell';
 
 const TEAL = '#00A8A3';
@@ -24,6 +25,13 @@ export const Welcome: React.FC = () => {
   const [piStep, setPiStep] = useState('');
   const [showPaymentNotice, setShowPaymentNotice] = useState(false);
   const [pendingVerified, setPendingVerified] = useState<{ uid: string; username?: string; piVerified?: boolean; sessionToken?: string } | null>(null);
+  const [hideGuest, setHideGuest] = useState(false);
+
+  useEffect(() => {
+    void fetchMaintenanceStatus().then((status) => {
+      setHideGuest(status.enabled && !status.allowed);
+    });
+  }, []);
 
   useEffect(() => {
     if (isLoggedIn() && isOnboardingComplete()) {
@@ -175,7 +183,7 @@ export const Welcome: React.FC = () => {
           </p>
         )}
 
-        {/* Guest Login */}
+        {!hideGuest && (
         <div className="w-full">
           <button
             type="button"
@@ -186,6 +194,7 @@ export const Welcome: React.FC = () => {
             {legalUi(lang, 'continueAsGuest')}
           </button>
         </div>
+        )}
 
         <p className="text-xs text-gray-400 text-center">
           <Link to="/terms" className="underline">{legalUi(lang, 'terms')}</Link>

@@ -82,6 +82,19 @@ async function request<T>(
       });
     }
 
+    if (res.status === 503 && data?.error === 'maintenance') {
+      void import('@/utils/maintenanceStatus').then(({ setCachedMaintenance, getCachedMaintenance }) => {
+        const prev = getCachedMaintenance();
+        setCachedMaintenance({
+          enabled: true,
+          allowed: false,
+          title: data.title || prev.title,
+          message: data.message || prev.message,
+          until: data.until || prev.until,
+        });
+      });
+    }
+
     return {
       ok: res.ok,
       data: res.ok ? (data as T) : undefined,

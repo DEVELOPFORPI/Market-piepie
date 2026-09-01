@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -15,6 +15,7 @@ import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from
 import { useAppPrices } from '@/utils/appPrices';
 
 import { checkMyProfileInDB, resetLocalCacheForIncompleteProfile } from '@/utils/dbSync';
+import { fetchMaintenanceStatus } from '@/utils/maintenanceStatus';
 
 
 
@@ -40,6 +41,13 @@ export const AppLogin: React.FC = () => {
 
   const [showPaymentNotice, setShowPaymentNotice] = useState(false);
   const [pendingVerified, setPendingVerified] = useState<{ uid: string; username?: string; piVerified?: boolean; sessionToken?: string } | null>(null);
+  const [hideGuest, setHideGuest] = useState(false);
+
+  useEffect(() => {
+    void fetchMaintenanceStatus().then((status) => {
+      setHideGuest(status.enabled && !status.allowed);
+    });
+  }, []);
 
   const handlePiLogin = async () => {
 
@@ -255,27 +263,21 @@ export const AppLogin: React.FC = () => {
 
 
       {/* Guest Mode */}
-
+      {!hideGuest && (
       <button
-
         type="button"
-
         onClick={() => {
           clearSuspendedAccount();
           void startGuestSession().then(() => {
             navigate('/', { replace: true });
           });
         }}
-
         className="w-full py-4 rounded-full text-base font-bold border-2 mb-4"
-
         style={{ borderColor: TEAL, color: TEAL }}
-
       >
-
         {legalUi(lang, 'continueAsGuest')}
-
       </button>
+      )}
 
       <p className="text-xs text-gray-400 text-center">
         <Link to="/terms" className="underline">{legalUi(lang, 'terms')}</Link>

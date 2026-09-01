@@ -545,6 +545,84 @@ app.use((req, _res, next) => {
 });
 app.use(optionalAuth);
 
+const MAINT_CACHE_MS = 3000;
+let maintCache = {
+  enabled: false,
+  title: "",
+  message: "",
+  until: null,
+  allow: new Set(),
+  at: 0,
+};
+
+function isMysqlTrue(value) {
+  return value === true || value === 1 || value === "1";
+}
+
+async function refreshMaintenance(force = false) {
+  if (!pool) return maintCache;
+  if (!force && Date.now() - maintCache.at < MAINT_CACHE_MS) return maintCache;
+  try {
+    const { rows } = await pool.query(
+      "SELECT enabled, title, message, until_at FROM app_maintenance WHERE id = 1 LIMIT 1",
+    );
+    const { rows: allowRows } = await pool.query(
+      "SELECT user_id FROM app_maintenance_allowlist",
+    );
+    const row = rows[0] || {};
+    maintCache = {
+      enabled: isMysqlTrue(row.enabled),
+      title: String(row.title || ""),
+      message: String(row.message || ""),
+      until: row.until_at || null,
+      allow: new Set(allowRows.map((r) => r.user_id)),
+      at: Date.now(),
+    };
+  } catch {
+    maintCache = { ...maintCache, at: Date.now() };
+  }
+  return maintCache;
+}
+
+function maintenancePublic(state, userId) {
+  const until = state.until
+    ? new Date(state.until).toISOString()
+    : null;
+  return {
+    enabled: Boolean(state.enabled),
+    allowed: Boolean(userId && state.allow.has(userId)),
+    title: state.title || "",
+    message: state.message || "",
+    until,
+  };
+}
+
+function isMaintenanceExemptPath(path) {
+  if (path === "/health" || path === "/api/health") return true;
+  if (path === "/api/maintenance") return true;
+  if (path.startsWith("/api/admin")) return true;
+  if (path.startsWith("/api/auth/")) return true;
+  if (path === "/api/prices") return true;
+  if (path.startsWith("/api/uploads/object")) return true;
+  return false;
+}
+
+async function blockIfMaintenance(req, res, next) {
+  if (isMaintenanceExemptPath(req.path)) return next();
+  if (isValidAdminToken(req.headers["x-admin-token"])) return next();
+  const state = await refreshMaintenance();
+  if (!state.enabled) return next();
+  if (req.authUserId && state.allow.has(req.authUserId)) return next();
+  return res.status(503).json({
+    error: "maintenance",
+    title: state.title || "",
+    message: state.message || "",
+    until: state.until ? new Date(state.until).toISOString() : null,
+  });
+}
+
+app.use(blockIfMaintenance);
+
 // Mobile carriers put many users behind one shared IP (CGNAT), so keying the
 // rate limit purely by IP throttles innocent users. Prefer the authenticated
 // user id and fall back to the IP for anonymous traffic.
@@ -832,6 +910,11 @@ app.get("/api/health", async (req, res) => {
     out.db = "error";
     return res.status(503).json(out);
   }
+});
+
+app.get("/api/maintenance", async (req, res) => {
+  const state = await refreshMaintenance();
+  res.json(maintenancePublic(state, req.authUserId));
 });
 
 app.post(
@@ -4184,6 +4267,156 @@ app.post("/api/admin/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+async function logMaintenance(action, detail) {
+  if (!pool) return;
+  try {
+    await pool.query(
+      "INSERT INTO app_maintenance_log (action, detail) VALUES ($1, $2)",
+      [action, detail ? JSON.stringify(detail) : null],
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function parseMaintLogDetail(detail) {
+  if (detail == null || detail === "") return null;
+  if (typeof detail === "object") return detail;
+  if (typeof detail !== "string") return null;
+  try {
+    const parsed = JSON.parse(detail);
+    return parsed && typeof parsed === "object" ? parsed : { message: String(parsed) };
+  } catch {
+    return { message: detail };
+  }
+}
+
+async function maintenanceAdminPayload() {
+  const state = await refreshMaintenance(true);
+  let allowlist = [];
+  let logs = [];
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.nickname, u.profile_image, u.pi_username, a.added_at
+         FROM app_maintenance_allowlist a
+         JOIN users u ON u.id = a.user_id
+        ORDER BY a.added_at DESC`,
+    );
+    allowlist = rows;
+  } catch (e) {
+    if (/pi_username|Unknown column/i.test(String(e.message))) {
+      const { rows } = await pool.query(
+        `SELECT u.id, u.nickname, u.profile_image, a.added_at
+           FROM app_maintenance_allowlist a
+           JOIN users u ON u.id = a.user_id
+          ORDER BY a.added_at DESC`,
+      );
+      allowlist = rows.map((row) => ({ ...row, pi_username: null }));
+    } else {
+      throw e;
+    }
+  }
+  const { rows: logRows } = await pool.query(
+    "SELECT id, action, detail, created_at FROM app_maintenance_log ORDER BY id DESC LIMIT 50",
+  );
+  logs = logRows.map((row) => ({
+    ...row,
+    detail: parseMaintLogDetail(row.detail),
+  }));
+  return {
+    ...maintenancePublic(state, null),
+    enabled: state.enabled,
+    allowlist,
+    logs,
+  };
+}
+
+app.get("/api/admin/maintenance", requireDb, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await maintenanceAdminPayload());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/api/admin/maintenance", requireDb, requireAdmin, async (req, res) => {
+  try {
+    const prev = await refreshMaintenance(true);
+    const enabled = Boolean(req.body?.enabled);
+    const title = clipText(String(req.body?.title || ""), 80) || "";
+    const message = clipText(String(req.body?.message || ""), 500) || "";
+    let until = null;
+    if (req.body?.until) {
+      const parsed = new Date(req.body.until);
+      if (!Number.isNaN(parsed.getTime())) until = parsed;
+    }
+    await pool.query(
+      `INSERT INTO app_maintenance (id, enabled, title, message, until_at)
+       VALUES (1, $1, $2, $3, $4)
+       ON DUPLICATE KEY UPDATE
+         enabled = VALUES(enabled),
+         title = VALUES(title),
+         message = VALUES(message),
+         until_at = VALUES(until_at)`,
+      [enabled ? 1 : 0, title, message, until],
+    );
+    const untilIso = until ? until.toISOString() : null;
+    if (enabled !== prev.enabled) {
+      await logMaintenance(enabled ? "enabled" : "disabled", { message, until: untilIso });
+    } else {
+      await logMaintenance("saved", { message, until: untilIso });
+    }
+    res.json(await maintenanceAdminPayload());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/maintenance/allowlist", requireDb, requireAdmin, async (req, res) => {
+  try {
+    const userId = String(req.body?.userId || "").trim();
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const { rows } = await pool.query(
+      "SELECT id, nickname FROM users WHERE id = $1 LIMIT 1",
+      [userId],
+    );
+    if (!rows.length) return res.status(404).json({ error: "User not found" });
+    await pool.query(
+      "INSERT IGNORE INTO app_maintenance_allowlist (user_id) VALUES ($1)",
+      [userId],
+    );
+    await logMaintenance("allow_add", { userId, nickname: rows[0].nickname });
+    res.json(await maintenanceAdminPayload());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete(
+  "/api/admin/maintenance/allowlist/:userId",
+  requireDb,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const userId = String(req.params.userId || "").trim();
+      const { rows } = await pool.query(
+        "SELECT nickname FROM users WHERE id = $1 LIMIT 1",
+        [userId],
+      );
+      await pool.query("DELETE FROM app_maintenance_allowlist WHERE user_id = $1", [
+        userId,
+      ]);
+      await logMaintenance("allow_remove", {
+        userId,
+        nickname: rows[0]?.nickname || userId,
+      });
+      res.json(await maintenanceAdminPayload());
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
+
 // ?????????? ?????
 app.get("/api/admin/stats", requireDb, requireAdmin, async (_req, res) => {
   const zero = () => ({ rows: [{ count: "0" }] });
@@ -5846,6 +6079,15 @@ io.on("connection", async (socket) => {
   if (!userId) {
     socket.disconnect(true);
     return;
+  }
+  try {
+    const state = await refreshMaintenance();
+    if (state.enabled && !state.allow.has(userId)) {
+      socket.disconnect(true);
+      return;
+    }
+  } catch {
+    /* ignore */
   }
   if (!userSockets.has(userId)) userSockets.set(userId, new Set());
   userSockets.get(userId).add(socket.id);

@@ -34,6 +34,7 @@ import { Settings } from './pages/Settings';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminDisputes } from './pages/AdminDisputes';
 import { AdminHomePopup } from './pages/AdminHomePopup';
+import { AdminMaintenance } from './pages/AdminMaintenance';
 import { AdminNotices } from './pages/AdminNotices';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminPayments } from './pages/AdminPayments';
@@ -78,6 +79,14 @@ import { syncActivityBadgesFromStats, syncPurchasedBadgesFromDB } from './utils/
 import { syncAppPricesFromDB } from './utils/appPrices';
 import { pruneInvalidDisplayActivityBadge } from './utils/profileStorage';
 import { isAdminVerified } from './utils/adminAccessStorage';
+import { MaintenanceScreen } from './components/common/MaintenanceScreen';
+import {
+  fetchMaintenanceStatus,
+  getCachedMaintenance,
+  isMaintenanceExemptPath,
+  type MaintenancePublic,
+} from './utils/maintenanceStatus';
+import { MAINTENANCE_TESTER_BANNER } from './i18n/maintenanceMessages';
 import { APP_SCROLL_ID, scrollAppToTop } from './utils/appScroll';
 
 const HIDE_NAV_PATHS = [
@@ -161,17 +170,37 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
   const navigate = useNavigate();
   const { t } = useLanguage();
   const testModeEnabled = isTestLoginEnabled();
+  const [maintenance, setMaintenance] = useState<MaintenancePublic>(getCachedMaintenance);
+
+  useEffect(() => {
+    const apply = (status: MaintenancePublic) => setMaintenance(status);
+    const onEvent = (event: Event) => {
+      const detail = (event as CustomEvent<MaintenancePublic>).detail;
+      if (detail) apply(detail);
+    };
+    window.addEventListener('appMaintenance', onEvent);
+    void fetchMaintenanceStatus().then(apply);
+    const timer = window.setInterval(() => {
+      void fetchMaintenanceStatus();
+    }, 20000);
+    return () => {
+      window.removeEventListener('appMaintenance', onEvent);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (testModeEnabled) return;
     if (location.pathname.startsWith('/admin') || location.pathname === '/admin-auth') return;
     if (location.pathname === "/app-login" || location.pathname === "/welcome") return;
+    if (maintenance.enabled && !maintenance.allowed) return;
     ensureImplicitSession();
-  }, [testModeEnabled, location.pathname]);
+  }, [testModeEnabled, location.pathname, maintenance.enabled, maintenance.allowed]);
 
   useEffect(() => {
     if (!heavyReady) return;
     const kick = async () => {
+      if (getCachedMaintenance().enabled && !getCachedMaintenance().allowed) return;
       await ensureImplicitSession();
       await refreshSuspendedAccountStatus();
       const userId = getCurrentUserId() || undefined;
@@ -385,6 +414,14 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
     return <Navigate to="/admin/data" replace />;
   }
 
+  if (
+    maintenance.enabled
+    && !maintenance.allowed
+    && !isMaintenanceExemptPath(location.pathname)
+  ) {
+    return <MaintenanceScreen status={maintenance} />;
+  }
+
   // Hide test user bar on post detail (match requested white header)
   const isPostDetailPage = /^\/community\/post\/[^/]+$/.test(location.pathname);
   const uid = getCurrentUserId();
@@ -395,7 +432,11 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
   return (
     <div className="App flex flex-col h-dvh overflow-hidden">
       <ScrollToTop />
-      {/* Test preset user bar (hidden on post detail) */}
+      {maintenance.enabled && maintenance.allowed && !isAdminPath && !isAdminAuthPage && (
+        <div className="shrink-0 text-center text-xs py-2 px-3 text-white font-medium" style={{ backgroundColor: '#b45309' }}>
+          {MAINTENANCE_TESTER_BANNER}
+        </div>
+      )}
       {showUserBar && (
         <div
           className="shrink-0 text-center text-xs py-1 text-white font-medium"
@@ -501,6 +542,7 @@ function AppContent({ showSplash, heavyReady }: { showSplash: boolean; heavyRead
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="data" replace />} />
             <Route path="popup" element={<AdminHomePopup />} />
+            <Route path="maintenance" element={<AdminMaintenance />} />
             <Route path="notices" element={<AdminNotices />} />
             <Route path="disputes" element={<AdminDisputes />} />
             <Route path="users" element={<AdminUsers />} />

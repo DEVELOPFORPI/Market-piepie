@@ -1,0 +1,24 @@
+CREATE TABLE IF NOT EXISTS app_maintenance (
+  id TINYINT PRIMARY KEY,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  title VARCHAR(120) NOT NULL DEFAULT '',
+  message TEXT NOT NULL,
+  until_at DATETIME(3) NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO app_maintenance (id, enabled, title, message) VALUES (1, 0, '', '');
+
+CREATE TABLE IF NOT EXISTS app_maintenance_allowlist (
+  user_id VARCHAR(191) PRIMARY KEY,
+  added_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_maint_allow_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_maintenance_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  action VARCHAR(32) NOT NULL,
+  detail TEXT,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX idx_maint_log_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
