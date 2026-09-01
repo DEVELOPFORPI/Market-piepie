@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { isTestLoginEnabled } from '@/config/features';
-import { isLoggedIn, clearImplicitSessionSkip, clearSuspendedAccount, ensureImplicitSession, getCurrentUserId, login, requestDevSessionToken, setSessionToken } from '@/utils/authStorage';
+import { isLoggedIn, clearImplicitSessionSkip, clearSuspendedAccount, startGuestSession, getCurrentUserId, login, requestDevSessionToken, setSessionToken } from '@/utils/authStorage';
 import { applySuspendedAccess } from '@/utils/guestGate';
 import { isOnboardingComplete } from '@/utils/onboardingStorage';
 import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
@@ -115,9 +115,8 @@ export const Welcome: React.FC = () => {
   };
 
   const handleGuestLogin = () => {
-    clearImplicitSessionSkip();
     clearSuspendedAccount();
-    void ensureImplicitSession({ allowAutoGuest: true }).then(() => navigate('/', { replace: true }));
+    void startGuestSession().then(() => navigate('/', { replace: true }));
   };
 
   const handleLocalTestLogin = async (userId: 'user1' | 'user2' | 'user3') => {

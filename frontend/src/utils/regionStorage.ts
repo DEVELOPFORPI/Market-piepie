@@ -95,9 +95,6 @@ export const saveRegion = async (
   const userId = getCurrentUserId();
   if (userId) {
     const ok = await saveMyProfileToDB(userId, {
-      nickname: profile.nickname || 'My nickname',
-      bio: profile.bio,
-      profileImage: profile.profileImage,
       activityRegion: trimmed,
     });
     if (!ok) return false;

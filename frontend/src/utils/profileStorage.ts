@@ -1,4 +1,4 @@
-import { ORDER_STATUS_VALUE } from '@/types';
+import { ORDER_STATUS_VALUE, isPlaceholderNickname } from '@/types';
 import { getCurrentUserId, userKey } from '@/utils/authStorage';
 import { getItem } from '@/utils/heavyStorage';
 import { saveMyProfileToDB } from '@/utils/dbSync';
@@ -97,6 +97,7 @@ export function cacheUserProfileFromRow(
   const isUsable =
     nickname.trim() !== '' &&
     nickname !== userId &&
+    !isPlaceholderNickname(nickname) &&
     !nickname.startsWith('guest_') &&
     !UUID_RE.test(nickname);
   if (!isUsable) return;
@@ -166,7 +167,7 @@ export const saveProfile = async (profile: StoredProfile): Promise<boolean> => {
   if (!userId) return false;
   const merged = { ...getProfile(), ...profile };
   const ok = await saveMyProfileToDB(userId, {
-    nickname: merged.nickname || 'My nickname',
+    nickname: isPlaceholderNickname(merged.nickname) ? undefined : merged.nickname,
     bio: merged.bio,
     profileImage: merged.profileImage,
     activityRegion: merged.activityRegion,
