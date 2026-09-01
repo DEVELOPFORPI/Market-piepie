@@ -22,7 +22,7 @@ import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId, isGuestUser } from '@/utils/authStorage';
 import { getDisputeCountByUserId } from '@/utils/disputeStorage';
 import { getPaidTradeCountByUserId, getShareCountByUserId } from '@/utils/orderStorage';
-import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferenceToR2 } from '@/utils/imageUpload';
 import { ProfileStatsRow } from '@/components/common/ProfileStatsRow';
 import { KYCBadge } from '@/components/common/KYCBadge';
 import { CollectedBadgesRow } from '@/components/profile/CollectedBadgesRow';
@@ -79,31 +79,33 @@ export const ProfileEdit: React.FC = () => {
     return () => window.removeEventListener('regionChanged', onRegionChanged);
   }, []);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingImage(true);
-    try {
-      const url = await uploadImageToR2(file, { folder: 'profiles' });
-      setProfileImage(url);
-      setLastPhoto(url);
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    void (async () => {
+      const previews = await createLocalPreviewUrls(files.slice(0, 1));
+      if (previews.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+      revokeLocalPreviewUrl(profileImage);
+      setProfileImage(previews[0]);
       setHasChanges(true);
-    } catch {
-      showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImage(false);
-      e.target.value = '';
-    }
+    })();
   };
 
   const handleSave = () => {
     void (async () => {
+      setUploadingImage(true);
       let img = profileImage;
       try {
         img = await uploadImageReferenceToR2(profileImage, { folder: 'profiles' });
       } catch {
         showToast(t('couldNotUpload'));
         return;
+      } finally {
+        setUploadingImage(false);
       }
       const profileData = {
         profileImage: img,
@@ -117,6 +119,7 @@ export const ProfileEdit: React.FC = () => {
         showToast(t('couldNotSaveProfile'));
         return;
       }
+      if (profileImage.startsWith('blob:')) revokeLocalPreviewUrl(profileImage);
       navigate('/my');
     })();
   };
@@ -131,6 +134,7 @@ export const ProfileEdit: React.FC = () => {
         });
         if (!ok) return;
       }
+      revokeLocalPreviewUrl(profileImage);
       navigate('/my');
     })();
   };
@@ -220,6 +224,7 @@ export const ProfileEdit: React.FC = () => {
               } else {
                 const currentPhoto = rememberLastProfilePhoto(profileImage);
                 if (currentPhoto) setLastPhoto(currentPhoto);
+                revokeLocalPreviewUrl(profileImage);
                 setProfileImage(activityBadgeAvatarUrl(id));
               }
               setHasChanges(true);

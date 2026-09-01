@@ -75,6 +75,7 @@ export function rememberLastProfilePhoto(url: string | undefined | null): string
   if (!url || isProfileImageActivityBadge(url)) return undefined;
   const trimmed = String(url).trim();
   if (!trimmed || trimmed === '/default-avatar.jpg') return undefined;
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return undefined;
   return trimmed;
 }
 

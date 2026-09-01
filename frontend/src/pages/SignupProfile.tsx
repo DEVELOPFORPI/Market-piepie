@@ -6,7 +6,7 @@ import { saveProfile } from '@/utils/profileStorage';
 import { getRegion } from '@/utils/regionStorage';
 import { getCurrentUserId } from '@/utils/authStorage';
 import { setOnboardingComplete, isOnboardingComplete } from '@/utils/onboardingStorage';
-import { uploadImageReferenceToR2, uploadImageToR2 } from '@/utils/imageUpload';
+import { createLocalPreviewUrls, revokeLocalPreviewUrl, uploadImageReferenceToR2 } from '@/utils/imageUpload';
 import { suggestPiePieNickname } from '@/utils/nickname';
 import { checkMyProfileInDB, saveMyProfileToDB } from '@/utils/dbSync';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -100,18 +100,19 @@ export const SignupProfile: React.FC = () => {
     return () => window.removeEventListener('regionChanged', onRegion);
   }, []);
 
-  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingImage(true);
-    try {
-      setProfileImage(await uploadImageToR2(file, { folder: 'profiles' }));
-    } catch {
-      showToast(t('couldNotUpload'));
-    } finally {
-      setUploadingImage(false);
-      e.target.value = '';
-    }
+  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    void (async () => {
+      const previews = await createLocalPreviewUrls(files.slice(0, 1));
+      if (previews.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+      if (profileImage) revokeLocalPreviewUrl(profileImage);
+      setProfileImage(previews[0]);
+    })();
   };
 
   const handleSubmit = async () => {
@@ -127,11 +128,14 @@ export const SignupProfile: React.FC = () => {
     const region = activityRegion.trim() || getRegion() || '';
     let uploadedProfileImage = profileImage;
     if (uploadedProfileImage) {
+      setUploadingImage(true);
       try {
         uploadedProfileImage = await uploadImageReferenceToR2(uploadedProfileImage, { folder: 'profiles' });
       } catch {
         showToast(t('couldNotUpload'));
         return;
+      } finally {
+        setUploadingImage(false);
       }
     }
 
@@ -154,6 +158,7 @@ export const SignupProfile: React.FC = () => {
       }
     }
 
+    if (profileImage?.startsWith('blob:')) revokeLocalPreviewUrl(profileImage);
     saveProfile(profileData);
     clearDraft();
     setOnboardingComplete();

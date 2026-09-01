@@ -99,12 +99,14 @@ export const PostWrite: React.FC = () => {
       return;
     }
     if (files.length > room) showToast(t('upTo5ImagesAlert'));
-    const previews = createLocalPreviewUrls(files.slice(0, room));
-    if (previews.length === 0) {
-      showToast(t('couldNotUpload'));
-      return;
-    }
-    setImages((prev) => [...prev, ...previews]);
+    void (async () => {
+      const previews = await createLocalPreviewUrls(files.slice(0, room));
+      if (previews.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+      setImages((prev) => [...prev, ...previews]);
+    })();
   };
 
   const removeImage = (index: number) => {

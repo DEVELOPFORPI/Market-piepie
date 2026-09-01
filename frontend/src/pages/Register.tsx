@@ -158,12 +158,14 @@ export const Register: React.FC = () => {
       return;
     }
     if (files.length > room) showToast(t('upToPhotos', { n: MAX_IMAGES }));
-    const previews = createLocalPreviewUrls(files.slice(0, room));
-    if (previews.length === 0) {
-      showToast(t('couldNotUpload'));
-      return;
-    }
-    setImages((prev) => [...prev, ...previews]);
+    void (async () => {
+      const previews = await createLocalPreviewUrls(files.slice(0, room));
+      if (previews.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+      setImages((prev) => [...prev, ...previews]);
+    })();
   };
 
   const removeImage = (index: number) => {

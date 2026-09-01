@@ -24,6 +24,28 @@ function fileNameForMime(mimeType: string): string {
   return `upload-${Date.now()}.${ext}`;
 }
 
+/** iOS WKWebView File handles die after the picker yields. Read bytes immediately. */
+function isAllowedUploadType(type: string): boolean {
+  const t = type.toLowerCase();
+  if (!t) return true;
+  if (t.startsWith('image/')) return true;
+  return t === 'application/octet-stream';
+}
+
+async function snapshotPickerFile(file: File): Promise<File | null> {
+  try {
+    const buffer = await file.arrayBuffer();
+    if (!buffer.byteLength) return null;
+    return new File(
+      [buffer],
+      file.name || fileNameForMime(file.type || 'image/jpeg'),
+      { type: file.type || '' },
+    );
+  } catch {
+    return null;
+  }
+}
+
 function dataUrlToFile(dataUrl: string): File {
   const [header, payload = ''] = dataUrl.split(',');
   const mimeMatch = header.match(/^data:([^;]+);base64$/);
@@ -157,15 +179,17 @@ export async function uploadImageToR2(
   file: File,
   options?: UploadImageOptions,
 ): Promise<string> {
-  if (file.type && !file.type.startsWith('image/')) {
+  const local = await snapshotPickerFile(file);
+  if (!local) throw new Error('Could not read image');
+  if (local.type && !isAllowedUploadType(local.type)) {
     throw new Error('Only image files can be uploaded');
   }
 
   let prepared: File;
   try {
-    prepared = await prepareImageForUpload(file);
+    prepared = await prepareImageForUpload(local);
   } catch {
-    prepared = file;
+    prepared = local;
   }
 
   const send = async () => {
@@ -226,12 +250,14 @@ export async function uploadImageToR2(
   throw new Error(lastError);
 }
 
-export function createLocalPreviewUrls(files: File[]): string[] {
-  return files
-    .filter((file) => !file.type || file.type.startsWith('image/'))
-    .map((file) => {
-      const url = URL.createObjectURL(file);
-      previewFiles.set(url, file);
+export async function createLocalPreviewUrls(files: File[]): Promise<string[]> {
+  const picked = files.filter((file) => !file.type || isAllowedUploadType(file.type));
+  const copies = await Promise.all(picked.map(snapshotPickerFile));
+  return copies
+    .filter((copy): copy is File => copy != null)
+    .map((copy) => {
+      const url = URL.createObjectURL(copy);
+      previewFiles.set(url, copy);
       return url;
     });
 }

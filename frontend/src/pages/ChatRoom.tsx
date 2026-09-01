@@ -1134,12 +1134,14 @@ export const ChatRoom: React.FC = () => {
     if (files.length > remaining) {
       showToast(t('upToPhotos', { n: MAX_CHAT_IMAGES }));
     }
-    const previews = createLocalPreviewUrls(files.slice(0, remaining));
-    if (previews.length === 0) {
-      showToast(t('couldNotUpload'));
-      return;
-    }
-    setPreviewImages((prev) => [...prev, ...previews].slice(0, MAX_CHAT_IMAGES));
+    void (async () => {
+      const previews = await createLocalPreviewUrls(files.slice(0, remaining));
+      if (previews.length === 0) {
+        showToast(t('couldNotUpload'));
+        return;
+      }
+      setPreviewImages((prev) => [...prev, ...previews].slice(0, MAX_CHAT_IMAGES));
+    })();
   };
 
   /**

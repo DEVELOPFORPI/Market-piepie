@@ -43,12 +43,14 @@ export const InquiryWrite: React.FC = () => {
     const room = MAX_IMAGES - images.length;
     if (room <= 0) return;
     const picks = Array.from(files).slice(0, room);
-    const previews = createLocalPreviewUrls(picks);
-    if (previews.length === 0) {
-      showToast(t('uploadImageFailed'));
-      return;
-    }
-    setImages((prev) => [...prev, ...previews]);
+    void (async () => {
+      const previews = await createLocalPreviewUrls(picks);
+      if (previews.length === 0) {
+        showToast(t('uploadImageFailed'));
+        return;
+      }
+      setImages((prev) => [...prev, ...previews]);
+    })();
   };
 
   const removeImage = (idx: number) => {
