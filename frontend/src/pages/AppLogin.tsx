@@ -8,7 +8,7 @@ import { ModalShell } from '@/components/common/ModalShell';
 
 import { isTestLoginEnabled } from '@/config/features';
 
-import { clearImplicitSessionSkip, clearSuspendedAccount, ensureImplicitSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
+import { clearSuspendedAccount, startGuestSession, getCurrentUserId, login, setSessionToken } from '@/utils/authStorage';
 import { applySuspendedAccess } from '@/utils/guestGate';
 
 import { piAuthenticate, piVerificationPayment, verifyPiAuth, isPiBrowser } from '@/utils/piAuth';
@@ -261,10 +261,8 @@ export const AppLogin: React.FC = () => {
         type="button"
 
         onClick={() => {
-          clearImplicitSessionSkip();
           clearSuspendedAccount();
-          // Decide destination before guest session exists (matches prior sync behavior).
-          void ensureImplicitSession({ allowAutoGuest: true }).then(() => {
+          void startGuestSession().then(() => {
             navigate('/', { replace: true });
           });
         }}

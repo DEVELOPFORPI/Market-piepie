@@ -4,7 +4,7 @@
  * - 데이터 저장 시 localStorage + API 동시에 저장
  */
 import { api } from '@/utils/api';
-import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE, Review } from '@/types';
+import { Product, Post, User, Order, ChatRoom, ChatMessage, PRODUCT_STATUS_VALUE, Review, isPlaceholderNickname } from '@/types';
 import { setItem, getItem } from '@/utils/heavyStorage';
 import { getMyUser, cacheUserProfileFromRow, applyProfileCacheToUser } from '@/utils/profileStorage';
 import { userKey, getCurrentUserId } from '@/utils/authStorage';
@@ -1671,6 +1671,7 @@ function isRealDbNickname(nickname: string, userId: string): boolean {
   return Boolean(
     nickname &&
     nickname !== userId &&
+    !isPlaceholderNickname(nickname) &&
     !nickname.startsWith('guest_') &&
     !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nickname)
   );
@@ -1773,7 +1774,7 @@ export async function checkMyProfileInDB(
 export async function saveMyProfileToDB(
   userId: string,
   profile: {
-    nickname: string;
+    nickname?: string;
     bio?: string;
     profileImage?: string;
     activityRegion?: string;
@@ -1783,12 +1784,15 @@ export async function saveMyProfileToDB(
   try {
     const payload: Record<string, unknown> = {
       id: userId,
-      nickname: profile.nickname,
       profile_image: profile.profileImage,
       bio: profile.bio,
       activity_region: profile.activityRegion,
       kyc_status: 'unverified',
     };
+    const nickname = (profile.nickname || '').trim();
+    if (nickname && !isPlaceholderNickname(nickname)) {
+      payload.nickname = nickname;
+    }
     if ('displayActivityBadgeId' in profile) {
       payload.display_activity_badge_id = profile.displayActivityBadgeId || '';
     }
@@ -1833,7 +1837,7 @@ export async function syncMyProfileFromDB(userId: string): Promise<void> {
         if (dbRegion) window.dispatchEvent(new Event('regionChanged'));
       } else if (!existing) {
         const profile = {
-          nickname: 'My nickname',
+          nickname: '',
           profileImage: String(u.profile_image || '/default-avatar.jpg'),
           bio: String(u.bio || ''),
           activityRegion: String(u.activity_region || ''),

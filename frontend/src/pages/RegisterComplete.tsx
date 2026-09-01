@@ -34,7 +34,7 @@ export const RegisterComplete: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white">
       <TopBar
         leftContent={
           <button onClick={() => navigate('/')} className="p-2" aria-label={t('close')}>
@@ -46,7 +46,7 @@ export const RegisterComplete: React.FC = () => {
         title={t('publishedTitle')}
       />
 
-      <div className="flex flex-col items-center px-4 pt-6 pb-12">
+      <div className="flex flex-col items-center px-4 pt-6 pb-6">
         <div className="mb-6">
           <img src="/check.svg" alt={t('doneAlt')} className="w-12 h-12 object-contain" />
         </div>
@@ -111,7 +111,7 @@ export const RegisterComplete: React.FC = () => {
           </button>
         </div>
 
-        <div className="mt-8 w-full max-w-sm">
+        <div className="mt-4 w-full max-w-sm">
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="text-sm font-medium text-blue-900 mb-2">💡 {t('tipsHeading')}</h4>
             <ul className="text-xs text-blue-800 space-y-1">

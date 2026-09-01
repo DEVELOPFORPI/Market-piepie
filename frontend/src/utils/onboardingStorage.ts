@@ -1,4 +1,4 @@
-import { PROFILE_LEGACY_DEFAULT_NICKNAME } from '@/types';
+import { isPlaceholderNickname } from '@/types';
 import { getCurrentUserId, isTestPresetUser } from '@/utils/authStorage';
 import { isTestLoginEnabled } from '@/config/features';
 
@@ -36,7 +36,7 @@ export function isOnboardingComplete(): boolean {
     try {
       const p = JSON.parse(raw) as { nickname?: string };
       const n = typeof p.nickname === 'string' ? p.nickname.trim() : '';
-      if (n && n !== PROFILE_LEGACY_DEFAULT_NICKNAME && n !== 'My nickname') return true;
+      if (n && !isPlaceholderNickname(n)) return true;
     } catch { /* ignore parse error */ }
   }
   return false;

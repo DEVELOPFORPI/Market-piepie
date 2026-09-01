@@ -176,6 +176,13 @@ export function clearImplicitSessionSkip(): void {
   }
 }
 
+/** Guest 둘러보기: 남아 있는 Pi 세션을 끊고 게스트로 바꾼다. */
+export async function startGuestSession(): Promise<void> {
+  logout();
+  clearImplicitSessionSkip();
+  await ensureImplicitSession({ allowAutoGuest: true });
+}
+
 function shouldSkipImplicitSession(): boolean {
   return sessionStorage.getItem(SKIP_IMPLICIT_SESSION_KEY) === '1';
 }

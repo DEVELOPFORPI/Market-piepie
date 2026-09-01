@@ -38,6 +38,12 @@ export const TIMELINE_EVENT_TYPE = {
 
 /** Legacy default nickname from older builds (onboarding completion heuristic) */
 export const PROFILE_LEGACY_DEFAULT_NICKNAME = '내 닉네임';
+export const PROFILE_PLACEHOLDER_NICKNAME = 'My nickname';
+
+export function isPlaceholderNickname(nickname?: string | null): boolean {
+  const n = (nickname || '').trim();
+  return n === PROFILE_PLACEHOLDER_NICKNAME || n === PROFILE_LEGACY_DEFAULT_NICKNAME;
+}
 
 export const SELLER_TYPE_VALUE = {
   INDIVIDUAL: '개인',
