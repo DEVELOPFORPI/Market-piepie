@@ -6,10 +6,10 @@
 #   DEPLOY_SSH_KEY   헤츠너 개인키 전체
 #
 # test 브랜치 push 시 backend/ 변경이 있으면 배포합니다.
-# 수동 실행: GitHub → Actions → Deploy test to Hetzner → Run workflow
+# 수동 실행: GitHub → Actions → Relocate test path to /srv/Market-piepie → Run workflow
 # .env 는 서버 값을 유지합니다. 메인넷은 이 워크플로로 배포하지 않습니다.
 
-name: Deploy test to Hetzner
+name: Relocate test path to /srv/Market-piepie
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
             -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes" \
             --exclude '.env' \
             --exclude 'node_modules' \
-            backend/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/blind-docker/Market-piepie/backend/"
+            backend/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/Market-piepie/backend/"
 
       - name: Rebuild API
         uses: appleboy/ssh-action@v1.2.0
@@ -62,15 +62,15 @@ jobs:
           command_timeout: 30m
           script: |
             set -euo pipefail
-            test -f /srv/blind-docker/Market-piepie/backend/.env
+            test -f /srv/Market-piepie/backend/.env
             export DOCKER_BUILDKIT=0
-            docker build -t market-piepie-backend /srv/blind-docker/Market-piepie/backend
+            docker build -t market-piepie-backend /srv/Market-piepie/backend
             docker rm -f market-piepie-backend
             docker run -d \
               --name market-piepie-backend \
               --restart unless-stopped \
               --network blind_lounge_backend_default \
-              --env-file /srv/blind-docker/Market-piepie/backend/.env \
+              --env-file /srv/Market-piepie/backend/.env \
               market-piepie-backend
             for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -sf https://marketpiepie-test.loungezero.io/api/health; then
