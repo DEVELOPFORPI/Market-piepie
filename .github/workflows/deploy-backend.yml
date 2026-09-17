@@ -1,74 +1,83 @@
-# Lightsail 백엔드 자동 배포
+# Hetzner 테스트넷 백엔드 자동 배포
 #
 # GitHub repo → Settings → Secrets and variables → Actions 에 등록:
-#   LIGHTSAIL_HOST      예: 13.124.170.97
-#   LIGHTSAIL_USER      예: ec2-user
-#   LIGHTSAIL_SSH_KEY   Lightsail SSH 개인키 전체 (PEM)
+#   DEPLOY_HOST      헤츠너 테스트넷 IP
+#   DEPLOY_USER      root
+#   DEPLOY_SSH_KEY   헤츠너 개인키 전체
 #
-# test / main 브랜치 push 시 backend/ 변경이 있으면 배포합니다.
-# 수동 실행: GitHub → Actions → Deploy Backend → Run workflow
+# test 브랜치 push 시 backend/ 변경이 있으면 배포합니다.
+# 수동 실행: GitHub → Actions → Deploy test to Hetzner → Run workflow
+# .env 는 서버 값을 유지합니다. 메인넷은 이 워크플로로 배포하지 않습니다.
 
-name: Deploy Backend
+name: Deploy test to Hetzner
 
 on:
   push:
     branches:
       - test
-      - main
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Deploy branch'
-        required: true
-        default: test
-        type: choice
-        options:
-          - test
-          - main
 
 concurrency:
-  group: deploy-backend-${{ github.ref_name }}
+  group: deploy-backend-test
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          set -euo pipefail
+          test -n "${{ secrets.DEPLOY_HOST }}" || { echo "DEPLOY_HOST secret is empty"; exit 1; }
+          test -n "${{ secrets.DEPLOY_USER }}" || { echo "DEPLOY_USER secret is empty"; exit 1; }
+          test -n "${{ secrets.DEPLOY_SSH_KEY }}" || { echo "DEPLOY_SSH_KEY secret is empty"; exit 1; }
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "echo ssh-ok"
+
+      - name: Sync backend without wiping env
+        run: |
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            --exclude '.env' \
+            --exclude 'node_modules' \
+            backend/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/blind-docker/Market-piepie/backend/"
+
+      - name: Rebuild API
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          command_timeout: 15m
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          command_timeout: 30m
           script: |
             set -euo pipefail
-            BRANCH="${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref_name }}"
-            REPO_DIR="/srv/blind-docker/Market-piepie"
-            COMPOSE_DIR="/srv/blind-docker"
-            SERVICE="market_piepie_backend"
-            CONTAINER="market-piepie-backend"
-
-            echo "=== Deploy branch: ${BRANCH} ==="
-
-            cd "${REPO_DIR}"
-            # Older manual deploys may have left an untracked Dockerfile on the server.
-            # Remove only that known conflicting file before checking out the tracked one.
-            if [ -f backend/Dockerfile ] && ! sudo git ls-files --error-unmatch backend/Dockerfile >/dev/null 2>&1; then
-              sudo rm -f backend/Dockerfile
-            fi
-            sudo git fetch origin "${BRANCH}"
-            sudo git checkout "${BRANCH}"
-            sudo git reset --hard "origin/${BRANCH}"
-
-            cd "${COMPOSE_DIR}"
-            sudo DOCKER_BUILDKIT=0 docker-compose up -d --build "${SERVICE}"
-
-            echo "=== Health check ==="
-            sleep 8
-            curl -sf https://pie.blindlounge.xyz/api/health
-            echo ""
-            echo "=== Deploy OK: ${BRANCH} ==="
+            test -f /srv/blind-docker/Market-piepie/backend/.env
+            export DOCKER_BUILDKIT=0
+            docker build -t market-piepie-backend /srv/blind-docker/Market-piepie/backend
+            docker rm -f market-piepie-backend
+            docker run -d \
+              --name market-piepie-backend \
+              --restart unless-stopped \
+              --network blind_lounge_backend_default \
+              --env-file /srv/blind-docker/Market-piepie/backend/.env \
+              market-piepie-backend
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -sf https://marketpiepie-test.loungezero.io/api/health; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "health check failed"
+            docker logs market-piepie-backend --tail 40
+            exit 1

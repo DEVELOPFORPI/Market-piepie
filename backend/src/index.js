@@ -506,6 +506,7 @@ const defaultAllowedOrigins = [
   "https://www.blindlounge.xyz",
   "https://pie.blindlounge.xyz",
   "https://www.pie.blindlounge.xyz",
+  "https://marketpiepie-test.loungezero.io",
 ];
 const envAllowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",")
